@@ -643,7 +643,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3416153a5f204045be1f7e157bad76c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
+  unit: {fileID: 1595015768}
 --- !u!4 &977997826
 Transform:
   m_ObjectHideFlags: 0
@@ -1005,6 +1005,10 @@ PrefabInstance:
     - target: {fileID: 3717558283722815987, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5431906996262311868, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+      propertyPath: maxMoveDistance
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
