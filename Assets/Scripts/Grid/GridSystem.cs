@@ -26,6 +26,16 @@ public class GridSystem
         
     }
 
+    public int GetWidth()
+    {
+        return width;
+    }
+
+    public int GetHeight()
+    {
+        return height;
+    }
+
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         return new Vector3(gridPosition.x, 0, gridPosition.z) * cellSize;
@@ -65,4 +75,6 @@ public class GridSystem
                 gridPosition.x < width && 
                 gridPosition.z < height;
     }
+
+
 }
