@@ -891,17 +891,17 @@ MonoBehaviour:
   roomPrefabs:
   - prefab: {fileID: 7211524986439877235, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
     roomType: 0
-    width: 30
+    width: 35
     height: 1
     spawnWeight: 1
   - prefab: {fileID: 1859990256}
     roomType: 2
-    width: 30
+    width: 35
     height: 1
     spawnWeight: 1
   - prefab: {fileID: 374571691}
     roomType: 1
-    width: 30
+    width: 35
     height: 1
     spawnWeight: 1
   hallwayPrefab: {fileID: 868505126936158952, guid: 06f61634c2353294fa22b66d1f4a5722, type: 3}
