@@ -6,6 +6,12 @@ public class StaminaContainerUI : MonoBehaviour
     public PlayerStats playerStats;
     public StaminaParticleUI particlePrefab;
 
+    public RectTransform particleLayer;
+
+    float mouseForceRadius = 60f;
+    float mouseForceStrength = 300f;
+
+
     RectTransform rect;
     List<StaminaParticleUI> particles = new();
 
@@ -25,7 +31,72 @@ public class StaminaContainerUI : MonoBehaviour
             UpdateParticles(playerStats.currentStamina);
             lastStamina = playerStats.currentStamina;
         }
+
+        DisturbParticlesWithMouse();
+        ApplyParticleRepulsion();
+
     }
+
+    void DisturbParticlesWithMouse()
+    {
+        Vector2 localMousePos;
+
+        // Convert screen mouse position to container-local space
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            rect,
+            Input.mousePosition,
+            null,
+            out localMousePos))
+            return;
+
+        // Only disturb if mouse is inside container
+        if (!rect.rect.Contains(localMousePos))
+            return;
+
+        foreach (var p in particles)
+        {
+            RectTransform pr = p.GetComponent<RectTransform>();
+            Vector2 dir = pr.anchoredPosition - localMousePos;
+            float distance = dir.magnitude;
+
+            if (distance < mouseForceRadius)
+            {
+                float strength = 1f - (distance / mouseForceRadius);
+                Vector2 force = dir.normalized * strength * mouseForceStrength;
+
+                p.ApplyForce(force * Time.deltaTime);
+            }
+        }
+    }
+
+    void ApplyParticleRepulsion()
+    {
+        float repelRadius = 18f;
+        float repelStrength = 80f;
+
+        for (int i = 0; i < particles.Count; i++)
+        {
+            RectTransform a = particles[i].GetComponent<RectTransform>();
+
+            for (int j = i + 1; j < particles.Count; j++)
+            {
+                RectTransform b = particles[j].GetComponent<RectTransform>();
+
+                Vector2 dir = a.anchoredPosition - b.anchoredPosition;
+                float distance = dir.magnitude;
+
+                if (distance < repelRadius && distance > 0.01f)
+                {
+                    float strength = 1f - (distance / repelRadius);
+                    Vector2 force = dir.normalized * strength * repelStrength;
+
+                    particles[i].ApplyForce(force * Time.deltaTime);
+                    particles[j].ApplyForce(-force * Time.deltaTime);
+                }
+            }
+        }
+    }
+
 
     void UpdateParticles(int targetCount)
     {
