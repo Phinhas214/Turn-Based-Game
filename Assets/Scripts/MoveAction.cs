@@ -1,48 +1,34 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class MoveAction : BaseAction
+public class MoveAction : MonoBehaviour
 {
     private Vector3 targetPosition;
-    
+    private Unit unit;
+
     [SerializeField] private int maxMoveDistance = 4;
 
 
-    protected override void Awake()
+    private void Awake()
     {
-        base.Awake();
+        unit = GetComponent<Unit>();
         targetPosition = transform.position;
     }
 
     private void Update()
     {
-        if (!isActive)
-        {
-            return;
-        }
-
-        Vector3 moveDirection = (targetPosition - transform.position).normalized;
-
         float stoppingDistance = 0.1f;
         if (Vector3.Distance(transform.position, targetPosition) > stoppingDistance)
         {
-            
-            float moveSpeed = 16f;
+            Vector3 moveDirection = (targetPosition - transform.position).normalized;
+            float moveSpeed = 4f;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
-        }
-        else
-        {
-            isActive = false;
-            onActionComplete();
         }
     }
 
-    public void Move(GridPosition gridPosition, Action onActionComplete)
+    public void Move(GridPosition gridPosition)
     {
-        this.onActionComplete = onActionComplete;
         this.targetPosition = LevelGrid.Instance.GetWorldPosition(gridPosition);
-        isActive = true;
     }
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
@@ -82,6 +68,7 @@ public class MoveAction : BaseAction
                 }
 
                 validGridPositionList.Add(testGridPosition);
+                Debug.Log(testGridPosition);
             }
         }
 
