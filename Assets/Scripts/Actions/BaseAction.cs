@@ -15,8 +15,4 @@ public abstract class BaseAction : MonoBehaviour
     {
         unit = GetComponent<Unit>();
     }
-
-    // abstract means that we'll be forced to implement this function 
-    // in all the other classes that inherit this BaseAction class
-    public abstract string GetActionName();
 }
