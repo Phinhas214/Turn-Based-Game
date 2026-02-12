@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
-public class StaminaContainerUI : MonoBehaviour
+public class StaminaContainerUI : MonoBehaviour,
+    IPointerEnterHandler,
+    IPointerExitHandler
 {
     public PlayerStats playerStats;
     public StaminaParticleUI particlePrefab;
@@ -11,6 +14,8 @@ public class StaminaContainerUI : MonoBehaviour
     float mouseForceRadius = 60f;
     float mouseForceStrength = 300f;
 
+    public GameObject hoverOverlay;
+    public TMPro.TextMeshProUGUI staminaText;
 
     RectTransform rect;
     List<StaminaParticleUI> particles = new();
@@ -35,6 +40,17 @@ public class StaminaContainerUI : MonoBehaviour
         DisturbParticlesWithMouse();
         ApplyParticleRepulsion();
 
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        hoverOverlay.SetActive(true);
+        staminaText.text = playerStats.currentStamina.ToString();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        hoverOverlay.SetActive(false);
     }
 
     void DisturbParticlesWithMouse()
@@ -116,7 +132,7 @@ public class StaminaContainerUI : MonoBehaviour
 
     void SpawnParticle()
     {
-        StaminaParticleUI p = Instantiate(particlePrefab, transform);
+        StaminaParticleUI p = Instantiate(particlePrefab, particleLayer, false);
         RectTransform pr = p.GetComponent<RectTransform>();
 
         Rect bounds = GetInnerBounds();
