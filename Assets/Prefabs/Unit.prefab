@@ -28,8 +28,8 @@ Transform:
   m_GameObject: {fileID: 752013145976937255}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.495, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0.02, z: 0}
+  m_LocalScale: {x: 1, y: 0.22777, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3717558283722815987}
@@ -62,8 +62,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -85,7 +83,6 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
@@ -123,7 +120,7 @@ GameObject:
   - component: {fileID: 8805797687680868294}
   - component: {fileID: 7179144902295360574}
   - component: {fileID: 5431906996262311868}
-  - component: {fileID: 8786965731321144665}
+  - component: {fileID: -5769443931900365964}
   m_Layer: 7
   m_Name: Unit
   m_TagString: Untagged
@@ -179,8 +176,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.3740344, y: 1.7350762, z: 1.3740344}
-  m_Center: {x: 0.116650224, y: 0.6325282, z: 0.070367604}
+  m_Size: {x: 1.3740344, y: 0.8937532, z: 1.3740344}
+  m_Center: {x: 0.116650224, y: 0.21186674, z: 0.070367575}
 --- !u!114 &5431906996262311868
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -194,7 +191,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxMoveDistance: 4
---- !u!114 &8786965731321144665
+--- !u!114 &-5769443931900365964
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -203,15 +200,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 922802329369371357}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 47ad70af5dd97ac478393e70eef207cf, type: 3}
+  m_Script: {fileID: 11500000, guid: f93af45601e7f4befafe0eaeb162e791, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
-  playerClass: 0
-  classStatsDatabase: {fileID: 11400000, guid: 56a8e4ecc51509d409a2411fc588f9e4, type: 2}
-  maxHealth: 0
-  currentHealth: 0
-  maxStamina: 0
-  currentStamina: 0
+  m_EditorClassIdentifier: 
 --- !u!1 &5260917431886183574
 GameObject:
   m_ObjectHideFlags: 0
@@ -274,8 +265,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -297,7 +286,6 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
