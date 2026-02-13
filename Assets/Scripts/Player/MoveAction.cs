@@ -5,12 +5,12 @@ public class MoveAction : MonoBehaviour
 {
     private Vector3 targetPosition;
     private Unit unit;
-
-    [SerializeField] private int maxMoveDistance = 4;
+    private PlayerStats playerStats;
 
 
     private void Awake()
     {
+        playerStats = GetComponent<PlayerStats>();
         unit = GetComponent<Unit>();
         targetPosition = transform.position;
     }
@@ -26,8 +26,28 @@ public class MoveAction : MonoBehaviour
         }
     }
 
+    private int GetMoveDistance()
+    {
+        if (playerStats == null) return 0;
+        return playerStats.currentStamina;
+    }
+
     public void Move(GridPosition gridPosition)
     {
+        GridPosition currentGridPosition = unit.GetGridPosition();
+
+        int distance = Mathf.Max(
+            Mathf.Abs(currentGridPosition.x - gridPosition.x),
+            Mathf.Abs(currentGridPosition.z - gridPosition.z)
+        );
+
+
+        if (playerStats != null)
+        {
+            playerStats.currentStamina -= distance;
+            playerStats.currentStamina = Mathf.Max(playerStats.currentStamina, 0);
+        }
+
         this.targetPosition = LevelGrid.Instance.GetWorldPosition(gridPosition);
     }
 
@@ -43,35 +63,32 @@ public class MoveAction : MonoBehaviour
         List<GridPosition> validGridPositionList = new List<GridPosition>();
 
         GridPosition unitGridPosition = unit.GetGridPosition();
-        for (int x = -maxMoveDistance; x <= maxMoveDistance; x++)
+        int moveDistance = GetMoveDistance();
+
+        for (int x = -moveDistance; x <= moveDistance; x++)
         {
-            for (int z = -maxMoveDistance; z <= maxMoveDistance; z++)
+            for (int z = -moveDistance; z <= moveDistance; z++)
             {
+                int distance = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z));
+                if (distance > moveDistance) continue;
+
                 GridPosition offsetGridPosition = new GridPosition(x, z);
                 GridPosition testGridPosition = unitGridPosition + offsetGridPosition;
+
                 if (!LevelGrid.Instance.isValidGridPosition(testGridPosition))
-                {
-                    // grid position out of bounds
                     continue;
-                }
 
                 if (unitGridPosition == testGridPosition)
-                {
-                    // Same grid position where the unit is already at
                     continue;
-                }
 
                 if (LevelGrid.Instance.HasAnyUnitOnGridPosition(testGridPosition))
-                {
-                    // Grid position already occupied with another unit 
                     continue;
-                }
 
                 validGridPositionList.Add(testGridPosition);
-                Debug.Log(testGridPosition);
             }
         }
 
         return validGridPositionList;
     }
+
 }
