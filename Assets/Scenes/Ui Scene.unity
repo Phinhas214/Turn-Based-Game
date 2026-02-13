@@ -397,7 +397,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 6590152938319763008}
+  playerStats: {fileID: 0}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 1944856292}
   hoverOverlay: {fileID: 428839575}
@@ -498,7 +498,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7fe4dd12479f14fca9f149995866488e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridSystemVisualSinglePrefab: {fileID: 9047776575756294587, guid: 7111b36424c2a45e6affb0380fa0ab46, type: 3}
+  gridSystemVisualSinglePrefab: {fileID: 8666994886348826599, guid: 7111b36424c2a45e6affb0380fa0ab46, type: 3}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -2533,17 +2533,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
---- !u!114 &6590152938319763008 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8786965731321144665, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
-  m_PrefabInstance: {fileID: 6590152938319763007}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 47ad70af5dd97ac478393e70eef207cf, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

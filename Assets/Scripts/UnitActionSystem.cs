@@ -29,7 +29,18 @@ public class UnitActionSystem : MonoBehaviour
         if (isBusy)
         {
             return;
-        }   
+        }
+
+        // ADD THIS: Check if a unit is selected before trying to use it
+        if (selectedUnit == null)
+        {
+            // Only allow selecting a unit when none is selected
+            if (Input.GetMouseButtonDown(0))
+            {
+                TryHandleUnitSelection();
+            }
+            return;
+        }
 
         if (Input.GetMouseButtonDown(0))
         {  
@@ -37,18 +48,24 @@ public class UnitActionSystem : MonoBehaviour
 
             GridPosition mouseGridPosition = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
             
-
-            if (selectedUnit.GetMoveAction().isValidActionGridPosition(mouseGridPosition))
+            // ADD THIS: Null check for MoveAction
+            MoveAction moveAction = selectedUnit.GetMoveAction();
+            if (moveAction != null && moveAction.isValidActionGridPosition(mouseGridPosition))
             {
                 SetBusy();
-                selectedUnit.GetMoveAction().Move(mouseGridPosition, ClearBusy);
+                moveAction.Move(mouseGridPosition, ClearBusy);
             }
         }
 
         if (Input.GetMouseButtonDown(1))
         {
-            SetBusy();
-            selectedUnit.GetSpinAction().Spin(ClearBusy);
+            // ADD THIS: Null check for SpinAction
+            SpinAction spinAction = selectedUnit.GetSpinAction();
+            if (spinAction != null)
+            {
+                SetBusy();
+                spinAction.Spin(ClearBusy);
+            }
         }
     }
 
