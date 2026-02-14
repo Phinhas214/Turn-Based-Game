@@ -28,7 +28,7 @@ public class MoveAction : BaseAction
         float stoppingDistance = 0.1f;
         if (Vector3.Distance(transform.position, targetPosition) > stoppingDistance)
         {
-            float moveSpeed = 16f;
+            float moveSpeed = 8f;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
         }
         else
