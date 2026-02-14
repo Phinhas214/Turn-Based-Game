@@ -11,6 +11,8 @@ public class UnitActionSystem : MonoBehaviour
     [SerializeField] private Unit selectedUnit;
     [SerializeField] private LayerMask unitLayerMask;
 
+    private bool isBusy;
+
     private void Awake()
     {
         if (Instance != null)
@@ -24,19 +26,57 @@ public class UnitActionSystem : MonoBehaviour
 
     private void Update()
     {
-        
+        if (isBusy)
+        {
+            return;
+        }
+
+        // ADD THIS: Check if a unit is selected before trying to use it
+        if (selectedUnit == null)
+        {
+            // Only allow selecting a unit when none is selected
+            if (Input.GetMouseButtonDown(0))
+            {
+                TryHandleUnitSelection();
+            }
+            return;
+        }
+
         if (Input.GetMouseButtonDown(0))
         {  
             if (TryHandleUnitSelection()) return;
 
             GridPosition mouseGridPosition = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
             
-
-            if (selectedUnit.GetMoveAction().isValidActionGridPosition(mouseGridPosition))
+            // ADD THIS: Null check for MoveAction
+            MoveAction moveAction = selectedUnit.GetMoveAction();
+            if (moveAction != null && moveAction.isValidActionGridPosition(mouseGridPosition))
             {
-                selectedUnit.GetMoveAction().Move(mouseGridPosition);
+                SetBusy();
+                moveAction.Move(mouseGridPosition, ClearBusy);
             }
         }
+
+        if (Input.GetMouseButtonDown(1))
+        {
+            // ADD THIS: Null check for SpinAction
+            SpinAction spinAction = selectedUnit.GetSpinAction();
+            if (spinAction != null)
+            {
+                SetBusy();
+                spinAction.Spin(ClearBusy);
+            }
+        }
+    }
+
+    private void SetBusy()
+    {
+        isBusy = true;
+    }
+
+    private void ClearBusy()
+    {
+        isBusy = false;
     }
 
     private bool TryHandleUnitSelection()

@@ -1,40 +1,79 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class MoveAction : MonoBehaviour
+public class MoveAction : BaseAction
 {
     private Vector3 targetPosition;
-    private Unit unit;
-
+    private PlayerStats playerStats;
+    
     [SerializeField] private int maxMoveDistance = 4;
 
-
-    private void Awake()
+    protected override void Awake()
     {
-        unit = GetComponent<Unit>();
+        base.Awake(); // This gets unit from BaseAction
+        playerStats = GetComponent<PlayerStats>();
         targetPosition = transform.position;
     }
 
     private void Update()
     {
+        if (!isActive)
+        {
+            return;
+        }
+
+        Vector3 moveDirection = (targetPosition - transform.position).normalized;
+
         float stoppingDistance = 0.1f;
         if (Vector3.Distance(transform.position, targetPosition) > stoppingDistance)
         {
-            Vector3 moveDirection = (targetPosition - transform.position).normalized;
-            float moveSpeed = 4f;
+            float moveSpeed = 8f;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
+        }
+        else
+        {
+            isActive = false;
+            onActionComplete?.Invoke();
         }
     }
 
-    public void Move(GridPosition gridPosition)
+    private int GetMoveDistance()
     {
+        if (playerStats != null)
+        {
+            return Mathf.Max(playerStats.currentStamina, 0);
+        }
+
+        return maxMoveDistance;
+    }
+
+
+    public void Move(GridPosition gridPosition, Action onActionComplete)
+    {
+
+        this.onActionComplete = onActionComplete;
+        
+        // Calculate distance and deduct stamina if PlayerStats exists
+        GridPosition currentGridPosition = unit.GetGridPosition();
+        int distance = Mathf.Max(
+            Mathf.Abs(currentGridPosition.x - gridPosition.x),
+            Mathf.Abs(currentGridPosition.z - gridPosition.z)
+        );
+
+        if (playerStats != null)
+        {
+            playerStats.currentStamina -= distance;
+            playerStats.currentStamina = Mathf.Max(playerStats.currentStamina, 0);
+        }
+
         this.targetPosition = LevelGrid.Instance.GetWorldPosition(gridPosition);
+        isActive = true;
     }
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
     {
         List<GridPosition> validGridPositionList = GetValidActionGridPositionList();
-
         return validGridPositionList.Contains(gridPosition);
     }
 
@@ -43,35 +82,36 @@ public class MoveAction : MonoBehaviour
         List<GridPosition> validGridPositionList = new List<GridPosition>();
 
         GridPosition unitGridPosition = unit.GetGridPosition();
-        for (int x = -maxMoveDistance; x <= maxMoveDistance; x++)
+        int moveDistance = GetMoveDistance();
+
+        for (int x = -moveDistance; x <= moveDistance; x++)
         {
-            for (int z = -maxMoveDistance; z <= maxMoveDistance; z++)
+            for (int z = -moveDistance; z <= moveDistance; z++)
             {
+                int distance = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z));
+                if (distance > moveDistance) continue;
+
                 GridPosition offsetGridPosition = new GridPosition(x, z);
                 GridPosition testGridPosition = unitGridPosition + offsetGridPosition;
+
                 if (!LevelGrid.Instance.isValidGridPosition(testGridPosition))
-                {
-                    // grid position out of bounds
                     continue;
-                }
 
                 if (unitGridPosition == testGridPosition)
-                {
-                    // Same grid position where the unit is already at
                     continue;
-                }
 
                 if (LevelGrid.Instance.HasAnyUnitOnGridPosition(testGridPosition))
-                {
-                    // Grid position already occupied with another unit 
                     continue;
-                }
 
                 validGridPositionList.Add(testGridPosition);
-                Debug.Log(testGridPosition);
             }
         }
 
         return validGridPositionList;
+    }
+
+    public override string GetActionName()
+    {
+        return "Move";
     }
 }
