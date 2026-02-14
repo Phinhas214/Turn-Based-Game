@@ -397,7 +397,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 0}
+  playerStats: {fileID: 8575818164243851910, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 1944856292}
   hoverOverlay: {fileID: 428839575}
