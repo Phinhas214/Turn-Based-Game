@@ -40,16 +40,18 @@ public class MoveAction : BaseAction
 
     private int GetMoveDistance()
     {
-        // If PlayerStats exists, use stamina; otherwise use maxMoveDistance
-        if (playerStats != null && playerStats.currentStamina > 0)
+        if (playerStats != null)
         {
-            return playerStats.currentStamina;
+            return Mathf.Max(playerStats.currentStamina, 0);
         }
+
         return maxMoveDistance;
     }
 
+
     public void Move(GridPosition gridPosition, Action onActionComplete)
     {
+
         this.onActionComplete = onActionComplete;
         
         // Calculate distance and deduct stamina if PlayerStats exists
