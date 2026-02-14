@@ -397,7 +397,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 8575818164243851910, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+  playerStats: {fileID: 2081691288}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 1944856292}
   hoverOverlay: {fileID: 428839575}
@@ -2397,6 +2397,17 @@ RectTransform:
   m_AnchoredPosition: {x: 3, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2081691288 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8575818164243851910, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+  m_PrefabInstance: {fileID: 6590152938319763007}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47ad70af5dd97ac478393e70eef207cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
 --- !u!1 &2106789198
 GameObject:
   m_ObjectHideFlags: 0
