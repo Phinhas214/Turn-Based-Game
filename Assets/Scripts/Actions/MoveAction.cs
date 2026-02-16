@@ -5,35 +5,37 @@ using UnityEngine;
 public class MoveAction : BaseAction
 {
     private Vector3 targetPosition;
+    private GridPosition targetGridPosition;
     private PlayerStats playerStats;
-    
+
     [SerializeField] private int maxMoveDistance = 4;
 
     protected override void Awake()
     {
-        base.Awake(); // This gets unit from BaseAction
+        base.Awake();
         playerStats = GetComponent<PlayerStats>();
-        targetPosition = transform.position;
     }
 
     private void Update()
     {
         if (!isActive)
-        {
             return;
-        }
 
         Vector3 moveDirection = (targetPosition - transform.position).normalized;
+        float stoppingDistance = 0.05f;
+        float moveSpeed = 8f;
 
-        float stoppingDistance = 0.1f;
         if (Vector3.Distance(transform.position, targetPosition) > stoppingDistance)
         {
-            float moveSpeed = 8f;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
         }
         else
         {
             isActive = false;
+
+            // 🔒 AUTHORITATIVELY LOCK GRID POSITION
+            unit.PlaceInRoom(unit.GetCurrentRoomGrid(), targetGridPosition);
+
             onActionComplete?.Invoke();
         }
     }
@@ -41,21 +43,24 @@ public class MoveAction : BaseAction
     private int GetMoveDistance()
     {
         if (playerStats != null)
-        {
             return Mathf.Max(playerStats.currentStamina, 0);
-        }
 
         return maxMoveDistance;
     }
 
-
     public void Move(GridPosition gridPosition, Action onActionComplete)
     {
-
         this.onActionComplete = onActionComplete;
-        
-        // Calculate distance and deduct stamina if PlayerStats exists
+
+        RoomGrid currentRoom = unit.GetCurrentRoomGrid();
+        if (currentRoom == null)
+        {
+            Debug.LogError("MoveAction: Unit has no current room grid!");
+            return;
+        }
+
         GridPosition currentGridPosition = unit.GetGridPosition();
+
         int distance = Mathf.Max(
             Mathf.Abs(currentGridPosition.x - gridPosition.x),
             Mathf.Abs(currentGridPosition.z - gridPosition.z)
@@ -67,19 +72,26 @@ public class MoveAction : BaseAction
             playerStats.currentStamina = Mathf.Max(playerStats.currentStamina, 0);
         }
 
-        this.targetPosition = LevelGrid.Instance.GetWorldPosition(gridPosition);
+        targetGridPosition = gridPosition;
+        targetPosition = currentRoom.GetWorldPosition(gridPosition);
+
         isActive = true;
+
+        Debug.Log($"Moving to grid {gridPosition}, world {targetPosition}");
     }
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
     {
-        List<GridPosition> validGridPositionList = GetValidActionGridPositionList();
-        return validGridPositionList.Contains(gridPosition);
+        return GetValidActionGridPositionList().Contains(gridPosition);
     }
 
     public List<GridPosition> GetValidActionGridPositionList()
     {
-        List<GridPosition> validGridPositionList = new List<GridPosition>();
+        List<GridPosition> validGridPositionList = new();
+
+        RoomGrid currentRoom = unit.GetCurrentRoomGrid();
+        if (currentRoom == null)
+            return validGridPositionList;
 
         GridPosition unitGridPosition = unit.GetGridPosition();
         int moveDistance = GetMoveDistance();
@@ -91,16 +103,16 @@ public class MoveAction : BaseAction
                 int distance = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z));
                 if (distance > moveDistance) continue;
 
-                GridPosition offsetGridPosition = new GridPosition(x, z);
-                GridPosition testGridPosition = unitGridPosition + offsetGridPosition;
+                GridPosition testGridPosition =
+                    unitGridPosition + new GridPosition(x, z);
 
-                if (!LevelGrid.Instance.isValidGridPosition(testGridPosition))
+                if (!currentRoom.IsValidGridPosition(testGridPosition))
                     continue;
 
-                if (unitGridPosition == testGridPosition)
+                if (testGridPosition == unitGridPosition)
                     continue;
 
-                if (LevelGrid.Instance.HasAnyUnitOnGridPosition(testGridPosition))
+                if (currentRoom.HasAnyUnitOnGridPosition(testGridPosition))
                     continue;
 
                 validGridPositionList.Add(testGridPosition);

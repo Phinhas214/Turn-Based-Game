@@ -42,8 +42,17 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private float cellSize = 2f;
     [SerializeField] private Transform gridDebugObjectPrefab;
 
+    [Header("Player Spawn")]
+    [SerializeField] private GameObject playerPrefab;
+    [SerializeField] private bool spawnPlayerOnGenerate = true;
+
     private List<PlacedRoom> placedRooms;
     private Dictionary<Vector2Int, PlacedRoom> roomGrid;
+    private Dictionary<(PlacedRoom, Direction), PlacedRoom> roomConnections;
+    private GameObject spawnedPlayer;
+
+    // Event fired when level generation is complete
+    public static System.Action OnLevelReady;
 
     public class PlacedRoom
     {
@@ -70,11 +79,30 @@ public class LevelGenerator : MonoBehaviour
             Destroy(child.gameObject);
         }
 
+        // Destroy previously spawned player if regenerating
+        if (spawnedPlayer != null)
+        {
+            Destroy(spawnedPlayer);
+            spawnedPlayer = null;
+        }
+
         placedRooms = new List<PlacedRoom>();
         roomGrid = new Dictionary<Vector2Int, PlacedRoom>();
+        roomConnections = new Dictionary<(PlacedRoom, Direction), PlacedRoom>();
 
         GenerateRoomLayout();
         InitializeRoomGrids();
+        InitializeDoors();
+
+        // Spawn player after level is ready
+        if (spawnPlayerOnGenerate && playerPrefab != null)
+        {
+            SpawnPlayer();
+        }
+
+        // Notify all systems that level is ready
+        Debug.Log("🎉 LEVEL GENERATION COMPLETE - Firing OnLevelReady event");
+        OnLevelReady?.Invoke();
     }
 
     private void GenerateRoomLayout()
@@ -195,7 +223,7 @@ public class LevelGenerator : MonoBehaviour
         return available;
     }
 
-    private Direction GetOppositeDirection(Direction dir)
+    public Direction GetOppositeDirection(Direction dir)
     {
         switch (dir)
         {
@@ -320,6 +348,10 @@ public class LevelGenerator : MonoBehaviour
 
     private void CreateHallway(PlacedRoom roomA, PlacedRoom roomB, Direction direction)
     {
+        // Track the connection between rooms
+        roomConnections[(roomA, direction)] = roomB;
+        roomConnections[(roomB, GetOppositeDirection(direction))] = roomA;
+
         if (hallwayPrefab == null)
         {
             return; // Hallways are optional
@@ -359,13 +391,13 @@ public class LevelGenerator : MonoBehaviour
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            RoomGrid roomGrid = room.roomInstance.GetComponent<RoomGrid>();
-            if (roomGrid == null)
+            RoomGrid roomGridComponent = room.roomInstance.GetComponent<RoomGrid>();
+            if (roomGridComponent == null)
             {
-                roomGrid = room.roomInstance.AddComponent<RoomGrid>();
+                roomGridComponent = room.roomInstance.AddComponent<RoomGrid>();
             }
 
-            roomGrid.Initialize(
+            roomGridComponent.Initialize(
                 room.prefabData.width,
                 room.prefabData.height,
                 cellSize,
@@ -373,8 +405,93 @@ public class LevelGenerator : MonoBehaviour
                 gridDebugObjectPrefab
             );
 
-            room.roomGrid = roomGrid;
+            room.roomGrid = roomGridComponent;
         }
+    }
+
+    private void InitializeDoors()
+    {
+        foreach (PlacedRoom room in placedRooms)
+        {
+            // Find all RoomDoor components in this room
+            RoomDoor[] doors = room.roomInstance.GetComponentsInChildren<RoomDoor>();
+            
+            foreach (RoomDoor door in doors)
+            {
+                door.Initialize(room);
+            }
+
+            Debug.Log($"Initialized {doors.Length} doors in {room.roomInstance.name}");
+        }
+    }
+
+    private void SpawnPlayer()
+    {
+        Debug.Log("=== SPAWN PLAYER CALLED ===");
+        
+        if (playerPrefab == null)
+        {
+            Debug.LogError("❌ No player prefab assigned to LevelGenerator!");
+            return;
+        }
+
+        if (placedRooms == null || placedRooms.Count == 0)
+        {
+            Debug.LogError("❌ Cannot spawn player - no rooms generated!");
+            return;
+        }
+
+        Debug.Log($"Total rooms generated: {placedRooms.Count}");
+        
+        // Debug: Show all rooms and their types
+        for (int i = 0; i < placedRooms.Count; i++)
+        {
+            Debug.Log($"Room {i}: {placedRooms[i].roomInstance.name}, Type: {placedRooms[i].prefabData.roomType}");
+        }
+
+        // Find the start room
+        PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == RoomType.Start);
+        
+        if (startRoom == null)
+        {
+            Debug.LogError("❌ NO START ROOM FOUND!");
+            Debug.LogError("Make sure you have a room prefab with RoomType set to 'Start' in the Inspector!");
+            return;
+        }
+
+        Debug.Log($"✓ Found start room: {startRoom.roomInstance.name}");
+
+        if (startRoom.roomGrid == null)
+        {
+            Debug.LogError("❌ Start room has no grid!");
+            return;
+        }
+
+        Debug.Log($"✓ Start room grid exists: {startRoom.prefabData.width}x{startRoom.prefabData.height}");
+
+        // Spawn player at center of start room
+        int centerX = startRoom.prefabData.width / 2;
+        int centerZ = startRoom.prefabData.height / 2;
+        GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
+        Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnGridPos);
+
+        Debug.Log($"Spawning at grid position: {spawnGridPos}, world position: {spawnWorldPos}");
+
+        spawnedPlayer = Instantiate(playerPrefab, spawnWorldPos, Quaternion.identity);
+        spawnedPlayer.name = "Player";
+
+        // Set the start room as current room in RoomManager
+        if (RoomManager.Instance != null)
+        {
+            RoomManager.Instance.SetCurrentRoom(startRoom);
+            Debug.Log($"✓ Set current room in RoomManager: {startRoom.roomInstance.name}");
+        }
+        else
+        {
+            Debug.LogError("❌ RoomManager.Instance is NULL! Make sure you have a RoomManager in the scene!");
+        }
+
+        Debug.Log($"✓✓✓ Player spawned successfully at {spawnWorldPos} ✓✓✓");
     }
 
     private RoomPrefabData GetRandomRoomPrefab(RoomType roomType)
@@ -430,8 +547,19 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
+    public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction direction)
+    {
+        if (roomConnections.TryGetValue((room, direction), out PlacedRoom connected))
+        {
+            return connected;
+        }
+        return null;
+    }
+
     public RoomGrid GetRoomAtWorldPosition(Vector3 worldPosition)
     {
+        if (placedRooms == null) return null;
+
         foreach (PlacedRoom room in placedRooms)
         {
             if (room.roomGrid != null && room.roomGrid.IsPositionInRoom(worldPosition))
