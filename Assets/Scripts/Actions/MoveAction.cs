@@ -32,8 +32,6 @@ public class MoveAction : BaseAction
         else
         {
             isActive = false;
-
-            // 🔒 AUTHORITATIVELY LOCK GRID POSITION
             unit.PlaceInRoom(unit.GetCurrentRoomGrid(), targetGridPosition);
 
             onActionComplete?.Invoke();
@@ -51,7 +49,7 @@ public class MoveAction : BaseAction
     public void Move(GridPosition gridPosition, Action onActionComplete)
     {
         this.onActionComplete = onActionComplete;
-
+        
         RoomGrid currentRoom = unit.GetCurrentRoomGrid();
         if (currentRoom == null)
         {
@@ -59,11 +57,14 @@ public class MoveAction : BaseAction
             return;
         }
 
-        GridPosition currentGridPosition = unit.GetGridPosition();
-
+        // Remove unit from old position
+        GridPosition oldGridPosition = unit.GetGridPosition();
+        currentRoom.RemoveUnitAtGridPosition(oldGridPosition, unit);
+        
+        // Calculate distance and deduct stamina
         int distance = Mathf.Max(
-            Mathf.Abs(currentGridPosition.x - gridPosition.x),
-            Mathf.Abs(currentGridPosition.z - gridPosition.z)
+            Mathf.Abs(oldGridPosition.x - gridPosition.x),
+            Mathf.Abs(oldGridPosition.z - gridPosition.z)
         );
 
         if (playerStats != null)
@@ -72,12 +73,11 @@ public class MoveAction : BaseAction
             playerStats.currentStamina = Mathf.Max(playerStats.currentStamina, 0);
         }
 
-        targetGridPosition = gridPosition;
-        targetPosition = currentRoom.GetWorldPosition(gridPosition);
-
+        // Add unit to new position
+        currentRoom.AddUnitAtGridPosition(gridPosition, unit);
+        
+        this.targetPosition = currentRoom.GetWorldPosition(gridPosition);
         isActive = true;
-
-        Debug.Log($"Moving to grid {gridPosition}, world {targetPosition}");
     }
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
