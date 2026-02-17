@@ -171,9 +171,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 38a442d9e7765da4eafa3a1919e75cb3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RoomGridDefinition
-  width: 10
-  height: 10
-  gridHeightOffset: 2
+  width: 14
+  height: 14
+  gridOffsetX: -14
+  gridOffsetY: 0.5
+  gridOffsetZ: -14
   showGizmos: 1
 --- !u!1 &8430599429114154165
 GameObject:

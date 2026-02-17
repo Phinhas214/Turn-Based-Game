@@ -791,7 +791,7 @@ Transform:
   m_GameObject: {fileID: 1979515162}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 71.78, y: 0, z: 8.400963}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -812,19 +812,22 @@ MonoBehaviour:
   roomPrefabs:
   - prefab: {fileID: 7211524986439877235, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
     roomType: 0
+    spawnWeight: 1
     width: 35
     height: 1
-    spawnWeight: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
   - prefab: {fileID: 7815365408416092535, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
     roomType: 2
+    spawnWeight: 1
     width: 35
     height: 1
-    spawnWeight: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
   - prefab: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
     roomType: 1
+    spawnWeight: 1
     width: 35
     height: 1
-    spawnWeight: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
   hallwayPrefab: {fileID: 868505126936158952, guid: 06f61634c2353294fa22b66d1f4a5722, type: 3}
   minRooms: 5
   maxRooms: 11
@@ -1080,9 +1083,25 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 1622547824573388520, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
-      propertyPath: m_Name
-      value: normal_room
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: width
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: height
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: gridOffsetX
+      value: -15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: gridOffsetY
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: gridOffsetZ
+      value: -15
       objectReference: {fileID: 0}
     - target: {fileID: 7406849774012905454, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1208,7 +1227,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4204262140245317218, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 125.86
+      value: 137.37
       objectReference: {fileID: 0}
     - target: {fileID: 4204262140245317218, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
       propertyPath: m_LocalRotation.w
@@ -1238,6 +1257,22 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6079437697460084756, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+      propertyPath: width
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6079437697460084756, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+      propertyPath: height
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6079437697460084756, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+      propertyPath: gridOffsetX
+      value: -15
+      objectReference: {fileID: 0}
+    - target: {fileID: 6079437697460084756, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+      propertyPath: gridOffsetZ
+      value: -15
+      objectReference: {fileID: 0}
     - target: {fileID: 7211524986439877235, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
       propertyPath: m_Name
       value: starting_room
@@ -1255,10 +1290,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 2564102700787146925, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
-      propertyPath: m_Name
-      value: end_room
-      objectReference: {fileID: 0}
     - target: {fileID: 4197639867654277644, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
       propertyPath: m_LocalPosition.x
       value: 9.683524
@@ -1298,6 +1329,26 @@ PrefabInstance:
     - target: {fileID: 4197639867654277644, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4506323904266692893, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: width
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 4506323904266692893, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: height
+      value: 15
+      objectReference: {fileID: 0}
+    - target: {fileID: 4506323904266692893, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: gridOffsetX
+      value: -15
+      objectReference: {fileID: 0}
+    - target: {fileID: 4506323904266692893, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: gridOffsetY
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4506323904266692893, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: gridOffsetZ
+      value: -15
       objectReference: {fileID: 0}
     - target: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
       propertyPath: m_Name

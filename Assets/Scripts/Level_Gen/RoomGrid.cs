@@ -4,18 +4,18 @@ public class RoomGrid : MonoBehaviour
 {
     private GridSystem gridSystem;
     private Vector3 roomWorldPosition;
+    private Vector3 gridOffset;
     private int width;
     private int height;
     private float cellSize;
-    private float heightOffset;
 
-    public void Initialize(int width, int height, float cellSize, Vector3 worldPosition, float heightOffset = 0.1f, Transform debugPrefab = null)
+    public void Initialize(int width, int height, float cellSize, Vector3 worldPosition, Vector3 gridOffset, Transform debugPrefab = null)
     {
         this.width = width;
         this.height = height;
         this.cellSize = cellSize;
-        this.heightOffset = heightOffset;
         this.roomWorldPosition = worldPosition;
+        this.gridOffset = gridOffset;
 
         gridSystem = new GridSystem(width, height, cellSize);
 
@@ -48,24 +48,23 @@ public class RoomGrid : MonoBehaviour
 
     public GridSystem GetGridSystem() => gridSystem;
 
-    // Height offset is applied here so grid sits on the floor
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         Vector3 localPos = gridSystem.GetWorldPosition(gridPosition);
-        return roomWorldPosition + new Vector3(localPos.x, heightOffset, localPos.z);
+        return roomWorldPosition + gridOffset + new Vector3(localPos.x, 0, localPos.z);
     }
 
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {
-        // Strip out the height offset before calculating grid position
-        Vector3 localPosition = worldPosition - roomWorldPosition;
+        // Subtract room position and offset before calculating grid position
+        Vector3 localPosition = worldPosition - roomWorldPosition - gridOffset;
         localPosition.y = 0;
         return gridSystem.GetGridPosition(localPosition);
     }
 
     public bool IsPositionInRoom(Vector3 worldPosition)
     {
-        Vector3 localPos = worldPosition - roomWorldPosition;
+        Vector3 localPos = worldPosition - roomWorldPosition - gridOffset;
         localPos.y = 0;
         GridPosition gridPos = gridSystem.GetGridPosition(localPos);
         return gridSystem.IsValidGridPosition(gridPos);
@@ -96,5 +95,5 @@ public class RoomGrid : MonoBehaviour
 
     public int GetWidth() => width;
     public int GetHeight() => height;
-    public float GetHeightOffset() => heightOffset;
-}
+    public Vector3 GetGridOffset() => gridOffset;
+}  

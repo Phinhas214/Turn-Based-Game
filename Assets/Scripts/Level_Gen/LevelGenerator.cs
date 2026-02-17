@@ -10,10 +10,10 @@ public class LevelGenerator : MonoBehaviour
         public RoomType roomType;
         [Range(0f, 1f)] public float spawnWeight = 1f;
 
-        // These get read from RoomGridDefinition on the prefab
+        // Read from RoomGridDefinition on the prefab
         [HideInInspector] public int width = 10;
         [HideInInspector] public int height = 10;
-        [HideInInspector] public float heightOffset = 0.1f;
+        [HideInInspector] public Vector3 gridOffset = new Vector3(0, 0.1f, 0);
     }
 
     public enum RoomType { Start, End, Normal, Special }
@@ -55,12 +55,10 @@ public class LevelGenerator : MonoBehaviour
 
     private void Start()
     {
-        // Read grid definitions from all prefabs before generating
         ReadRoomPrefabDefinitions();
         Invoke(nameof(GenerateLevel), 0.1f);
     }
 
-    // Reads RoomGridDefinition from each prefab so width/height/offset are correct
     private void ReadRoomPrefabDefinitions()
     {
         foreach (RoomPrefabData data in roomPrefabs)
@@ -72,16 +70,16 @@ public class LevelGenerator : MonoBehaviour
             {
                 data.width = def.width;
                 data.height = def.height;
-                data.heightOffset = def.gridHeightOffset;
-                Debug.Log($"Read grid definition from {data.prefab.name}: {data.width}x{data.height}, offset: {data.heightOffset}");
+                data.gridOffset = def.GetGridOffset();
+                Debug.Log($"Read grid definition from {data.prefab.name}: " +
+                          $"{data.width}x{data.height}, offset: {data.gridOffset}");
             }
             else
             {
-                // Default values if no definition found
                 data.width = 10;
                 data.height = 10;
-                data.heightOffset = 0.1f;
-                Debug.LogWarning($"Room prefab {data.prefab.name} has no RoomGridDefinition - using defaults 10x10");
+                data.gridOffset = new Vector3(0, 0.1f, 0);
+                Debug.LogWarning($"{data.prefab.name} has no RoomGridDefinition - using defaults 10x10");
             }
         }
     }
@@ -190,27 +188,31 @@ public class LevelGenerator : MonoBehaviour
                 roomGridComponent = room.roomInstance.AddComponent<RoomGrid>();
             }
 
-            // Use per-room settings from RoomGridDefinition
+            // Read offset directly from the instantiated room's definition
+            RoomGridDefinition def = room.roomInstance.GetComponent<RoomGridDefinition>();
+            Vector3 gridOffset = def != null ? def.GetGridOffset() : new Vector3(0, 0.1f, 0);
+            int width = def != null ? def.width : room.prefabData.width;
+            int height = def != null ? def.height : room.prefabData.height;
+
             roomGridComponent.Initialize(
-                room.prefabData.width,
-                room.prefabData.height,
+                width,
+                height,
                 cellSize,
                 room.worldPosition,
-                room.prefabData.heightOffset,
+                gridOffset,
                 gridDebugObjectPrefab
             );
 
             room.roomGrid = roomGridComponent;
 
-            // Register this room grid with LevelGrid
             if (LevelGrid.Instance != null)
             {
                 LevelGrid.Instance.RegisterRoomGrid(room.roomGrid);
             }
 
             Debug.Log($"Grid initialized: {room.roomInstance.name} " +
-                      $"{room.prefabData.width}x{room.prefabData.height} " +
-                      $"offset:{room.prefabData.heightOffset} " +
+                      $"{width}x{height} " +
+                      $"offset:{gridOffset} " +
                       $"at:{room.worldPosition}");
         }
     }
@@ -237,9 +239,8 @@ public class LevelGenerator : MonoBehaviour
             return;
         }
 
-        // Spawn at center of start room
-        int centerX = startRoom.prefabData.width / 2;
-        int centerZ = startRoom.prefabData.height / 2;
+        int centerX = startRoom.roomGrid.GetWidth() / 2;
+        int centerZ = startRoom.roomGrid.GetHeight() / 2;
         GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
         Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnGridPos);
 
@@ -281,13 +282,14 @@ public class LevelGenerator : MonoBehaviour
             return null;
         }
 
-        // Read grid definition from the instantiated room
+        // Read grid definition from instantiated room
+        // This ensures each room instance has its own correct values
         RoomGridDefinition def = roomInstance.GetComponent<RoomGridDefinition>();
         if (def != null)
         {
             prefabData.width = def.width;
             prefabData.height = def.height;
-            prefabData.heightOffset = def.gridHeightOffset;
+            prefabData.gridOffset = def.GetGridOffset();
         }
 
         PlacedRoom placedRoom = new PlacedRoom

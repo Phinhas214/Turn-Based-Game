@@ -12,7 +12,7 @@ public class SpinAction : BaseAction
         float spinAddAmount = 360 * Time.deltaTime;
         transform.eulerAngles += new Vector3(0, spinAddAmount, 0);   
 
-        totalSpinAmount += spinAddAmount;     
+        totalSpinAmount += spinAddAmount;
 
         if (totalSpinAmount > 360)
         {
