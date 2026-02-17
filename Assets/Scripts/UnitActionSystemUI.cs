@@ -1,28 +1,33 @@
 using System;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class UnitActionSystemUI : MonoBehaviour
 {
     [SerializeField] private Transform actionButtonPrefab;
     [SerializeField] private Transform actionButtonContainerTransform;
 
-
     private void Start()
     {
         UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChanged;
-        CreateUnitActionButtons();
+        // Don't create buttons until a unit is selected
     }
-
 
     private void CreateUnitActionButtons()
     {
-        foreach (Transform buttonTransfrom in actionButtonContainerTransform)
+        // Clear existing buttons
+        foreach (Transform buttonTransform in actionButtonContainerTransform)
         {
-            Destroy(buttonTransfrom.gameObject);
+            Destroy(buttonTransform.gameObject);
         }
 
         Unit selectedUnit = UnitActionSystem.Instance.GetSelectedUnit();
+        
+        // Don't create buttons if no unit selected
+        if (selectedUnit == null)
+        {
+            return;
+        }
+
         foreach (BaseAction baseAction in selectedUnit.GetBaseActionArray())
         {
             Transform actionButtonTransform = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
@@ -35,6 +40,4 @@ public class UnitActionSystemUI : MonoBehaviour
     {
         CreateUnitActionButtons();
     }
-
-
 }

@@ -515,7 +515,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1061830643}
   - component: {fileID: 1061830642}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: UnitActionSystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -534,7 +534,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92f5eb3e80b3e4ccb80ebb69f9616ace, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  selectedUnit: {fileID: 0}
+  selectedUnit: {fileID: 8805797687680868294, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
   unitLayerMask:
     serializedVersion: 2
     m_Bits: 128
@@ -547,7 +547,7 @@ Transform:
   m_GameObject: {fileID: 1061830641}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 3.3623838, y: 2.0846305, z: -0.7864225}
+  m_LocalPosition: {x: 6.7, y: 2.0846305, z: -0.7864225}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -627,7 +627,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8112095d853cd41b893a686794d7f368, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
+  gridDebugObjectPrefab: {fileID: 4204262140245317218, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
 --- !u!4 &1315480509
 Transform:
   m_ObjectHideFlags: 0
@@ -802,7 +802,7 @@ Transform:
   m_GameObject: {fileID: 1979515162}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 71.78, y: 3.65, z: 8.400963}
+  m_LocalPosition: {x: 71.78, y: 0, z: 8.400963}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -840,7 +840,7 @@ MonoBehaviour:
   minRooms: 5
   maxRooms: 11
   specialRoomChance: 0
-  cellSize: 2
+  cellSize: 10
   gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
   playerPrefab: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
   spawnPlayerOnGenerate: 1

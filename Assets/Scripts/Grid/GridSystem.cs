@@ -10,7 +10,7 @@ public class GridSystem
 
     public GridSystem(int width, int height, float cellSize)
     {
-        this.width = width;
+                this.width = width;
         this.height = height;
         this.cellSize = cellSize;
 

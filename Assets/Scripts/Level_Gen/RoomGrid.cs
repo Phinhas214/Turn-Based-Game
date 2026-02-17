@@ -8,7 +8,6 @@ public class RoomGrid : MonoBehaviour
     private int height;
     private float cellSize;
 
-    // Add to RoomGrid.cs in the Initialize method, after gridSystem is created:
     public void Initialize(int width, int height, float cellSize, Vector3 worldPosition, Transform debugPrefab = null)
     {
         this.width = width;
@@ -18,16 +17,9 @@ public class RoomGrid : MonoBehaviour
         
         gridSystem = new GridSystem(width, height, cellSize);
         
-        Debug.Log($"✓✓✓ RoomGrid initialized: {width}x{height}, cellSize: {cellSize}, at: {worldPosition}");
-        
         if (debugPrefab != null)
         {
             CreateDebugObjects(debugPrefab);
-            Debug.Log($"✓ Created debug objects for grid");
-        }
-        else
-        {
-            Debug.LogWarning("⚠ No debug prefab provided - grid is invisible but functional");
         }
     }
 

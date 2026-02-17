@@ -26,13 +26,11 @@ public class GridSystemVisual : MonoBehaviour
 
     private void OnEnable()
     {
-        // Subscribe to level ready event
         LevelGenerator.OnLevelReady += InitializeVisuals;
     }
 
     private void OnDisable()
     {
-        // Unsubscribe
         LevelGenerator.OnLevelReady -= InitializeVisuals;
         
         if (RoomManager.Instance != null)
@@ -43,8 +41,6 @@ public class GridSystemVisual : MonoBehaviour
 
     private void InitializeVisuals()
     {
-        Debug.Log("=== GridSystemVisual.InitializeVisuals (via OnLevelReady event) ===");
-        
         LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
         if (levelGen == null)
         {
@@ -59,22 +55,17 @@ public class GridSystemVisual : MonoBehaviour
             return;
         }
 
-        // Create visual grids for each room
         foreach (var room in rooms)
         {
             if (room.roomGrid == null) continue;
             CreateVisualGridForRoom(room.roomGrid);
         }
 
-        Debug.Log($"✓ GridSystemVisual: Created visuals for {roomVisualGrids.Count} rooms");
-
-        // Subscribe to room changes
         if (RoomManager.Instance != null)
         {
             RoomManager.Instance.OnRoomChanged += OnRoomChanged;
         }
 
-        // Show the current room's grid
         if (RoomManager.Instance != null && RoomManager.Instance.GetCurrentRoom() != null)
         {
             ShowRoomGrid(RoomManager.Instance.GetCurrentRoomGrid());
@@ -105,7 +96,7 @@ public class GridSystemVisual : MonoBehaviour
                 );
 
                 GridSystemVisualSingle visual = visualTransform.GetComponent<GridSystemVisualSingle>();
-                visual.Hide(); // Start hidden
+                visual.Hide();
                 visualArray[x, z] = visual;
             }
         }
@@ -125,13 +116,11 @@ public class GridSystemVisual : MonoBehaviour
     {
         HideAllGrids();
         currentVisibleRoom = roomGrid;
-        Debug.Log($"GridSystemVisual: Switched to room grid");
     }
 
     private void Update()
     {
-        if (!isInitialized) return; // Don't update until initialized
-        
+        if (!isInitialized) return;
         UpdateGridVisual();
     }
 
@@ -186,26 +175,23 @@ public class GridSystemVisual : MonoBehaviour
     {
         HideAllGridPosition();
 
-        // Check if UnitActionSystem exists
         if (UnitActionSystem.Instance == null)
         {
-            return; // Silently return - system not ready yet
+            return;
         }
         
         Unit selectedUnit = UnitActionSystem.Instance.GetSelectedUnit();
         if (selectedUnit == null)
         {
-            return; // No unit selected - this is normal
+            return;
         }
 
-        // Make sure unit has MoveAction
         MoveAction moveAction = selectedUnit.GetMoveAction();
         if (moveAction == null)
         {
-            return; // No MoveAction - don't spam warnings
+            return;
         }
 
-        // Show valid move positions
         List<GridPosition> validPositions = moveAction.GetValidActionGridPositionList();
         ShowGridPositionList(validPositions);
     }

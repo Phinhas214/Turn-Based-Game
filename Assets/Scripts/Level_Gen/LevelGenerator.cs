@@ -553,4 +553,38 @@ public class LevelGenerator : MonoBehaviour
     {
         GenerateLevel();
     }
+
+
+    [ContextMenu("Debug Level State")]
+    private void DebugLevelState()
+    {
+        Debug.Log("=== LEVEL STATE DEBUG ===");
+        Debug.Log($"Total rooms: {placedRooms?.Count ?? 0}");
+        
+        if (placedRooms != null)
+        {
+            foreach (var room in placedRooms)
+            {
+                Debug.Log($"Room: {room.roomInstance.name}");
+                Debug.Log($"  Position: {room.worldPosition}");
+                Debug.Log($"  Grid: {room.roomGrid != null}");
+                if (room.roomGrid != null)
+                {
+                    Debug.Log($"  Grid Size: {room.roomGrid.GetWidth()}x{room.roomGrid.GetHeight()}");
+                }
+            }
+        }
+        
+        if (spawnedPlayer != null)
+        {
+            Debug.Log($"Player: {spawnedPlayer.name} at {spawnedPlayer.transform.position}");
+            Unit unit = spawnedPlayer.GetComponent<Unit>();
+            if (unit != null)
+            {
+                Debug.Log($"  Initialized: {unit.IsInitialized()}");
+                Debug.Log($"  Grid Position: {unit.GetGridPosition()}");
+                Debug.Log($"  Has Room: {unit.GetCurrentRoomGrid() != null}");
+            }
+        }
+    }
 }

@@ -28,6 +28,8 @@ public class RoomManager : MonoBehaviour
     {
         currentRoom = room;
         Debug.Log($"Current room set to: {room.roomInstance.name}");
+        
+        // Notify LevelGrid and other systems
         OnRoomChanged?.Invoke(room);
     }
 
@@ -41,9 +43,6 @@ public class RoomManager : MonoBehaviour
         return currentRoom?.roomGrid;
     }
 
-    // =========================================================
-    // GRID-FIRST ROOM TRANSITION (AUTHORITATIVE)
-    // =========================================================
     public void TransitionToRoom(LevelGenerator.PlacedRoom targetRoom, Vector3 doorWorldPosition)
     {
         if (targetRoom == null)
@@ -60,12 +59,12 @@ public class RoomManager : MonoBehaviour
         }
 
         // Convert door world position → grid position
-        GridPosition spawnGridPosition =
-            targetRoom.roomGrid.GetGridPosition(doorWorldPosition);
+        GridPosition spawnGridPosition = targetRoom.roomGrid.GetGridPosition(doorWorldPosition);
 
-        // AUTHORITATIVE placement
+        // Place player in new room
         player.PlaceInRoom(targetRoom.roomGrid, spawnGridPosition);
 
+        // Update current room (this triggers OnRoomChanged event)
         SetCurrentRoom(targetRoom);
     }
 }

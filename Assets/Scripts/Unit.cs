@@ -32,28 +32,37 @@ public class Unit : MonoBehaviour
 
     public MoveAction GetMoveAction()
     {
-        if (moveAction == null)
-        {
-            Debug.LogError($"GetMoveAction() called but moveAction is NULL on {gameObject.name}!");
-        }
         return moveAction;
     }
     
-    public SpinAction GetSpinAction() => spinAction;
+    public SpinAction GetSpinAction()
+    {
+        return spinAction;
+    }
+    
+    public BaseAction[] GetBaseActionArray()
+    {
+        return baseActionArray;
+    }
+    
+    public RoomGrid GetCurrentRoomGrid()
+    {
+        return currentRoomGrid;
+    }
+    
+    public bool IsInitialized()
+    {
+        return isInitialized;
+    }
     
     public GridPosition GetGridPosition()
     {
         if (currentRoomGrid == null || !isInitialized)
         {
-            Debug.LogError("Unit.GetGridPosition() called but unit is not initialized!");
             return new GridPosition(0, 0);
         }
         return gridPosition;
     }
-    
-    public RoomGrid GetCurrentRoomGrid() => currentRoomGrid;
-    public BaseAction[] GetBaseActionArray() => baseActionArray;
-    public bool IsInitialized() => isInitialized;
 
     public void SetCurrentRoomGrid(RoomGrid roomGrid)
     {
@@ -89,7 +98,5 @@ public class Unit : MonoBehaviour
         transform.position = roomGrid.GetWorldPosition(newGridPosition);
         roomGrid.AddUnitAtGridPosition(newGridPosition, this);
         isInitialized = true;
-        
-        Debug.Log($"Unit placed in room at grid {newGridPosition}, initialized: {isInitialized}");
     }
 }

@@ -5,35 +5,35 @@ using UnityEngine;
 public class MoveAction : BaseAction
 {
     private Vector3 targetPosition;
-    private GridPosition targetGridPosition;
     private PlayerStats playerStats;
-
+    
     [SerializeField] private int maxMoveDistance = 4;
 
     protected override void Awake()
     {
         base.Awake();
         playerStats = GetComponent<PlayerStats>();
+        targetPosition = transform.position;
     }
 
     private void Update()
     {
         if (!isActive)
+        {
             return;
+        }
 
         Vector3 moveDirection = (targetPosition - transform.position).normalized;
-        float stoppingDistance = 0.05f;
-        float moveSpeed = 8f;
+        float stoppingDistance = 0.1f;
 
         if (Vector3.Distance(transform.position, targetPosition) > stoppingDistance)
         {
+            float moveSpeed = 8f;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
         }
         else
         {
             isActive = false;
-            unit.PlaceInRoom(unit.GetCurrentRoomGrid(), targetGridPosition);
-
             onActionComplete?.Invoke();
         }
     }
@@ -41,8 +41,9 @@ public class MoveAction : BaseAction
     private int GetMoveDistance()
     {
         if (playerStats != null)
+        {
             return Mathf.Max(playerStats.currentStamina, 0);
-
+        }
         return maxMoveDistance;
     }
 
@@ -57,11 +58,9 @@ public class MoveAction : BaseAction
             return;
         }
 
-        // Remove unit from old position
         GridPosition oldGridPosition = unit.GetGridPosition();
         currentRoom.RemoveUnitAtGridPosition(oldGridPosition, unit);
-        
-        // Calculate distance and deduct stamina
+
         int distance = Mathf.Max(
             Mathf.Abs(oldGridPosition.x - gridPosition.x),
             Mathf.Abs(oldGridPosition.z - gridPosition.z)
@@ -73,7 +72,6 @@ public class MoveAction : BaseAction
             playerStats.currentStamina = Mathf.Max(playerStats.currentStamina, 0);
         }
 
-        // Add unit to new position
         currentRoom.AddUnitAtGridPosition(gridPosition, unit);
         
         this.targetPosition = currentRoom.GetWorldPosition(gridPosition);
@@ -82,16 +80,19 @@ public class MoveAction : BaseAction
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
     {
-        return GetValidActionGridPositionList().Contains(gridPosition);
+        List<GridPosition> validGridPositionList = GetValidActionGridPositionList();
+        return validGridPositionList.Contains(gridPosition);
     }
 
     public List<GridPosition> GetValidActionGridPositionList()
     {
-        List<GridPosition> validGridPositionList = new();
-
+        List<GridPosition> validGridPositionList = new List<GridPosition>();
+        
         RoomGrid currentRoom = unit.GetCurrentRoomGrid();
         if (currentRoom == null)
+        {
             return validGridPositionList;
+        }
 
         GridPosition unitGridPosition = unit.GetGridPosition();
         int moveDistance = GetMoveDistance();
@@ -103,13 +104,13 @@ public class MoveAction : BaseAction
                 int distance = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z));
                 if (distance > moveDistance) continue;
 
-                GridPosition testGridPosition =
-                    unitGridPosition + new GridPosition(x, z);
+                GridPosition offsetGridPosition = new GridPosition(x, z);
+                GridPosition testGridPosition = unitGridPosition + offsetGridPosition;
 
                 if (!currentRoom.IsValidGridPosition(testGridPosition))
                     continue;
 
-                if (testGridPosition == unitGridPosition)
+                if (unitGridPosition == testGridPosition)
                     continue;
 
                 if (currentRoom.HasAnyUnitOnGridPosition(testGridPosition))
