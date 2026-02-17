@@ -58,12 +58,13 @@ public class StaminaContainerUI : MonoBehaviour,
         Vector2 localMousePos;
 
         // Convert screen mouse position to container-local space
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
             rect,
             Input.mousePosition,
-            null,
-            out localMousePos))
-            return;
+            Camera.main,
+            out localMousePos
+        );
+
 
         // Only disturb if mouse is inside container
         if (!rect.rect.Contains(localMousePos))
