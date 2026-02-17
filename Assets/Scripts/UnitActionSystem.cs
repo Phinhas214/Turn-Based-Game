@@ -4,12 +4,12 @@ using UnityEngine;
 public class UnitActionSystem : MonoBehaviour
 {
     public static UnitActionSystem Instance { get; private set; }
-
+    
     public event EventHandler OnSelectedUnitChange;
-
-    [SerializeField] private Unit selectedUnit;
+    
     [SerializeField] private LayerMask unitLayerMask;
-
+    
+    private Unit selectedUnit;
     private bool isBusy;
 
     private void Awake()
@@ -20,6 +20,34 @@ public class UnitActionSystem : MonoBehaviour
             return;
         } 
         Instance = this;
+    }
+
+    private void OnEnable()
+    {
+        // Listen for when level is ready then find the spawned player
+        LevelGenerator.OnLevelReady += OnLevelReady;
+    }
+
+    private void OnDisable()
+    {
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+    }
+
+    private void OnLevelReady()
+    {
+        // Find the player that was just spawned by LevelGenerator
+        Unit spawnedUnit = FindFirstObjectByType<Unit>();
+        
+        if (spawnedUnit != null)
+        {
+            // Auto select the player when level is ready
+            SetSelectedUnit(spawnedUnit);
+            Debug.Log($"UnitActionSystem: Auto-selected spawned unit {spawnedUnit.name}");
+        }
+        else
+        {
+            Debug.LogWarning("UnitActionSystem: No unit found after level ready!");
+        }
     }
 
     private void Update()
@@ -44,7 +72,8 @@ public class UnitActionSystem : MonoBehaviour
         {  
             if (TryHandleUnitSelection()) return;
 
-            GridPosition mouseGridPosition = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+            Vector3 mouseWorldPos = MouseWorld.GetPosition();
+            GridPosition mouseGridPosition = LevelGrid.Instance.GetGridPosition(mouseWorldPos);
             
             MoveAction moveAction = selectedUnit.GetMoveAction();
             if (moveAction != null && moveAction.isValidActionGridPosition(mouseGridPosition))
@@ -86,7 +115,6 @@ public class UnitActionSystem : MonoBehaviour
                 return true;
             }
         }
-
         return false;
     }
 
