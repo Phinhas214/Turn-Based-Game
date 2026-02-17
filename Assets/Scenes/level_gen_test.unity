@@ -841,7 +841,7 @@ MonoBehaviour:
   maxRooms: 11
   specialRoomChance: 0
   cellSize: 2
-  gridDebugObjectPrefab: {fileID: 0}
+  gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
   playerPrefab: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
   spawnPlayerOnGenerate: 1
 --- !u!1 &2088779255
@@ -1091,6 +1091,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1622547824573388520, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: m_Name
+      value: normal_room
+      objectReference: {fileID: 0}
     - target: {fileID: 7406849774012905454, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
       propertyPath: m_LocalPosition.x
       value: 9.683524
@@ -1262,6 +1266,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2564102700787146925, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+      propertyPath: m_Name
+      value: end_room
+      objectReference: {fileID: 0}
     - target: {fileID: 4197639867654277644, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
       propertyPath: m_LocalPosition.x
       value: 9.683524

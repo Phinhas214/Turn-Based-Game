@@ -16,46 +16,6 @@ public class Unit : MonoBehaviour
         baseActionArray = GetComponents<BaseAction>();
     }
 
-    private void OnEnable()
-    {
-        LevelGenerator.OnLevelReady += InitializeUnit;
-    }
-
-    private void OnDisable()
-    {
-        LevelGenerator.OnLevelReady -= InitializeUnit;
-    }
-
-    private void InitializeUnit()
-    {
-        // Get current room from RoomManager
-        if (RoomManager.Instance != null)
-        {
-            currentRoomGrid = RoomManager.Instance.GetCurrentRoomGrid();
-        }
-
-        // Fallback: try to find room at our world position
-        if (currentRoomGrid == null)
-        {
-            LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
-            if (levelGen != null)
-            {
-                currentRoomGrid = levelGen.GetRoomAtWorldPosition(transform.position);
-            }
-        }
-        
-        if (currentRoomGrid != null)
-        {
-            gridPosition = currentRoomGrid.GetGridPosition(transform.position);
-            currentRoomGrid.AddUnitAtGridPosition(gridPosition, this);
-            isInitialized = true;
-        }
-        else
-        {
-            Debug.LogError($"Unit {gameObject.name} at position {transform.position} could not find a room!");
-        }
-    }
-
     private void Update()
     {
         if (!isInitialized || currentRoomGrid == null) return;
@@ -97,16 +57,13 @@ public class Unit : MonoBehaviour
 
     public void SetCurrentRoomGrid(RoomGrid roomGrid)
     {
-        // Remove from old grid
         if (currentRoomGrid != null && isInitialized)
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
         }
 
-        // Set new grid
         currentRoomGrid = roomGrid;
         
-        // Add to new grid
         if (currentRoomGrid != null)
         {
             gridPosition = currentRoomGrid.GetGridPosition(transform.position);
@@ -121,19 +78,18 @@ public class Unit : MonoBehaviour
 
     public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
     {
-        // Remove from old grid
         if (currentRoomGrid != null && isInitialized)
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
         }
 
-        // Set new grid and position
         currentRoomGrid = roomGrid;
         gridPosition = newGridPosition;
 
-        // Update world position and register
         transform.position = roomGrid.GetWorldPosition(newGridPosition);
         roomGrid.AddUnitAtGridPosition(newGridPosition, this);
         isInitialized = true;
+        
+        Debug.Log($"Unit placed in room at grid {newGridPosition}, initialized: {isInitialized}");
     }
 }
