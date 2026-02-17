@@ -214,6 +214,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7406849774012905454}
   - component: {fileID: 9144956332462796746}
+  - component: {fileID: 6710372886455344540}
   m_Layer: 6
   m_Name: normal_room
   m_TagString: Untagged
@@ -269,6 +270,22 @@ MonoBehaviour:
     transform: {fileID: 7992546055664152532}
     direction: 3
     isConnected: 0
+--- !u!114 &6710372886455344540
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7815365408416092535}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 38a442d9e7765da4eafa3a1919e75cb3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoomGridDefinition
+  width: 10
+  height: 10
+  gridHeightOffset: 2
+  showGizmos: 1
 --- !u!1 &8759586000354732134
 GameObject:
   m_ObjectHideFlags: 0

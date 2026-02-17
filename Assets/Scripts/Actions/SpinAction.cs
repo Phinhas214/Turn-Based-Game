@@ -7,10 +7,7 @@ public class SpinAction : BaseAction
 
     private void Update()
     {
-        if (!isActive)
-        {
-            return;
-        }
+        if (!isActive) return;
 
         float spinAddAmount = 360 * Time.deltaTime;
         transform.eulerAngles += new Vector3(0, spinAddAmount, 0);   
@@ -23,7 +20,6 @@ public class SpinAction : BaseAction
             onActionComplete();
         }
     }
-
 
     public void Spin(Action onActionComplete)
     {

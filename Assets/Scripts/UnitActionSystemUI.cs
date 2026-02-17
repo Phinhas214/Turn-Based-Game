@@ -8,25 +8,30 @@ public class UnitActionSystemUI : MonoBehaviour
 
     private void Start()
     {
-        UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChanged;
-        // Don't create buttons until a unit is selected
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChanged;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange -= UnitActionSystem_OnSelectedUnitChanged;
+        }
     }
 
     private void CreateUnitActionButtons()
     {
-        // Clear existing buttons
         foreach (Transform buttonTransform in actionButtonContainerTransform)
         {
             Destroy(buttonTransform.gameObject);
         }
 
-        Unit selectedUnit = UnitActionSystem.Instance.GetSelectedUnit();
+        Unit selectedUnit = UnitActionSystem.Instance?.GetSelectedUnit();
         
-        // Don't create buttons if no unit selected
-        if (selectedUnit == null)
-        {
-            return;
-        }
+        if (selectedUnit == null) return;
 
         foreach (BaseAction baseAction in selectedUnit.GetBaseActionArray())
         {

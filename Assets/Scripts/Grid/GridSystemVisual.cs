@@ -15,7 +15,6 @@ public class GridSystemVisual : MonoBehaviour
     {
         if (Instance != null)
         {
-            Debug.LogError("There's more than one GridSystemVisual! " + transform + " " + Instance);
             Destroy(gameObject);
             return;
         }
@@ -42,18 +41,10 @@ public class GridSystemVisual : MonoBehaviour
     private void InitializeVisuals()
     {
         LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
-        if (levelGen == null)
-        {
-            Debug.LogWarning("GridSystemVisual: No LevelGenerator found!");
-            return;
-        }
+        if (levelGen == null) return;
 
         List<LevelGenerator.PlacedRoom> rooms = levelGen.GetAllRooms();
-        if (rooms == null || rooms.Count == 0)
-        {
-            Debug.LogWarning("GridSystemVisual: No rooms to visualize!");
-            return;
-        }
+        if (rooms == null || rooms.Count == 0) return;
 
         foreach (var room in rooms)
         {
@@ -175,22 +166,13 @@ public class GridSystemVisual : MonoBehaviour
     {
         HideAllGridPosition();
 
-        if (UnitActionSystem.Instance == null)
-        {
-            return;
-        }
+        if (UnitActionSystem.Instance == null) return;
         
         Unit selectedUnit = UnitActionSystem.Instance.GetSelectedUnit();
-        if (selectedUnit == null)
-        {
-            return;
-        }
+        if (selectedUnit == null) return;
 
         MoveAction moveAction = selectedUnit.GetMoveAction();
-        if (moveAction == null)
-        {
-            return;
-        }
+        if (moveAction == null) return;
 
         List<GridPosition> validPositions = moveAction.GetValidActionGridPositionList();
         ShowGridPositionList(validPositions);

@@ -301,11 +301,6 @@ Transform:
   - {fileID: 304442975}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &374571691 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
-  m_PrefabInstance: {fileID: 5290578668332342962}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &485253838
 GameObject:
   m_ObjectHideFlags: 0
@@ -627,7 +622,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8112095d853cd41b893a686794d7f368, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridDebugObjectPrefab: {fileID: 4204262140245317218, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
 --- !u!4 &1315480509
 Transform:
   m_ObjectHideFlags: 0
@@ -692,11 +686,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1859990256 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 7815365408416092535, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
-  m_PrefabInstance: {fileID: 180505689377780118}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1901068411
 GameObject:
   m_ObjectHideFlags: 0
@@ -826,12 +815,12 @@ MonoBehaviour:
     width: 35
     height: 1
     spawnWeight: 1
-  - prefab: {fileID: 1859990256}
+  - prefab: {fileID: 7815365408416092535, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
     roomType: 2
     width: 35
     height: 1
     spawnWeight: 1
-  - prefab: {fileID: 374571691}
+  - prefab: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
     roomType: 1
     width: 35
     height: 1
@@ -840,7 +829,7 @@ MonoBehaviour:
   minRooms: 5
   maxRooms: 11
   specialRoomChance: 0
-  cellSize: 10
+  cellSize: 2
   gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
   playerPrefab: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
   spawnPlayerOnGenerate: 1

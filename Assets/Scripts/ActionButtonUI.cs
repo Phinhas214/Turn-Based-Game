@@ -1,14 +1,17 @@
 using UnityEngine;
-using TMPro;
 using UnityEngine.UI;
+using TMPro;
 
 public class ActionButtonUI : MonoBehaviour
 {
-    [SerializeField] private TextMeshProUGUI testMeshPro;
+    [SerializeField] private TextMeshProUGUI textMeshPro;
     [SerializeField] private Button button;
 
+    private BaseAction baseAction;
+
     public void SetBaseAction(BaseAction baseAction)
-    {  
-        testMeshPro.text = baseAction.GetActionName().ToUpper();
+    {
+        this.baseAction = baseAction;
+        textMeshPro.text = baseAction.GetActionName().ToUpper();
     }
 }

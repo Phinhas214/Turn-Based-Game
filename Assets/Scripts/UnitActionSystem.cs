@@ -1,5 +1,4 @@
 using System;
-using Unity.VisualScripting;
 using UnityEngine;
 
 public class UnitActionSystem : MonoBehaviour
@@ -17,7 +16,6 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (Instance != null)
         {
-            Debug.LogError("There's more than one UnitActionSystem! " + transform + " - " + Instance);
             Destroy(gameObject);
             return;
         } 
@@ -26,15 +24,15 @@ public class UnitActionSystem : MonoBehaviour
 
     private void Update()
     {
-        if (isBusy)
+        if (LevelGrid.Instance == null || !LevelGrid.Instance.IsInitialized())
         {
             return;
         }
 
-        // ADD THIS: Check if a unit is selected before trying to use it
+        if (isBusy) return;
+
         if (selectedUnit == null)
         {
-            // Only allow selecting a unit when none is selected
             if (Input.GetMouseButtonDown(0))
             {
                 TryHandleUnitSelection();
@@ -48,7 +46,6 @@ public class UnitActionSystem : MonoBehaviour
 
             GridPosition mouseGridPosition = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
             
-            // ADD THIS: Null check for MoveAction
             MoveAction moveAction = selectedUnit.GetMoveAction();
             if (moveAction != null && moveAction.isValidActionGridPosition(mouseGridPosition))
             {
@@ -59,7 +56,6 @@ public class UnitActionSystem : MonoBehaviour
 
         if (Input.GetMouseButtonDown(1))
         {
-            // ADD THIS: Null check for SpinAction
             SpinAction spinAction = selectedUnit.GetSpinAction();
             if (spinAction != null)
             {
@@ -97,8 +93,6 @@ public class UnitActionSystem : MonoBehaviour
     private void SetSelectedUnit(Unit unit)
     {   
         selectedUnit = unit;
-        
-        // if OnSelectedUnitChange doesn't return null -> fire and event
         OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
     }
 
@@ -106,5 +100,4 @@ public class UnitActionSystem : MonoBehaviour
     {
         return selectedUnit;
     }
-    
 }

@@ -18,10 +18,7 @@ public class MoveAction : BaseAction
 
     private void Update()
     {
-        if (!isActive)
-        {
-            return;
-        }
+        if (!isActive) return;
 
         Vector3 moveDirection = (targetPosition - transform.position).normalized;
         float stoppingDistance = 0.1f;
@@ -89,10 +86,7 @@ public class MoveAction : BaseAction
         List<GridPosition> validGridPositionList = new List<GridPosition>();
         
         RoomGrid currentRoom = unit.GetCurrentRoomGrid();
-        if (currentRoom == null)
-        {
-            return validGridPositionList;
-        }
+        if (currentRoom == null) return validGridPositionList;
 
         GridPosition unitGridPosition = unit.GetGridPosition();
         int moveDistance = GetMoveDistance();

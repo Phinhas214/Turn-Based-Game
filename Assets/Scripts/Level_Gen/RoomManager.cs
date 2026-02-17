@@ -5,7 +5,6 @@ public class RoomManager : MonoBehaviour
     public static RoomManager Instance { get; private set; }
 
     private LevelGenerator.PlacedRoom currentRoom;
-    private LevelGenerator levelGenerator;
 
     public System.Action<LevelGenerator.PlacedRoom> OnRoomChanged;
 
@@ -19,17 +18,9 @@ public class RoomManager : MonoBehaviour
         Instance = this;
     }
 
-    private void Start()
-    {
-        levelGenerator = FindFirstObjectByType<LevelGenerator>();
-    }
-
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom = room;
-        Debug.Log($"Current room set to: {room.roomInstance.name}");
-        
-        // Notify LevelGrid and other systems
         OnRoomChanged?.Invoke(room);
     }
 
@@ -58,13 +49,9 @@ public class RoomManager : MonoBehaviour
             return;
         }
 
-        // Convert door world position → grid position
         GridPosition spawnGridPosition = targetRoom.roomGrid.GetGridPosition(doorWorldPosition);
-
-        // Place player in new room
         player.PlaceInRoom(targetRoom.roomGrid, spawnGridPosition);
 
-        // Update current room (this triggers OnRoomChanged event)
         SetCurrentRoom(targetRoom);
     }
 }

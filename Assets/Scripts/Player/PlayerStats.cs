@@ -16,12 +16,12 @@ public class PlayerStats : MonoBehaviour
     public int maxStamina;
     public int currentStamina;
 
-    void Start()
+    private void Start()
     {
         ApplyClassStats();
     }
 
-    void OnValidate()
+    private void OnValidate()
     {
         if (Application.isPlaying && classStatsDatabase != null)
         {
@@ -29,8 +29,7 @@ public class PlayerStats : MonoBehaviour
         }
     }
 
-
-    void ApplyClassStats()
+    private void ApplyClassStats()
     {
         if (!classStatsDatabase)
         {
@@ -39,7 +38,6 @@ public class PlayerStats : MonoBehaviour
         }
 
         ClassStats stats = classStatsDatabase.Get(playerClass);
-
         if (stats == null) return;
 
         maxHealth = stats.maxHealth;

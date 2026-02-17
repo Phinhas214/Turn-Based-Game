@@ -49,7 +49,6 @@ public class RoomConnector : MonoBehaviour
         }
     }
 
-    // Draw gizmos to visualize connection points
     private void OnDrawGizmos()
     {
         DrawConnectionGizmo(northConnection, Color.blue);
@@ -58,7 +57,7 @@ public class RoomConnector : MonoBehaviour
         DrawConnectionGizmo(westConnection, Color.yellow);
     }
 
-    private void DrawConnectionGizmo(RoomConnector.ConnectionPoint connection, Color color)
+    private void DrawConnectionGizmo(ConnectionPoint connection, Color color)
     {
         if (connection != null && connection.transform != null)
         {

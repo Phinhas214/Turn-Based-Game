@@ -1,5 +1,3 @@
-
-
 using System;
 
 public struct GridPosition : IEquatable<GridPosition>
@@ -16,8 +14,8 @@ public struct GridPosition : IEquatable<GridPosition>
     public override bool Equals(object obj)
     {
         return obj is GridPosition position && 
-                x == position.x && 
-                z == position.z;
+               x == position.x && 
+               z == position.z;
     }
 
     public bool Equals(GridPosition other)
@@ -32,15 +30,15 @@ public struct GridPosition : IEquatable<GridPosition>
 
     public override string ToString()
     {
-        return "x: " + x + "; z: " + z;
+        return $"x: {x}; z: {z}";
     }
 
-    public static bool operator == (GridPosition a, GridPosition b)
+    public static bool operator ==(GridPosition a, GridPosition b)
     {
         return a.x == b.x && a.z == b.z;
     }
 
-    public static bool operator != (GridPosition a, GridPosition b)
+    public static bool operator !=(GridPosition a, GridPosition b)
     {
         return !(a == b);
     }
