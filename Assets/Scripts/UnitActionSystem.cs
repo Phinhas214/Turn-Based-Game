@@ -55,7 +55,7 @@ public class UnitActionSystem : MonoBehaviour
             switch (selectedAction)
             {
                 case MoveAction moveAction:
-                    if (moveAction != null && moveAction.isValidActionGridPosition(mouseGridPosition))
+                    if (moveAction.isValidActionGridPosition(mouseGridPosition))
                     {
                         SetBusy();
                         moveAction.Move(mouseGridPosition, ClearBusy);
@@ -102,6 +102,7 @@ public class UnitActionSystem : MonoBehaviour
     private void SetSelectedUnit(Unit unit)
     {   
         selectedUnit = unit;
+
         SetSelectedAction(unit.GetMoveAction());
         
         // if OnSelectedUnitChange doesn't return null -> fire and event
