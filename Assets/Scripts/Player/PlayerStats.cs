@@ -48,4 +48,19 @@ public class PlayerStats : MonoBehaviour
         currentHealth = maxHealth;
         currentStamina = maxStamina;
     }
+
+    public int GetCurrentStaminaPoints()
+    {
+        return currentStamina;
+    }
+
+    public void SetCurrentStaminaPoints(int stamina)
+    {
+        currentStamina = stamina;
+    }
+
+    public int GetMaxStaminaPoints()
+    {
+        return maxStamina;
+    }
 }

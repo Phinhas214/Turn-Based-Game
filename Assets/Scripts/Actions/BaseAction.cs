@@ -10,9 +10,11 @@ public abstract class BaseAction : MonoBehaviour
     protected Unit unit;
     protected bool isActive;
     protected Action onActionComplete;
+    protected PlayerStats playerStats;
 
     protected virtual void Awake() {
       unit = GetComponent<Unit>();
+      playerStats = GetComponent<PlayerStats>();
     }
 
     // abstract means that we'll be forced to implement this function

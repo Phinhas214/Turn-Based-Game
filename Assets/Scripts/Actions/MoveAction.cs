@@ -5,14 +5,13 @@ using UnityEngine;
 public class MoveAction : BaseAction
 {
     private Vector3 targetPosition;
-    private PlayerStats playerStats;
     
-    [SerializeField] private int maxMoveDistance = 4;
+    [SerializeField] private int maxMoveDistance;
 
     protected override void Awake()
     {
         base.Awake(); // This gets unit from BaseAction
-        playerStats = GetComponent<PlayerStats>();
+        // playerStats = GetComponent<PlayerStats>();
         targetPosition = transform.position;
     }
 
@@ -40,12 +39,13 @@ public class MoveAction : BaseAction
 
     private int GetMoveDistance()
     {
-        if (playerStats != null)
-        {
-            return Mathf.Max(playerStats.currentStamina, 0);
-        }
+        // if (playerStats != null)
+        // {
+            
+        // }
+        return Mathf.Max(playerStats.currentStamina, 0);
 
-        return maxMoveDistance;
+        // return maxMoveDistance;
     }
 
 
