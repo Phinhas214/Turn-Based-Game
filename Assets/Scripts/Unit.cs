@@ -22,7 +22,46 @@ public class Unit : MonoBehaviour
 
         GridPosition newGridPosition = currentRoomGrid.GetGridPosition(transform.position);
         
-        if (newGridPosition != gridPosition)
+        // Check if we moved out of bounds of current room
+        if (!currentRoomGrid.IsValidGridPosition(newGridPosition))
+        {
+            // Try to find which room we're actually in now
+            RoomGrid newRoom = LevelGrid.Instance?.GetRoomAtPosition(transform.position);
+            
+            if (newRoom != null && newRoom != currentRoomGrid)
+            {
+                Debug.Log($"Player moved from {currentRoomGrid.gameObject.name} to {newRoom.gameObject.name}");
+                
+                // Remove from old room
+                currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+                
+                // Switch to new room
+                currentRoomGrid = newRoom;
+                gridPosition = newRoom.GetGridPosition(transform.position);
+                newRoom.AddUnitAtGridPosition(gridPosition, this);
+                
+                // Update RoomManager
+                LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
+                if (levelGen != null)
+                {
+                    // Find the PlacedRoom that matches this RoomGrid
+                    var rooms = levelGen.GetAllRooms();
+                    foreach (var room in rooms)
+                    {
+                        if (room.roomGrid == newRoom)
+                        {
+                            RoomManager.Instance?.SetCurrentRoom(room);
+                            break;
+                        }
+                    }
+                }
+                
+                return;
+            }
+        }
+        
+        // Normal update within same room
+        if (newGridPosition != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
             currentRoomGrid.AddUnitAtGridPosition(newGridPosition, this);

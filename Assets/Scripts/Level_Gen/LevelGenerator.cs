@@ -10,7 +10,6 @@ public class LevelGenerator : MonoBehaviour
         public RoomType roomType;
         [Range(0f, 1f)] public float spawnWeight = 1f;
 
-        // Read from RoomGridDefinition on the prefab
         [HideInInspector] public int width = 10;
         [HideInInspector] public int height = 10;
         [HideInInspector] public Vector3 gridOffset = new Vector3(0, 0.1f, 0);
@@ -71,15 +70,12 @@ public class LevelGenerator : MonoBehaviour
                 data.width = def.width;
                 data.height = def.height;
                 data.gridOffset = def.GetGridOffset();
-                Debug.Log($"Read grid definition from {data.prefab.name}: " +
-                          $"{data.width}x{data.height}, offset: {data.gridOffset}");
             }
             else
             {
                 data.width = 10;
                 data.height = 10;
                 data.gridOffset = new Vector3(0, 0.1f, 0);
-                Debug.LogWarning($"{data.prefab.name} has no RoomGridDefinition - using defaults 10x10");
             }
         }
     }
@@ -188,7 +184,6 @@ public class LevelGenerator : MonoBehaviour
                 roomGridComponent = room.roomInstance.AddComponent<RoomGrid>();
             }
 
-            // Read offset directly from the instantiated room's definition
             RoomGridDefinition def = room.roomInstance.GetComponent<RoomGridDefinition>();
             Vector3 gridOffset = def != null ? def.GetGridOffset() : new Vector3(0, 0.1f, 0);
             int width = def != null ? def.width : room.prefabData.width;
@@ -209,11 +204,6 @@ public class LevelGenerator : MonoBehaviour
             {
                 LevelGrid.Instance.RegisterRoomGrid(room.roomGrid);
             }
-
-            Debug.Log($"Grid initialized: {room.roomInstance.name} " +
-                      $"{width}x{height} " +
-                      $"offset:{gridOffset} " +
-                      $"at:{room.worldPosition}");
         }
     }
 
@@ -251,11 +241,6 @@ public class LevelGenerator : MonoBehaviour
         if (playerUnit != null)
         {
             playerUnit.PlaceInRoom(startRoom.roomGrid, spawnGridPos);
-            Debug.Log($"Player spawned at grid {spawnGridPos}, world {spawnWorldPos}");
-        }
-        else
-        {
-            Debug.LogError("Player prefab is missing Unit component!");
         }
 
         if (RoomManager.Instance != null)
@@ -282,8 +267,6 @@ public class LevelGenerator : MonoBehaviour
             return null;
         }
 
-        // Read grid definition from instantiated room
-        // This ensures each room instance has its own correct values
         RoomGridDefinition def = roomInstance.GetComponent<RoomGridDefinition>();
         if (def != null)
         {
