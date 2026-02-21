@@ -100,3 +100,35 @@ public class UnitActionSystem : MonoBehaviour
     }
 
     private bool TryHandleUnitSelection()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out RaycastHit raycastHit, float.MaxValue, unitLayerMask))
+            {
+                if (raycastHit.transform.TryGetComponent<Unit>(out Unit unit))
+                {
+                    SetSelectedUnit(unit);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void SetSelectedUnit(Unit unit)
+    {   
+        selectedUnit = unit;
+        SetSelectedAction(unit.GetMoveAction());
+        OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetSelectedAction(BaseAction baseAction)
+    {
+        selectedAction = baseAction;
+        OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    public Unit GetSelectedUnit() => selectedUnit;
+    public BaseAction GetSelectedAction() => selectedAction;
+}
