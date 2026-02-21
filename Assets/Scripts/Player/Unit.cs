@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class Unit : MonoBehaviour
@@ -8,12 +9,19 @@ public class Unit : MonoBehaviour
     private BaseAction[] baseActionArray;
     private RoomGrid currentRoomGrid;
     private bool isInitialized = false;
+    private PlayerStats playerStats;
 
     private void Awake()
     {
         moveAction = GetComponent<MoveAction>();
         spinAction = GetComponent<SpinAction>();
         baseActionArray = GetComponents<BaseAction>();
+        playerStats = GetComponent<PlayerStats>();
+    }
+
+    private void Start()
+    {
+        TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
     }
 
     private void Update()
@@ -22,29 +30,22 @@ public class Unit : MonoBehaviour
 
         GridPosition newGridPosition = currentRoomGrid.GetGridPosition(transform.position);
         
-        // Check if we moved out of bounds of current room
         if (!currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
-            // Try to find which room we're actually in now
             RoomGrid newRoom = LevelGrid.Instance?.GetRoomAtPosition(transform.position);
             
             if (newRoom != null && newRoom != currentRoomGrid)
             {
                 Debug.Log($"Player moved from {currentRoomGrid.gameObject.name} to {newRoom.gameObject.name}");
                 
-                // Remove from old room
                 currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
-                
-                // Switch to new room
                 currentRoomGrid = newRoom;
                 gridPosition = newRoom.GetGridPosition(transform.position);
                 newRoom.AddUnitAtGridPosition(gridPosition, this);
                 
-                // Update RoomManager
                 LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
                 if (levelGen != null)
                 {
-                    // Find the PlacedRoom that matches this RoomGrid
                     var rooms = levelGen.GetAllRooms();
                     foreach (var room in rooms)
                     {
@@ -60,7 +61,6 @@ public class Unit : MonoBehaviour
             }
         }
         
-        // Normal update within same room
         if (newGridPosition != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
@@ -69,46 +69,31 @@ public class Unit : MonoBehaviour
         }
     }
 
-    public MoveAction GetMoveAction()
+    private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
     {
-        return moveAction;
+        if (playerStats != null)
+        {
+            playerStats.SetCurrentStaminaPoints(playerStats.GetMaxStaminaPoints());
+        }
     }
-    
-    public SpinAction GetSpinAction()
-    {
-        return spinAction;
-    }
-    
-    public BaseAction[] GetBaseActionArray()
-    {
-        return baseActionArray;
-    }
-    
-    public RoomGrid GetCurrentRoomGrid()
-    {
-        return currentRoomGrid;
-    }
-    
-    public bool IsInitialized()
-    {
-        return isInitialized;
-    }
-    
+
+    public MoveAction GetMoveAction() => moveAction;
+    public SpinAction GetSpinAction() => spinAction;
+    public BaseAction[] GetBaseActionArray() => baseActionArray;
+    public RoomGrid GetCurrentRoomGrid() => currentRoomGrid;
+    public bool IsInitialized() => isInitialized;
+
     public GridPosition GetGridPosition()
     {
         if (currentRoomGrid == null || !isInitialized)
-        {
             return new GridPosition(0, 0);
-        }
         return gridPosition;
     }
 
     public void SetCurrentRoomGrid(RoomGrid roomGrid)
     {
         if (currentRoomGrid != null && isInitialized)
-        {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
-        }
 
         currentRoomGrid = roomGrid;
         
@@ -127,9 +112,7 @@ public class Unit : MonoBehaviour
     public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
     {
         if (currentRoomGrid != null && isInitialized)
-        {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
-        }
 
         currentRoomGrid = roomGrid;
         gridPosition = newGridPosition;

@@ -26,6 +26,11 @@ public class SpinAction : BaseAction
         this.onActionComplete = onActionComplete;
         isActive = true;
         totalSpinAmount = 0f;
+
+        // spin action takes 2 stamina points. 
+        int current = playerStats.GetCurrentStaminaPoints();
+        playerStats.SetCurrentStaminaPoints(current - 1);
+
     }
 
     public override string GetActionName()

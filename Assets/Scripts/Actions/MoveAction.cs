@@ -5,14 +5,12 @@ using UnityEngine;
 public class MoveAction : BaseAction
 {
     private Vector3 targetPosition;
-    private PlayerStats playerStats;
     
-    [SerializeField] private int maxMoveDistance = 4;
+    [SerializeField] private int maxMoveDistance;
 
     protected override void Awake()
     {
-        base.Awake();
-        playerStats = GetComponent<PlayerStats>();
+        base.Awake(); // gets unit AND playerStats from BaseAction
         targetPosition = transform.position;
     }
 
@@ -101,14 +99,9 @@ public class MoveAction : BaseAction
                 GridPosition offsetGridPosition = new GridPosition(x, z);
                 GridPosition testGridPosition = unitGridPosition + offsetGridPosition;
 
-                if (!currentRoom.IsValidGridPosition(testGridPosition))
-                    continue;
-
-                if (unitGridPosition == testGridPosition)
-                    continue;
-
-                if (currentRoom.HasAnyUnitOnGridPosition(testGridPosition))
-                    continue;
+                if (!currentRoom.IsValidGridPosition(testGridPosition)) continue;
+                if (unitGridPosition == testGridPosition) continue;
+                if (currentRoom.HasAnyUnitOnGridPosition(testGridPosition)) continue;
 
                 validGridPositionList.Add(testGridPosition);
             }
