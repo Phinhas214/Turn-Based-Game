@@ -27,6 +27,30 @@ public class StaminaContainerUI : MonoBehaviour,
         rect = GetComponent<RectTransform>();
     }
 
+        void OnEnable()
+    {
+        LevelGenerator.OnLevelReady += OnLevelReady;
+    }
+
+    void OnDisable()
+    {
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+    }
+
+    void OnLevelReady()
+    {
+        Unit unit = FindFirstObjectByType<Unit>();
+        if (unit != null)
+        {
+            playerStats = unit.GetComponent<PlayerStats>();
+            lastStamina = -1; // force particle refresh
+        }
+        else
+        {
+            Debug.LogWarning("StaminaContainerUI: No Unit found after level ready!");
+        }
+    }
+
     void Update()
     {
         if (!playerStats) return;

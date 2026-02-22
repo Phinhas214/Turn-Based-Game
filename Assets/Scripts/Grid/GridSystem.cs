@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 public class GridSystem
@@ -15,6 +14,7 @@ public class GridSystem
         this.cellSize = cellSize;
 
         gridObjectArray = new GridObject[width, height];
+        
         for (int x = 0; x < width; x++)
         {
             for (int z = 0; z < height; z++)
@@ -23,18 +23,10 @@ public class GridSystem
                 gridObjectArray[x, z] = new GridObject(this, gridPosition);
             }
         }
-        
     }
 
-    public int GetWidth()
-    {
-        return width;
-    }
-
-    public int GetHeight()
-    {
-        return height;
-    }
+    public int GetWidth() => width;
+    public int GetHeight() => height;
 
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
@@ -49,32 +41,19 @@ public class GridSystem
         );
     }
 
-    public void CreateDebugObjects(Transform debugPrefab)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            for (int z = 0; z < width; z++)
-            {
-                GridPosition gridPosition = new GridPosition(x, z);
-                Transform debugTransform = GameObject.Instantiate(debugPrefab, GetWorldPosition(gridPosition), Quaternion.identity);
-                GridDebugObject gridDebugObject = debugTransform.GetComponent<GridDebugObject>();
-                gridDebugObject.SetGridObject(GetGridObject(gridPosition));
-            }
-        }
-    }
-
     public GridObject GetGridObject(GridPosition gridPosition)
     {
         return gridObjectArray[gridPosition.x, gridPosition.z];
     }
 
-    public bool isValidGridPosition(GridPosition gridPosition)
+    public bool IsValidGridPosition(GridPosition gridPosition)
     {
-        return gridPosition.x >= 0 && 
-                gridPosition.z >= 0 && 
-                gridPosition.x < width && 
-                gridPosition.z < height;
+        return gridPosition.x >= 0 &&
+               gridPosition.z >= 0 &&
+               gridPosition.x < width &&
+               gridPosition.z < height;
     }
 
-
+    // Keep old name for compatibility
+    public bool isValidGridPosition(GridPosition gridPosition) => IsValidGridPosition(gridPosition);
 }

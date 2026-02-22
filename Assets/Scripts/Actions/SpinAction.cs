@@ -7,15 +7,12 @@ public class SpinAction : BaseAction
 
     private void Update()
     {
-        if (!isActive)
-        {
-            return;
-        }
+        if (!isActive) return;
 
         float spinAddAmount = 360 * Time.deltaTime;
         transform.eulerAngles += new Vector3(0, spinAddAmount, 0);   
 
-        totalSpinAmount += spinAddAmount;     
+        totalSpinAmount += spinAddAmount;
 
         if (totalSpinAmount > 360)
         {
@@ -24,12 +21,16 @@ public class SpinAction : BaseAction
         }
     }
 
-
     public void Spin(Action onActionComplete)
     {
         this.onActionComplete = onActionComplete;
         isActive = true;
         totalSpinAmount = 0f;
+
+        // spin action takes 2 stamina points. 
+        int current = playerStats.GetCurrentStaminaPoints();
+        playerStats.SetCurrentStaminaPoints(current - 1);
+
     }
 
     public override string GetActionName()

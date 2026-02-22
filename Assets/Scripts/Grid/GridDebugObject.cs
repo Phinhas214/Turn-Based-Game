@@ -3,8 +3,7 @@ using TMPro;
 
 public class GridDebugObject : MonoBehaviour
 {
-
-    [SerializeField] TextMeshPro textMeshPro;
+    [SerializeField] private TextMeshPro textMeshPro;
     private GridObject gridObject;
 
     public void SetGridObject(GridObject gridObject)
@@ -14,6 +13,9 @@ public class GridDebugObject : MonoBehaviour
 
     private void Update()
     {
-        textMeshPro.text = gridObject.ToString();
+        if (gridObject != null)
+        {
+            textMeshPro.text = gridObject.ToString();
+        }
     }
 }

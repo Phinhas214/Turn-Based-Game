@@ -8,42 +8,39 @@ public class LevelGenerator : MonoBehaviour
     {
         public GameObject prefab;
         public RoomType roomType;
-        public int width;  // in grid cells
-        public int height; // in grid cells
         [Range(0f, 1f)] public float spawnWeight = 1f;
+
+        [HideInInspector] public int width = 10;
+        [HideInInspector] public int height = 10;
+        [HideInInspector] public Vector3 gridOffset = new Vector3(0, 0.1f, 0);
     }
 
-    public enum RoomType
-    {
-        Start,
-        End,
-        Normal,
-        Special
-    }
-
-    public enum Direction
-    {
-        North,
-        South,
-        East,
-        West
-    }
+    public enum RoomType { Start, End, Normal, Special }
+    public enum Direction { North, South, East, West }
 
     [Header("Room Prefabs")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
     [SerializeField] private GameObject hallwayPrefab;
-    
+
     [Header("Generation Settings")]
     [SerializeField] private int minRooms = 5;
     [SerializeField] private int maxRooms = 10;
     [SerializeField] private float specialRoomChance = 0.3f;
-    
+
     [Header("Grid Settings")]
     [SerializeField] private float cellSize = 2f;
     [SerializeField] private Transform gridDebugObjectPrefab;
 
+    [Header("Player Spawn")]
+    [SerializeField] private GameObject playerPrefab;
+    [SerializeField] private bool spawnPlayerOnGenerate = true;
+
     private List<PlacedRoom> placedRooms;
     private Dictionary<Vector2Int, PlacedRoom> roomGrid;
+    private Dictionary<(PlacedRoom, Direction), PlacedRoom> roomConnections;
+    private GameObject spawnedPlayer;
+
+    public static System.Action OnLevelReady;
 
     public class PlacedRoom
     {
@@ -53,36 +50,74 @@ public class LevelGenerator : MonoBehaviour
         public Vector3 worldPosition;
         public Vector2Int gridPosition;
         public RoomGrid roomGrid;
-
-        public PlacedRoom() { }
     }
 
     private void Start()
     {
+        ReadRoomPrefabDefinitions();
         Invoke(nameof(GenerateLevel), 0.1f);
+    }
+
+    private void ReadRoomPrefabDefinitions()
+    {
+        foreach (RoomPrefabData data in roomPrefabs)
+        {
+            if (data.prefab == null) continue;
+
+            RoomGridDefinition def = data.prefab.GetComponent<RoomGridDefinition>();
+            if (def != null)
+            {
+                data.width = def.width;
+                data.height = def.height;
+                data.gridOffset = def.GetGridOffset();
+            }
+            else
+            {
+                data.width = 10;
+                data.height = 10;
+                data.gridOffset = new Vector3(0, 0.1f, 0);
+            }
+        }
     }
 
     public void GenerateLevel()
     {
-        // Clear any existing level
+        ClearLevel();
+
+        placedRooms = new List<PlacedRoom>();
+        roomGrid = new Dictionary<Vector2Int, PlacedRoom>();
+        roomConnections = new Dictionary<(PlacedRoom, Direction), PlacedRoom>();
+
+        GenerateRoomLayout();
+        InitializeRoomGrids();
+        InitializeDoors();
+
+        if (spawnPlayerOnGenerate && playerPrefab != null)
+        {
+            SpawnPlayer();
+        }
+
+        OnLevelReady?.Invoke();
+    }
+
+    private void ClearLevel()
+    {
         foreach (Transform child in transform)
         {
             Destroy(child.gameObject);
         }
 
-        placedRooms = new List<PlacedRoom>();
-        roomGrid = new Dictionary<Vector2Int, PlacedRoom>();
-
-        GenerateRoomLayout();
-        InitializeRoomGrids();
+        if (spawnedPlayer != null)
+        {
+            Destroy(spawnedPlayer);
+            spawnedPlayer = null;
+        }
     }
 
     private void GenerateRoomLayout()
     {
-        // Place starting room at origin
-        Vector2Int startGridPos = Vector2Int.zero;
-        PlacedRoom startRoom = PlaceRoom(RoomType.Start, startGridPos, Vector3.zero);
-        
+        PlacedRoom startRoom = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
+
         if (startRoom == null)
         {
             Debug.LogError("Failed to place start room!");
@@ -95,140 +130,128 @@ public class LevelGenerator : MonoBehaviour
         int roomCount = 1;
         int targetRoomCount = Random.Range(minRooms, maxRooms + 1);
         PlacedRoom endRoom = null;
-
-        int maxAttempts = 100;
         int attempts = 0;
 
-        while (roomsToConnect.Count > 0 && roomCount < targetRoomCount && attempts < maxAttempts)
+        while (roomsToConnect.Count > 0 && roomCount < targetRoomCount && attempts < 100)
         {
             attempts++;
             PlacedRoom currentRoom = roomsToConnect.Dequeue();
-            
-            // Get available directions from this room
-            List<Direction> availableDirections = GetAvailableDirections(currentRoom);
-            
-            if (availableDirections.Count == 0)
-                continue;
 
-            // Shuffle directions
+            List<Direction> availableDirections = GetAvailableDirections(currentRoom);
+            if (availableDirections.Count == 0) continue;
+
             ShuffleList(availableDirections);
 
-            // Try to connect 1-2 new rooms
             int connectionsToMake = Mathf.Min(Random.Range(1, 3), availableDirections.Count);
-            
+
             for (int i = 0; i < connectionsToMake && roomCount < targetRoomCount; i++)
             {
                 Direction direction = availableDirections[i];
-
                 RoomType roomType = DetermineRoomType(roomCount, targetRoomCount);
                 PlacedRoom newRoom = PlaceRoomInDirection(currentRoom, direction, roomType);
-                
+
                 if (newRoom != null)
                 {
                     CreateHallway(currentRoom, newRoom, direction);
-                    
-                    // Mark connections as used
                     currentRoom.connector.MarkConnectionUsed(direction);
                     newRoom.connector.MarkConnectionUsed(GetOppositeDirection(direction));
-                    
+
                     if (roomType != RoomType.End)
-                    {
                         roomsToConnect.Enqueue(newRoom);
-                    }
                     else
-                    {
                         endRoom = newRoom;
-                    }
-                    
+
                     roomCount++;
                 }
             }
         }
 
-        // Ensure we have an end room
         if (endRoom == null && placedRooms.Count > 1)
         {
-            PlacedRoom lastRoom = placedRooms[placedRooms.Count - 1];
-            ConvertToEndRoom(lastRoom);
+            ConvertToEndRoom(placedRooms[placedRooms.Count - 1]);
         }
 
-        Debug.Log($"Generated {placedRooms.Count} rooms in {attempts} attempts");
+        Debug.Log($"Generated {placedRooms.Count} rooms");
     }
 
-    private void ShuffleList<T>(List<T> list)
+    private void InitializeRoomGrids()
     {
-        for (int i = 0; i < list.Count; i++)
+        foreach (PlacedRoom room in placedRooms)
         {
-            int randomIndex = Random.Range(i, list.Count);
-            T temp = list[i];
-            list[i] = list[randomIndex];
-            list[randomIndex] = temp;
-        }
-    }
-
-    private List<Direction> GetAvailableDirections(PlacedRoom room)
-    {
-        List<Direction> available = new List<Direction>();
-        
-        if (room.connector == null)
-        {
-            Debug.LogWarning($"Room {room.roomInstance.name} has no RoomConnector component!");
-            return available;
-        }
-
-        foreach (Direction dir in System.Enum.GetValues(typeof(Direction)))
-        {
-            // Check if room has this connection point and it's not used
-            if (room.connector.IsDirectionAvailable(dir))
+            RoomGrid roomGridComponent = room.roomInstance.GetComponent<RoomGrid>();
+            if (roomGridComponent == null)
             {
-                // Check if there's already a room in that grid position
-                Vector2Int offset = GetDirectionOffset(dir);
-                Vector2Int checkPos = room.gridPosition + offset;
-                
-                if (!roomGrid.ContainsKey(checkPos))
-                {
-                    available.Add(dir);
-                }
+                roomGridComponent = room.roomInstance.AddComponent<RoomGrid>();
+            }
+
+            RoomGridDefinition def = room.roomInstance.GetComponent<RoomGridDefinition>();
+            Vector3 gridOffset = def != null ? def.GetGridOffset() : new Vector3(0, 0.1f, 0);
+            int width = def != null ? def.width : room.prefabData.width;
+            int height = def != null ? def.height : room.prefabData.height;
+
+            roomGridComponent.Initialize(
+                width,
+                height,
+                cellSize,
+                room.worldPosition,
+                gridOffset,
+                gridDebugObjectPrefab
+            );
+
+            room.roomGrid = roomGridComponent;
+
+            if (LevelGrid.Instance != null)
+            {
+                LevelGrid.Instance.RegisterRoomGrid(room.roomGrid);
             }
         }
-        
-        return available;
     }
 
-    private Direction GetOppositeDirection(Direction dir)
+    private void InitializeDoors()
     {
-        switch (dir)
+        foreach (PlacedRoom room in placedRooms)
         {
-            case Direction.North: return Direction.South;
-            case Direction.South: return Direction.North;
-            case Direction.East: return Direction.West;
-            case Direction.West: return Direction.East;
-            default: return Direction.North;
+            RoomDoor[] doors = room.roomInstance.GetComponentsInChildren<RoomDoor>();
+            foreach (RoomDoor door in doors)
+            {
+                door.Initialize(room);
+            }
         }
     }
 
-    private RoomType DetermineRoomType(int currentCount, int targetCount)
+    private void SpawnPlayer()
     {
-        if (currentCount == targetCount - 1)
+        PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == RoomType.Start);
+
+        if (startRoom == null || startRoom.roomGrid == null)
         {
-            return RoomType.End;
+            Debug.LogError("No valid start room found!");
+            return;
         }
-        
-        if (Random.value < specialRoomChance)
+
+        int centerX = startRoom.roomGrid.GetWidth() / 2;
+        int centerZ = startRoom.roomGrid.GetHeight() / 2;
+        GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
+        Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnGridPos);
+
+        spawnedPlayer = Instantiate(playerPrefab, spawnWorldPos, Quaternion.identity);
+        spawnedPlayer.name = "Player";
+
+        Unit playerUnit = spawnedPlayer.GetComponent<Unit>();
+        if (playerUnit != null)
         {
-            return RoomType.Special;
+            playerUnit.PlaceInRoom(startRoom.roomGrid, spawnGridPos);
         }
-        
-        return RoomType.Normal;
+
+        if (RoomManager.Instance != null)
+        {
+            RoomManager.Instance.SetCurrentRoom(startRoom);
+        }
     }
 
     private PlacedRoom PlaceRoom(RoomType roomType, Vector2Int gridPosition, Vector3 worldPosition)
     {
-        // Check if position is already occupied
-        if (roomGrid.ContainsKey(gridPosition))
-        {
-            return null;
-        }
+        if (roomGrid.ContainsKey(gridPosition)) return null;
 
         RoomPrefabData prefabData = GetRandomRoomPrefab(roomType);
         if (prefabData == null) return null;
@@ -236,13 +259,20 @@ public class LevelGenerator : MonoBehaviour
         GameObject roomInstance = Instantiate(prefabData.prefab, worldPosition, Quaternion.identity, transform);
         roomInstance.name = $"{roomType}Room_({gridPosition.x},{gridPosition.y})";
 
-        // Get the RoomConnector component
         RoomConnector connector = roomInstance.GetComponent<RoomConnector>();
         if (connector == null)
         {
-            Debug.LogError($"Room prefab {prefabData.prefab.name} is missing RoomConnector component!");
+            Debug.LogError($"{prefabData.prefab.name} missing RoomConnector!");
             Destroy(roomInstance);
             return null;
+        }
+
+        RoomGridDefinition def = roomInstance.GetComponent<RoomGridDefinition>();
+        if (def != null)
+        {
+            prefabData.width = def.width;
+            prefabData.height = def.height;
+            prefabData.gridOffset = def.GetGridOffset();
         }
 
         PlacedRoom placedRoom = new PlacedRoom
@@ -256,54 +286,93 @@ public class LevelGenerator : MonoBehaviour
 
         placedRooms.Add(placedRoom);
         roomGrid.Add(gridPosition, placedRoom);
-        
+
         return placedRoom;
     }
 
     private PlacedRoom PlaceRoomInDirection(PlacedRoom existingRoom, Direction direction, RoomType roomType)
     {
-        // Get the connection point from the existing room
         RoomConnector.ConnectionPoint exitPoint = existingRoom.connector.GetConnectionPoint(direction);
-        if (exitPoint == null || exitPoint.transform == null)
-        {
-            Debug.LogWarning($"No connection point found for direction {direction} on room {existingRoom.roomInstance.name}");
-            return null;
-        }
+        if (exitPoint == null || exitPoint.transform == null) return null;
 
-        // Get a random prefab of the desired type
         RoomPrefabData newRoomPrefab = GetRandomRoomPrefab(roomType);
         if (newRoomPrefab == null) return null;
 
-        // Check if new room has the opposite connection point
         RoomConnector tempConnector = newRoomPrefab.prefab.GetComponent<RoomConnector>();
-        if (tempConnector == null)
-        {
-            Debug.LogError($"Room prefab {newRoomPrefab.prefab.name} is missing RoomConnector component!");
-            return null;
-        }
+        if (tempConnector == null) return null;
 
         Direction oppositeDir = GetOppositeDirection(direction);
-        if (!tempConnector.HasConnectionPoint(oppositeDir))
+        if (!tempConnector.HasConnectionPoint(oppositeDir)) return null;
+
+        RoomConnector.ConnectionPoint entryPoint = tempConnector.GetConnectionPoint(oppositeDir);
+        Vector3 newRoomWorldPos = exitPoint.transform.position - entryPoint.transform.localPosition;
+
+        Vector2Int newGridPos = existingRoom.gridPosition + GetDirectionOffset(direction);
+        return PlaceRoom(roomType, newGridPos, newRoomWorldPos);
+    }
+
+    private void CreateHallway(PlacedRoom roomA, PlacedRoom roomB, Direction direction)
+    {
+        roomConnections[(roomA, direction)] = roomB;
+        roomConnections[(roomB, GetOppositeDirection(direction))] = roomA;
+
+        if (hallwayPrefab == null) return;
+
+        RoomConnector.ConnectionPoint exitPoint = roomA.connector.GetConnectionPoint(direction);
+        RoomConnector.ConnectionPoint entryPoint = roomB.connector.GetConnectionPoint(GetOppositeDirection(direction));
+
+        if (exitPoint?.transform == null || entryPoint?.transform == null) return;
+
+        Vector3 hallwayPosition = (exitPoint.transform.position + entryPoint.transform.position) / 2f;
+
+        Quaternion rot = (direction == Direction.East || direction == Direction.West)
+            ? Quaternion.Euler(0, 90, 0)
+            : Quaternion.identity;
+
+        GameObject hallway = Instantiate(hallwayPrefab, hallwayPosition, rot, transform);
+        hallway.name = $"Hallway_{roomA.gridPosition}_{direction}";
+    }
+
+    private void ConvertToEndRoom(PlacedRoom room)
+    {
+        RoomPrefabData endPrefab = GetRandomRoomPrefab(RoomType.End);
+        if (endPrefab == null) return;
+
+        Vector3 position = room.worldPosition;
+        Vector2Int gridPos = room.gridPosition;
+        Destroy(room.roomInstance);
+
+        PlacedRoom newRoom = PlaceRoom(RoomType.End, gridPos, position);
+        if (newRoom != null)
         {
-            Debug.LogWarning($"Room prefab {newRoomPrefab.prefab.name} has no {oppositeDir} connection point!");
-            return null;
+            int index = placedRooms.IndexOf(room);
+            if (index >= 0) placedRooms[index] = newRoom;
+        }
+    }
+
+    private List<Direction> GetAvailableDirections(PlacedRoom room)
+    {
+        List<Direction> available = new List<Direction>();
+        if (room.connector == null) return available;
+
+        foreach (Direction dir in System.Enum.GetValues(typeof(Direction)))
+        {
+            if (room.connector.IsDirectionAvailable(dir))
+            {
+                Vector2Int checkPos = room.gridPosition + GetDirectionOffset(dir);
+                if (!roomGrid.ContainsKey(checkPos))
+                    available.Add(dir);
+            }
         }
 
-        // Calculate world position for new room
-        // We want the new room's entrance to align with the exit point
-        RoomConnector.ConnectionPoint entryPoint = tempConnector.GetConnectionPoint(oppositeDir);
-        
-        // Calculate offset from new room's pivot to its entry point
-        Vector3 entryLocalPos = entryPoint.transform.localPosition;
-        
-        // New room position = exit point position - entry point local position
-        Vector3 newRoomWorldPos = exitPoint.transform.position - entryLocalPos;
+        return available;
+    }
 
-        // Calculate grid position
-        Vector2Int offset = GetDirectionOffset(direction);
-        Vector2Int newGridPos = existingRoom.gridPosition + offset;
-
-        return PlaceRoom(roomType, newGridPos, newRoomWorldPos);
+    private RoomType DetermineRoomType(int currentCount, int targetCount)
+    {
+        if (currentCount == targetCount - 1) return RoomType.End;
+        if (Random.value < specialRoomChance) return RoomType.Special;
+        return RoomType.Normal;
     }
 
     private Vector2Int GetDirectionOffset(Direction direction)
@@ -318,138 +387,73 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
-    private void CreateHallway(PlacedRoom roomA, PlacedRoom roomB, Direction direction)
+    public Direction GetOppositeDirection(Direction dir)
     {
-        if (hallwayPrefab == null)
+        switch (dir)
         {
-            return; // Hallways are optional
-        }
-
-        // Get connection points
-        RoomConnector.ConnectionPoint exitPoint = roomA.connector.GetConnectionPoint(direction);
-        RoomConnector.ConnectionPoint entryPoint = roomB.connector.GetConnectionPoint(GetOppositeDirection(direction));
-
-        if (exitPoint == null || exitPoint.transform == null || entryPoint == null || entryPoint.transform == null)
-        {
-            return;
-        }
-
-        // Position hallway between the two connection points
-        Vector3 hallwayPosition = (exitPoint.transform.position + entryPoint.transform.position) / 2f;
-        
-        // Determine rotation based on direction
-        Quaternion hallwayRotation = Quaternion.identity;
-        switch (direction)
-        {
-            case Direction.North:
-            case Direction.South:
-                hallwayRotation = Quaternion.Euler(0, 0, 0); // Z-axis aligned
-                break;
-            case Direction.East:
-            case Direction.West:
-                hallwayRotation = Quaternion.Euler(0, 90, 0); // X-axis aligned
-                break;
-        }
-
-        GameObject hallway = Instantiate(hallwayPrefab, hallwayPosition, hallwayRotation, transform);
-        hallway.name = $"Hallway_{roomA.gridPosition}_{direction}";
-    }
-
-    private void InitializeRoomGrids()
-    {
-        foreach (PlacedRoom room in placedRooms)
-        {
-            RoomGrid roomGrid = room.roomInstance.GetComponent<RoomGrid>();
-            if (roomGrid == null)
-            {
-                roomGrid = room.roomInstance.AddComponent<RoomGrid>();
-            }
-
-            roomGrid.Initialize(
-                room.prefabData.width,
-                room.prefabData.height,
-                cellSize,
-                room.worldPosition,
-                gridDebugObjectPrefab
-            );
-
-            room.roomGrid = roomGrid;
+            case Direction.North: return Direction.South;
+            case Direction.South: return Direction.North;
+            case Direction.East: return Direction.West;
+            case Direction.West: return Direction.East;
+            default: return Direction.North;
         }
     }
 
     private RoomPrefabData GetRandomRoomPrefab(RoomType roomType)
     {
-        List<RoomPrefabData> validPrefabs = roomPrefabs.FindAll(p => p.roomType == roomType);
-        
-        if (validPrefabs.Count == 0)
+        List<RoomPrefabData> valid = roomPrefabs.FindAll(p => p.roomType == roomType);
+        if (valid.Count == 0) return null;
+
+        float total = 0f;
+        foreach (var p in valid) total += p.spawnWeight;
+
+        float rand = Random.value * total;
+        float current = 0f;
+
+        foreach (var p in valid)
         {
-            Debug.LogWarning($"No prefabs found for room type: {roomType}");
-            return null;
+            current += p.spawnWeight;
+            if (rand <= current) return p;
         }
 
-        float totalWeight = 0f;
-        foreach (RoomPrefabData prefab in validPrefabs)
-        {
-            totalWeight += prefab.spawnWeight;
-        }
-
-        float randomValue = Random.value * totalWeight;
-        float currentWeight = 0f;
-
-        foreach (RoomPrefabData prefab in validPrefabs)
-        {
-            currentWeight += prefab.spawnWeight;
-            if (randomValue <= currentWeight)
-            {
-                return prefab;
-            }
-        }
-
-        return validPrefabs[0];
+        return valid[0];
     }
 
-    private void ConvertToEndRoom(PlacedRoom room)
+    private void ShuffleList<T>(List<T> list)
     {
-        RoomPrefabData endPrefab = GetRandomRoomPrefab(RoomType.End);
-        if (endPrefab != null)
+        for (int i = 0; i < list.Count; i++)
         {
-            Vector3 position = room.worldPosition;
-            Vector2Int gridPos = room.gridPosition;
-            Destroy(room.roomInstance);
-            
-            PlacedRoom newRoom = PlaceRoom(RoomType.End, gridPos, position);
-            if (newRoom != null)
-            {
-                // Update the reference in the list
-                int index = placedRooms.IndexOf(room);
-                if (index >= 0)
-                {
-                    placedRooms[index] = newRoom;
-                }
-            }
+            int j = Random.Range(i, list.Count);
+            T temp = list[i];
+            list[i] = list[j];
+            list[j] = temp;
         }
+    }
+
+    public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction direction)
+    {
+        roomConnections.TryGetValue((room, direction), out PlacedRoom connected);
+        return connected;
     }
 
     public RoomGrid GetRoomAtWorldPosition(Vector3 worldPosition)
     {
+        if (placedRooms == null) return null;
         foreach (PlacedRoom room in placedRooms)
         {
             if (room.roomGrid != null && room.roomGrid.IsPositionInRoom(worldPosition))
-            {
                 return room.roomGrid;
-            }
         }
         return null;
     }
 
-    public List<PlacedRoom> GetAllRooms()
-    {
-        return placedRooms;
-    }
+    public List<PlacedRoom> GetAllRooms() => placedRooms;
+    public float GetCellSize() => cellSize;
 
     [ContextMenu("Regenerate Level")]
     public void RegenerateLevel()
     {
+        ReadRoomPrefabDefinitions();
         GenerateLevel();
     }
 }

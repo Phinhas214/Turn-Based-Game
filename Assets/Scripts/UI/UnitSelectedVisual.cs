@@ -1,5 +1,4 @@
 using System;
-using Unity.VisualScripting;
 using UnityEngine;
 
 public class UnitSelectedVisual : MonoBehaviour
@@ -15,9 +14,20 @@ public class UnitSelectedVisual : MonoBehaviour
 
     private void Start()
     {
-        UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChange;
-
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChange;
+        }
+        
         UpdateVisual();
+    }
+
+    private void OnDestroy()
+    {
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange -= UnitActionSystem_OnSelectedUnitChange;
+        }
     }
 
     private void UnitActionSystem_OnSelectedUnitChange(object sender, EventArgs empty)
@@ -27,10 +37,11 @@ public class UnitSelectedVisual : MonoBehaviour
 
     private void UpdateVisual()
     {
-        if (UnitActionSystem.Instance.GetSelectedUnit() == unit)
+        if (UnitActionSystem.Instance != null && UnitActionSystem.Instance.GetSelectedUnit() == unit)
         {
             meshRenderer.enabled = true;
-        } else
+        }
+        else
         {
             meshRenderer.enabled = false;
         }
