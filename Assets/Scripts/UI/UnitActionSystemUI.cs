@@ -2,24 +2,32 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Populates the action bar with one button per action on the selected unit.
+/// Refreshes affordability state every frame so stamina cost badges stay accurate.
+/// Drop-in replacement for the original UnitActionSystemUI.
+/// </summary>
 public class UnitActionSystemUI : MonoBehaviour
 {
+    // -------------------------------------------------------------------------
+    [Header("References")]
+    [Tooltip("Prefab for a single action button. Must have an ActionButtonUI component.")]
     [SerializeField] private Transform actionButtonPrefab;
+
+    [Tooltip("Parent transform that action buttons are spawned inside.")]
     [SerializeField] private Transform actionButtonContainerTransform;
 
-    private List<ActionButtonUI> actionButtonUIList;
+    // -------------------------------------------------------------------------
+    private List<ActionButtonUI> actionButtonUIList = new List<ActionButtonUI>();
 
-    private void Awake()
-    {
-        actionButtonUIList = new List<ActionButtonUI>();
-    }
+    // -------------------------------------------------------------------------
 
     private void Start()
     {
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange += UnitActionSystem_OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
         }
 
         CreateUnitActionButtons();
@@ -30,48 +38,63 @@ public class UnitActionSystemUI : MonoBehaviour
     {
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange -= UnitActionSystem_OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange -= UnitActionSystem_OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChange   -= OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChange -= OnSelectedActionChanged;
         }
     }
 
+    // Refresh affordability every frame (stamina ticks down during moves etc.)
+    private void Update()
+    {
+        UpdateSelectedVisual();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Button creation
+    // -------------------------------------------------------------------------
+
     private void CreateUnitActionButtons()
     {
-        foreach (Transform buttonTransform in actionButtonContainerTransform)
-        {
-            Destroy(buttonTransform.gameObject);
-        }
+        // Clear existing buttons
+        foreach (Transform child in actionButtonContainerTransform)
+            Destroy(child.gameObject);
 
         actionButtonUIList.Clear();
 
         Unit selectedUnit = UnitActionSystem.Instance?.GetSelectedUnit();
         if (selectedUnit == null) return;
 
-        foreach (BaseAction baseAction in selectedUnit.GetBaseActionArray())
+        foreach (BaseAction action in selectedUnit.GetBaseActionArray())
         {
-            Transform actionButtonTransform = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
-            ActionButtonUI actionButtonUI = actionButtonTransform.GetComponent<ActionButtonUI>();
-            actionButtonUI.SetBaseAction(baseAction);
+            Transform buttonTransform = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
+            ActionButtonUI actionButtonUI = buttonTransform.GetComponent<ActionButtonUI>();
+            actionButtonUI.SetBaseAction(action);
             actionButtonUIList.Add(actionButtonUI);
         }
     }
 
-    private void UnitActionSystem_OnSelectedUnitChanged(object sender, EventArgs e)
+    // -------------------------------------------------------------------------
+    //  Visual refresh
+    // -------------------------------------------------------------------------
+
+    private void UpdateSelectedVisual()
+    {
+        foreach (ActionButtonUI button in actionButtonUIList)
+            button.UpdateSelectedVisual();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Event handlers
+    // -------------------------------------------------------------------------
+
+    private void OnSelectedUnitChanged(object sender, EventArgs e)
     {
         CreateUnitActionButtons();
         UpdateSelectedVisual();
     }
 
-    private void UnitActionSystem_OnSelectedActionChanged(object sender, EventArgs e)
+    private void OnSelectedActionChanged(object sender, EventArgs e)
     {
         UpdateSelectedVisual();
-    }
-
-    private void UpdateSelectedVisual()
-    {
-        foreach (ActionButtonUI actionButtonUI in actionButtonUIList)
-        {
-            actionButtonUI.UpdateSelectedVisual();
-        }
     }
 }

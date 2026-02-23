@@ -1,5 +1,10 @@
 using UnityEngine;
 
+/// <summary>
+/// Core grid math. Tiles are CENTER-anchored — GetWorldPosition returns the
+/// center of each tile, and GetGridPosition snaps to the nearest tile center.
+/// This ensures the mouse highlight always lands on the tile you're hovering.
+/// </summary>
 public class GridSystem
 {
     private int width;
@@ -9,30 +14,37 @@ public class GridSystem
 
     public GridSystem(int width, int height, float cellSize)
     {
-        this.width = width;
-        this.height = height;
+        this.width    = width;
+        this.height   = height;
         this.cellSize = cellSize;
 
         gridObjectArray = new GridObject[width, height];
-        
+
         for (int x = 0; x < width; x++)
-        {
             for (int z = 0; z < height; z++)
             {
-                GridPosition gridPosition = new GridPosition(x, z);
-                gridObjectArray[x, z] = new GridObject(this, gridPosition);
+                GridPosition gp = new GridPosition(x, z);
+                gridObjectArray[x, z] = new GridObject(this, gp);
             }
-        }
     }
 
-    public int GetWidth() => width;
+    public int GetWidth()  => width;
     public int GetHeight() => height;
 
+    /// <summary>
+    /// Returns the WORLD-SPACE CENTER of the tile at gridPosition.
+    /// Tiles are cellSize apart, starting at (0,0).
+    /// </summary>
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         return new Vector3(gridPosition.x, 0, gridPosition.z) * cellSize;
     }
 
+    /// <summary>
+    /// Converts a world position to the nearest grid position.
+    /// Rounds to the nearest tile center so hovering anywhere on a tile
+    /// returns that tile's grid position.
+    /// </summary>
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {
         return new GridPosition(
@@ -54,6 +66,6 @@ public class GridSystem
                gridPosition.z < height;
     }
 
-    // Keep old name for compatibility
+    // Kept for compatibility
     public bool isValidGridPosition(GridPosition gridPosition) => IsValidGridPosition(gridPosition);
 }
