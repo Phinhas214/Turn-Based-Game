@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Serialization;
 using TMPro;
 
 /// <summary>
@@ -11,18 +12,17 @@ using TMPro;
 /// </summary>
 public class ActionButtonUI : MonoBehaviour
 {
-    // -------------------------------------------------------------------------
     [Header("Core References")]
     [Tooltip("The clickable button.")]
     [SerializeField] private Button button;
 
     [Tooltip("Label showing the action name.")]
+    [FormerlySerializedAs("textMeshPro")]          // ← keeps your existing prefab reference
     [SerializeField] private TextMeshProUGUI actionNameText;
 
     [Tooltip("Outline or background image shown when this action is selected.")]
     [SerializeField] private GameObject selectedGameObject;
 
-    // -------------------------------------------------------------------------
     [Header("Stamina Cost Display")]
     [Tooltip("Root object for the stamina cost badge. Hidden for actions with no cost.")]
     [SerializeField] private GameObject staminaCostRoot;
@@ -33,22 +33,16 @@ public class ActionButtonUI : MonoBehaviour
     [Tooltip("Icon next to the stamina cost number (optional).")]
     [SerializeField] private Image staminaIcon;
 
-    // -------------------------------------------------------------------------
     [Header("Affordability Visuals")]
-    [Tooltip("Alpha applied to the button contents when the unit can't afford the action.")]
+    [Tooltip("Alpha applied to the button when the unit can't afford the action.")]
     [Range(0f, 1f)]
     [SerializeField] private float unaffordableAlpha = 0.4f;
 
-    [Tooltip("CanvasGroup on this button used to dim it when unaffordable. " +
-             "If left empty one will be added automatically.")]
+    [Tooltip("CanvasGroup used to dim the button when unaffordable. Auto-added if left empty.")]
     [SerializeField] private CanvasGroup canvasGroup;
 
-    // -------------------------------------------------------------------------
-    // Runtime
-    // -------------------------------------------------------------------------
+    // ── Runtime ───────────────────────────────────────────────────────────
     private BaseAction baseAction;
-
-    // -------------------------------------------------------------------------
 
     private void Awake()
     {
@@ -56,47 +50,33 @@ public class ActionButtonUI : MonoBehaviour
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
     }
 
-    // -------------------------------------------------------------------------
-    //  Public API
-    // -------------------------------------------------------------------------
+    // ── Public API ────────────────────────────────────────────────────────
 
     public void SetBaseAction(BaseAction action)
     {
         baseAction = action;
 
-        // Action name
         if (actionNameText != null)
             actionNameText.text = action.GetActionName().ToUpper();
 
-        // Wire button click
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(() => UnitActionSystem.Instance.SetSelectedAction(baseAction));
 
-        // Refresh stamina cost badge
         RefreshStaminaCost();
         RefreshAffordability();
     }
 
-    /// <summary>
-    /// Called by UnitActionSystemUI every frame (or on relevant events)
-    /// to keep the selected highlight and affordability state current.
-    /// </summary>
     public void UpdateSelectedVisual()
     {
         if (UnitActionSystem.Instance == null) return;
 
-        // Selected highlight
-        bool isSelected = UnitActionSystem.Instance.GetSelectedAction() == baseAction;
         if (selectedGameObject != null)
-            selectedGameObject.SetActive(isSelected);
+            selectedGameObject.SetActive(UnitActionSystem.Instance.GetSelectedAction() == baseAction);
 
-        // Affordability (stamina may have changed since last frame)
         RefreshAffordability();
     }
 
-    // -------------------------------------------------------------------------
-    //  Private helpers
-    // -------------------------------------------------------------------------
+    // ── Private helpers ───────────────────────────────────────────────────
 
     private void RefreshStaminaCost()
     {
@@ -111,7 +91,6 @@ public class ActionButtonUI : MonoBehaviour
         }
         else if (baseAction is SpinAction)
         {
-            // SpinAction hard-codes a cost of 1 — expose it here
             staminaCostRoot.SetActive(true);
             if (staminaCostText != null)
                 staminaCostText.text = "1";
@@ -128,26 +107,20 @@ public class ActionButtonUI : MonoBehaviour
 
         bool canAfford = CanAffordAction();
         canvasGroup.alpha = canAfford ? 1f : unaffordableAlpha;
-        // Keep interactable so the player can still click (UnitActionSystem
-        // will log "not enough stamina" and no-op). Set to false if you prefer
-        // to hard-block the click entirely.
         button.interactable = canAfford;
     }
 
     private bool CanAffordAction()
     {
-        // MoveAction: affordable as long as there's at least 1 stamina
-        if (baseAction is MoveAction moveAction)
+        if (baseAction is MoveAction)
         {
             PlayerStats stats = baseAction.GetComponent<PlayerStats>();
             return stats == null || stats.currentStamina > 0;
         }
 
-        // CombatAction: use its built-in CanAfford()
         if (baseAction is CombatAction combatAction)
             return combatAction.CanAfford();
 
-        // Everything else (SpinAction etc.): always show as affordable
         return true;
     }
 }
