@@ -125,8 +125,6 @@ GameObject:
   - component: {fileID: 5431906996262311868}
   - component: {fileID: -5769443931900365964}
   - component: {fileID: 8575818164243851910}
-  - component: {fileID: -1591146092377154691}
-  - component: {fileID: 3507660563399409944}
   m_Layer: 7
   m_Name: Unit
   m_TagString: Untagged
@@ -227,30 +225,6 @@ MonoBehaviour:
   currentHealth: 0
   maxStamina: 0
   currentStamina: 0
---- !u!114 &-1591146092377154691
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 922802329369371357}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0131417695fd6d945b697102d01229d6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ClickDebugger
---- !u!114 &3507660563399409944
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 922802329369371357}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3658e0c35bdc97f4b9592eeeaed9c89d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerSetupChecker
 --- !u!1 &5260917431886183574
 GameObject:
   m_ObjectHideFlags: 0
