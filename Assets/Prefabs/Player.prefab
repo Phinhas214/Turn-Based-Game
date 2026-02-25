@@ -126,6 +126,7 @@ GameObject:
   - component: {fileID: -5769443931900365964}
   - component: {fileID: 8575818164243851910}
   - component: {fileID: 4896305900031482026}
+  - component: {fileID: 6502254005860565181}
   m_Layer: 7
   m_Name: Player
   m_TagString: Untagged
@@ -241,6 +242,18 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: 3c98bd948d1ce4a449eae030c63833d1, type: 2}
   facingRotationSteps: 1
   debugGizmos: 0
+--- !u!114 &6502254005860565181
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922802329369371357}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50835332e6b4d3f4fae4ad431a200d9a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerTarget
 --- !u!1 &5260917431886183574
 GameObject:
   m_ObjectHideFlags: 0

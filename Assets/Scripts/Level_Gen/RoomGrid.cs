@@ -44,10 +44,8 @@ public class RoomGrid : MonoBehaviour
 
     public GridSystem GetGridSystem() => gridSystem;
 
-    /// <summary>
     /// Returns the world-space center of the tile at gridPosition,
     /// accounting for the room's world position and grid offset.
-    /// </summary>
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         Vector3 localPos = gridSystem.GetWorldPosition(gridPosition);
@@ -56,10 +54,8 @@ public class RoomGrid : MonoBehaviour
              + new Vector3(localPos.x, 0f, localPos.z);
     }
 
-    /// <summary>
     /// Converts a world position to the nearest grid position within this room.
     /// Strips Y before conversion so floor-collider height never causes mismatches.
-    /// </summary>
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {
         Vector3 localPosition = worldPosition - roomWorldPosition - gridOffset;
@@ -67,9 +63,7 @@ public class RoomGrid : MonoBehaviour
         return gridSystem.GetGridPosition(localPosition);
     }
 
-    /// <summary>
     /// Returns true if worldPosition lies within this room's grid bounds.
-    /// </summary>
     public bool IsPositionInRoom(Vector3 worldPosition)
     {
         Vector3 localPos = worldPosition - roomWorldPosition - gridOffset;
@@ -92,10 +86,8 @@ public class RoomGrid : MonoBehaviour
         gridSystem.GetGridObject(gridPosition).RemoveUnit(unit);
     }
 
-    /// <summary>
     /// Returns true if a player Unit OR an EnemyUnit is on this tile.
     /// This means enemies block player movement and pathfinding treats both as obstacles.
-    /// </summary>
     public bool HasAnyUnitOnGridPosition(GridPosition gridPosition)
     {
         if (!gridSystem.IsValidGridPosition(gridPosition)) return false;

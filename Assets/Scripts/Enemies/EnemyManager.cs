@@ -4,32 +4,22 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Tracks all active enemies in the scene.
-/// Runs all enemy turns sequentially when TurnSystem fires the enemy turn.
-/// Works with the existing TurnSystem — hook it up by calling RunEnemyTurns()
-/// from TurnSystem or from a coordinator that knows when it's the enemy phase.
+/// Tracks all active enemies and runs their turns sequentially.
+/// No longer needs a player reference — EnemyAI finds the player
+/// via PlayerTarget, which works regardless of spawn order.
 /// </summary>
 public class EnemyManager : MonoBehaviour
 {
     public static EnemyManager Instance { get; private set; }
 
-    // ── Inspector ──────────────────────────────────────────────────────────
-    [Header("References")]
-    [Tooltip("Assign the player Unit here, or leave empty to auto-find on level ready.")]
-    [SerializeField] private Unit playerUnit;
-
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs = false;
 
-    // ── Runtime ────────────────────────────────────────────────────────────
     private List<EnemyUnit> activeEnemies = new List<EnemyUnit>();
     private bool isRunningEnemyTurns = false;
 
-    // ── Events ─────────────────────────────────────────────────────────────
     /// <summary>Fired when all enemies have finished their turns.</summary>
     public event Action OnEnemyTurnsComplete;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -37,23 +27,7 @@ public class EnemyManager : MonoBehaviour
         Instance = this;
     }
 
-    private void OnEnable()
-    {
-        LevelGenerator.OnLevelReady += OnLevelReady;
-    }
-
-    private void OnDisable()
-    {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
-    }
-
-    private void OnLevelReady()
-    {
-        if (playerUnit == null)
-            playerUnit = FindFirstObjectByType<Unit>();
-    }
-
-    // ── Enemy registration ─────────────────────────────────────────────────
+    // ── Registration ───────────────────────────────────────────────────────
 
     public void RegisterEnemy(EnemyUnit enemy)
     {
@@ -72,15 +46,26 @@ public class EnemyManager : MonoBehaviour
             Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
     }
 
-    public int GetEnemyCount() => activeEnemies.Count;
-    public List<EnemyUnit> GetAllEnemies() => new List<EnemyUnit>(activeEnemies);
+    public int             GetEnemyCount()  => activeEnemies.Count;
+    public List<EnemyUnit> GetAllEnemies()  => new List<EnemyUnit>(activeEnemies);
+
+    /// <summary>
+    /// Returns all enemies currently in the given room.
+    /// Used by RoomNavigationUI to check if navigation should be locked.
+    /// </summary>
+    public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
+    {
+        List<EnemyUnit> result = new List<EnemyUnit>();
+        foreach (EnemyUnit enemy in activeEnemies)
+        {
+            if (!enemy.IsDead && enemy.CurrentRoomGrid == room)
+                result.Add(enemy);
+        }
+        return result;
+    }
 
     // ── Turn execution ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Run every active enemy's turn sequentially.
-    /// Call this from TurnSystem when the enemy phase begins.
-    /// </summary>
     public void RunEnemyTurns()
     {
         if (isRunningEnemyTurns) return;
@@ -92,24 +77,20 @@ public class EnemyManager : MonoBehaviour
         isRunningEnemyTurns = true;
 
         if (showDebugLogs)
-            Debug.Log($"[EnemyManager] Starting enemy turns. Enemies: {activeEnemies.Count}");
+            Debug.Log($"[EnemyManager] Running turns for {activeEnemies.Count} enemies.");
 
-        // Snapshot the list so deaths mid-turn don't break iteration
         List<EnemyUnit> snapshot = new List<EnemyUnit>(activeEnemies);
 
         foreach (EnemyUnit enemy in snapshot)
         {
             if (enemy == null || enemy.IsDead) continue;
-            if (playerUnit == null) break;
 
             EnemyAI ai = enemy.GetComponent<EnemyAI>();
             if (ai == null) continue;
 
-            bool turnComplete = false;
-            ai.TakeTurn(playerUnit, () => turnComplete = true);
-
-            // Wait for this enemy to finish before moving to the next
-            yield return new WaitUntil(() => turnComplete);
+            bool done = false;
+            ai.TakeTurn(() => done = true);   // no longer passes playerUnit
+            yield return new WaitUntil(() => done);
         }
 
         isRunningEnemyTurns = false;

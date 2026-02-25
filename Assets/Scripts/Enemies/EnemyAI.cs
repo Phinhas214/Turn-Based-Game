@@ -5,17 +5,22 @@ using UnityEngine;
 
 /// <summary>
 /// Controls one enemy's behaviour on its turn.
-/// - If the player is NOT in the same room: does nothing (idles).
-/// - If the player IS in the same room:
-///     1. Pathfinds and moves toward the player (up to moveRange steps)
-///     2. Attacks if the player is within attackRange
+///
+/// Uses PlayerTarget to find the player — this works regardless of
+/// initialization order and will naturally extend to multiplayer
+/// (target the closest PlayerTarget).
+///
+/// Per turn:
+///   - If no PlayerTarget in same room → idle
+///   - If player in room but out of attack range → move closer
+///   - If player in range → attack
 /// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class EnemyAI : MonoBehaviour
 {
     [Header("Movement Timing")]
-    [Tooltip("Seconds between each step when the enemy moves across tiles.")]
-    [SerializeField, Min(0f)] private float stepDelay = 0.15f;
+    [Tooltip("Seconds between each step when moving across tiles.")]
+    [SerializeField, Min(0f)] private float stepDelay = 0.2f;
 
     private EnemyUnit enemyUnit;
 
@@ -26,11 +31,8 @@ public class EnemyAI : MonoBehaviour
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Execute this enemy's full turn. Calls onComplete when finished.
-    /// Called by EnemyManager during the enemy turn phase.
-    /// </summary>
-    public void TakeTurn(Unit playerUnit, Action onComplete)
+    /// <summary>Called by EnemyManager. Runs the full turn then calls onComplete.</summary>
+    public void TakeTurn(Action onComplete)
     {
         if (!enemyUnit.CanActThisTurn() || enemyUnit.IsDead)
         {
@@ -38,64 +40,63 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // Only act if the player is in the same room
-        if (!IsPlayerInSameRoom(playerUnit))
+        // Find the player target
+        PlayerTarget target = FindPlayerInRoom();
+
+        if (target == null)
         {
-            if (enemyUnit.Stats != null)
-                Debug.Log($"[EnemyAI] {enemyUnit.Stats.enemyName} idles — player not in room.");
+            Debug.Log($"[EnemyAI] {enemyUnit.Stats?.enemyName} idles — no player in room.");
             onComplete?.Invoke();
             return;
         }
 
-        StartCoroutine(TurnRoutine(playerUnit, onComplete));
+        StartCoroutine(TurnRoutine(target, onComplete));
     }
 
-    // ── Turn coroutine ─────────────────────────────────────────────────────
+    // ── Turn logic ─────────────────────────────────────────────────────────
 
-    private IEnumerator TurnRoutine(Unit playerUnit, Action onComplete)
+    private IEnumerator TurnRoutine(PlayerTarget target, Action onComplete)
     {
         EnemyStats stats = enemyUnit.Stats;
         RoomGrid   room  = enemyUnit.CurrentRoomGrid;
 
-        if (room == null || playerUnit == null)
+        if (stats == null || room == null)
         {
             onComplete?.Invoke();
             yield break;
         }
 
-        GridPosition enemyPos  = enemyUnit.GridPosition;
+        Unit playerUnit   = target.GetUnit();
+        GridPosition myPos     = enemyUnit.GridPosition;
         GridPosition playerPos = playerUnit.GetGridPosition();
+        int dist = ManhattanDist(myPos, playerPos);
 
         // ── Move phase ─────────────────────────────────────────────────────
-        int distToPlayer = ManhattanDist(enemyPos, playerPos);
-
-        if (distToPlayer > stats.attackRange)
+        if (dist > stats.attackRange)
         {
             Pathfinder pathfinder = new Pathfinder(room);
-            List<GridPosition> path = pathfinder.FindPathToRange(enemyPos, playerPos, stats.attackRange);
+            List<GridPosition> path = pathfinder.FindPathToRange(myPos, playerPos, stats.attackRange);
 
             if (path.Count > 0)
             {
-                int stepsToTake = Mathf.Min(path.Count, stats.moveRange);
-
-                for (int i = 0; i < stepsToTake; i++)
+                int steps = Mathf.Min(path.Count, stats.moveRange);
+                for (int i = 0; i < steps; i++)
                 {
                     if (enemyUnit.IsDead) { onComplete?.Invoke(); yield break; }
-
                     enemyUnit.MoveToPosition(path[i]);
                     yield return new WaitForSeconds(stepDelay);
                 }
 
-                // Recalculate after moving
-                enemyPos     = enemyUnit.GridPosition;
-                distToPlayer = ManhattanDist(enemyPos, playerPos);
+                // Recalculate distance after moving
+                myPos = enemyUnit.GridPosition;
+                dist  = ManhattanDist(myPos, playerPos);
             }
         }
 
         yield return new WaitForSeconds(stepDelay);
 
         // ── Attack phase ───────────────────────────────────────────────────
-        if (distToPlayer <= stats.attackRange && !enemyUnit.IsDead)
+        if (dist <= stats.attackRange && !enemyUnit.IsDead)
         {
             PerformAttack(playerUnit);
             yield return new WaitForSeconds(stepDelay);
@@ -109,31 +110,45 @@ public class EnemyAI : MonoBehaviour
     private void PerformAttack(Unit playerUnit)
     {
         EnemyStats stats = enemyUnit.Stats;
-        if (stats.attackData == null) return;
+        if (stats.attackData == null)
+        {
+            Debug.LogWarning($"[EnemyAI] {stats?.enemyName} has no attackData assigned in EnemyStats.");
+            return;
+        }
 
         HealthComponent playerHealth = playerUnit.GetComponent<HealthComponent>();
         if (playerHealth == null)
         {
-            Debug.LogWarning("[EnemyAI] Player has no HealthComponent.");
+            Debug.LogWarning("[EnemyAI] Player has no HealthComponent — cannot deal damage.");
             return;
         }
 
+        // Use pattern if one is set, otherwise hit directly
         if (stats.attackData.attackPattern != null)
         {
-            GridPosition enemyPos  = enemyUnit.GridPosition;
+            GridPosition myPos     = enemyUnit.GridPosition;
             GridPosition playerPos = playerUnit.GetGridPosition();
-            Vector2Int   facing    = GetFacingToward(enemyPos, playerPos);
+            Vector2Int   facing    = GetFacingToward(myPos, playerPos);
 
             List<GridPosition> hitTiles = stats.attackData.attackPattern
-                .GetAffectedPositions(enemyPos, facing);
+                .GetAffectedPositions(myPos, facing);
 
+            bool hit = false;
             foreach (GridPosition tile in hitTiles)
             {
                 if (tile == playerPos)
                 {
                     playerHealth.TakeDamage(stats.attackData.baseDamage);
+                    hit = true;
                     Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg.");
                 }
+            }
+
+            if (!hit)
+            {
+                // Pattern didn't reach — fall back to direct hit
+                playerHealth.TakeDamage(stats.attackData.baseDamage);
+                Debug.Log($"[EnemyAI] {stats.enemyName} hit player (direct) for {stats.attackData.baseDamage} dmg.");
             }
         }
         else
@@ -143,27 +158,27 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    // ── Room check ─────────────────────────────────────────────────────────
+    // ── Player detection ───────────────────────────────────────────────────
 
-    private bool IsPlayerInSameRoom(Unit playerUnit)
+    /// <summary>
+    /// Returns the PlayerTarget if they are in the same room as this enemy.
+    /// Uses PlayerTarget component — no fragile grid comparison.
+    /// </summary>
+    private PlayerTarget FindPlayerInRoom()
     {
-        if (playerUnit == null) return false;
+        PlayerTarget target = PlayerTarget.Instance;
+        if (target == null) return null;
 
-        RoomGrid enemyRoom  = enemyUnit.CurrentRoomGrid;
-        RoomGrid playerRoom = playerUnit.GetCurrentRoomGrid();
+        RoomGrid enemyRoom = enemyUnit.CurrentRoomGrid;
+        if (enemyRoom == null) return null;
 
-        // Both must be initialized and in the same room instance
-        return enemyRoom != null
-            && playerRoom != null
-            && enemyRoom == playerRoom;
+        return target.IsInRoom(enemyRoom) ? target : null;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private int ManhattanDist(GridPosition a, GridPosition b)
-    {
-        return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.z - b.z);
-    }
+        => Mathf.Abs(a.x - b.x) + Mathf.Abs(a.z - b.z);
 
     private Vector2Int GetFacingToward(GridPosition from, GridPosition to)
     {
