@@ -1,5 +1,10 @@
 using UnityEngine;
 
+/// <summary>
+/// Loads player stats from ClassStatsDatabase (which is populated via CSV import).
+/// Explicitly initializes HealthComponent after loading so health always
+/// reflects the CSV values — no Awake ordering issues.
+/// </summary>
 public class PlayerStats : MonoBehaviour, IHasHealth
 {
     [Header("Class")]
@@ -8,7 +13,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     [Header("Database")]
     public ClassStatsDatabase classStatsDatabase;
 
-    [Header("Health")]
+    [Header("Health (read-only — driven by CSV data)")]
     public int maxHealth;
     public int currentHealth;
 
@@ -16,18 +21,27 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     public int maxStamina;
     public int currentStamina;
 
+    // Cached reference so we don't GetComponent every frame
+    private HealthComponent healthComponent;
+
     private void Awake()
     {
-        // MOVED FROM Start → Awake so that when HealthComponent.Awake runs
-        // on the same frame and calls GetMaxHealth(), maxHealth is already set.
-        ApplyClassStats();
-    }
+        healthComponent = GetComponent<HealthComponent>();
 
-    private void OnValidate()
-    {
-        if (Application.isPlaying && classStatsDatabase != null)
+        // Load stats from the database first
+        ApplyClassStats();
+
+        // Then explicitly push the health value into HealthComponent.
+        // This bypasses any Awake ordering race — we set it ourselves
+        // after we know maxHealth is correct.
+        if (healthComponent != null)
         {
-            ApplyClassStats();
+            healthComponent.InitializeHealth(maxHealth);
+            Debug.Log($"[PlayerStats] Initialized health to {maxHealth} from CSV data ({playerClass}).");
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerStats] No HealthComponent found on player — attach one to the player prefab.");
         }
     }
 
@@ -35,12 +49,16 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     {
         if (!classStatsDatabase)
         {
-            Debug.LogError("Missing ClassStatsDatabase reference.");
+            Debug.LogError("[PlayerStats] Missing ClassStatsDatabase reference.");
             return;
         }
 
         ClassStats stats = classStatsDatabase.Get(playerClass);
-        if (stats == null) return;
+        if (stats == null)
+        {
+            Debug.LogError($"[PlayerStats] No stats found for class {playerClass} in database.");
+            return;
+        }
 
         maxHealth  = stats.maxHealth;
         maxStamina = stats.maxStamina;
@@ -49,16 +67,22 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         currentStamina = maxStamina;
     }
 
-    // ── IHasHealth ─────────────────────────────────────────────────────────
-
-    public int GetMaxHealth()
+    private void OnValidate()
     {
-        return maxHealth;
+        if (Application.isPlaying && classStatsDatabase != null)
+            ApplyClassStats();
     }
 
-    // ── Existing methods (unchanged) ───────────────────────────────────────
+    // ── IHasHealth ─────────────────────────────────────────────────────────
+    // Kept so anything else that calls GetComponent<IHasHealth>() still works.
+    // But the primary initialization path is now the explicit InitializeHealth()
+    // call in Awake, not the auto-detection in HealthComponent.Awake.
 
-    public int GetCurrentStaminaPoints()  => currentStamina;
+    public int GetMaxHealth() => maxHealth;
+
+    // ── Stamina API (unchanged) ────────────────────────────────────────────
+
+    public int  GetCurrentStaminaPoints()            => currentStamina;
     public void SetCurrentStaminaPoints(int stamina) { currentStamina = stamina; }
-    public int GetMaxStaminaPoints()      => maxStamina;
+    public int  GetMaxStaminaPoints()                => maxStamina;
 }

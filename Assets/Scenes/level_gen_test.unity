@@ -3920,8 +3920,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
   spawnEntries:
   - prefab: {fileID: 8025110106504339535, guid: 59f93f03f17988548bbd8327cf699f82, type: 3}
-    count: 1
-    roomType: 0
+    count: 10
+    roomType: 2
     preferEdgeTiles: 0
   borderPadding: 1
   spawnOnLevelReady: 1

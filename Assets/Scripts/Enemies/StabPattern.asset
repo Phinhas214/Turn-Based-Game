@@ -13,6 +13,8 @@ MonoBehaviour:
   m_Name: StabPattern
   m_EditorClassIdentifier: Assembly-CSharp::AttackPattern
   tiles: []
-  minRange: 0
-  maxRange: 0
-  _previewInfo: 
+  minRange: 1
+  maxRange: 1
+  _previewInfo: 'Tile count: 0
+
+    Range: 1 - 1 (RANGED)'
