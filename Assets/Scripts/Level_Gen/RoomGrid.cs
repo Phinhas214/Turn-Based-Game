@@ -51,8 +51,6 @@ public class RoomGrid : MonoBehaviour
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         Vector3 localPos = gridSystem.GetWorldPosition(gridPosition);
-        // Only carry X and Z from gridOffset into world tile positions.
-        // Y is handled separately (the grid sits flat; Y offset just lifts the visuals).
         return roomWorldPosition
              + new Vector3(gridOffset.x, gridOffset.y, gridOffset.z)
              + new Vector3(localPos.x, 0f, localPos.z);
@@ -64,7 +62,6 @@ public class RoomGrid : MonoBehaviour
     /// </summary>
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {
-        // Strip Y so grid math is always flat regardless of collider or gridOffset.y
         Vector3 localPosition = worldPosition - roomWorldPosition - gridOffset;
         localPosition.y = 0f;
         return gridSystem.GetGridPosition(localPosition);
@@ -81,6 +78,8 @@ public class RoomGrid : MonoBehaviour
         return gridSystem.IsValidGridPosition(gridPos);
     }
 
+    // ── Existing player unit methods (unchanged) ──────────────────────────
+
     public void AddUnitAtGridPosition(GridPosition gridPosition, Unit unit)
     {
         if (!gridSystem.IsValidGridPosition(gridPosition)) return;
@@ -93,15 +92,46 @@ public class RoomGrid : MonoBehaviour
         gridSystem.GetGridObject(gridPosition).RemoveUnit(unit);
     }
 
+    /// <summary>
+    /// Returns true if a player Unit OR an EnemyUnit is on this tile.
+    /// This means enemies block player movement and pathfinding treats both as obstacles.
+    /// </summary>
     public bool HasAnyUnitOnGridPosition(GridPosition gridPosition)
     {
         if (!gridSystem.IsValidGridPosition(gridPosition)) return false;
-        return gridSystem.GetGridObject(gridPosition).HasAnyUnit();
+        GridObject obj = gridSystem.GetGridObject(gridPosition);
+        return obj.HasAnyUnit() || obj.HasAnyEnemy(); // UPDATED — was just HasAnyUnit()
     }
 
     public bool IsValidGridPosition(GridPosition gridPosition)
     {
         return gridSystem.IsValidGridPosition(gridPosition);
+    }
+
+    // ── New enemy methods ─────────────────────────────────────────────────
+
+    public void AddEnemyAtGridPosition(GridPosition gridPosition, EnemyUnit enemy)
+    {
+        if (!gridSystem.IsValidGridPosition(gridPosition)) return;
+        gridSystem.GetGridObject(gridPosition).AddEnemy(enemy);
+    }
+
+    public void RemoveEnemyAtGridPosition(GridPosition gridPosition, EnemyUnit enemy)
+    {
+        if (!gridSystem.IsValidGridPosition(gridPosition)) return;
+        gridSystem.GetGridObject(gridPosition).RemoveEnemy(enemy);
+    }
+
+    public bool HasAnyEnemyOnGridPosition(GridPosition gridPosition)
+    {
+        if (!gridSystem.IsValidGridPosition(gridPosition)) return false;
+        return gridSystem.GetGridObject(gridPosition).HasAnyEnemy();
+    }
+
+    public EnemyUnit GetEnemyAtGridPosition(GridPosition gridPosition)
+    {
+        if (!gridSystem.IsValidGridPosition(gridPosition)) return null;
+        return gridSystem.GetGridObject(gridPosition).GetEnemy();
     }
 
     public int     GetWidth()      => width;

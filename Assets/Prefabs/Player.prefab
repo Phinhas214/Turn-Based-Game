@@ -127,7 +127,7 @@ GameObject:
   - component: {fileID: 8575818164243851910}
   - component: {fileID: 4896305900031482026}
   m_Layer: 7
-  m_Name: Unit
+  m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -239,6 +239,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
   actionData: {fileID: 11400000, guid: 3c98bd948d1ce4a449eae030c63833d1, type: 2}
+  facingRotationSteps: 1
+  debugGizmos: 0
 --- !u!1 &5260917431886183574
 GameObject:
   m_ObjectHideFlags: 0

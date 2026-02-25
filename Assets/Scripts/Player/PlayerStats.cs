@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class PlayerStats : MonoBehaviour
+public class PlayerStats : MonoBehaviour, IHasHealth
 {
     [Header("Class")]
     public PlayerClass playerClass;
@@ -16,8 +16,10 @@ public class PlayerStats : MonoBehaviour
     public int maxStamina;
     public int currentStamina;
 
-    private void Start()
+    private void Awake()
     {
+        // MOVED FROM Start → Awake so that when HealthComponent.Awake runs
+        // on the same frame and calls GetMaxHealth(), maxHealth is already set.
         ApplyClassStats();
     }
 
@@ -40,25 +42,23 @@ public class PlayerStats : MonoBehaviour
         ClassStats stats = classStatsDatabase.Get(playerClass);
         if (stats == null) return;
 
-        maxHealth = stats.maxHealth;
+        maxHealth  = stats.maxHealth;
         maxStamina = stats.maxStamina;
 
-        currentHealth = maxHealth;
+        currentHealth  = maxHealth;
         currentStamina = maxStamina;
     }
 
-    public int GetCurrentStaminaPoints()
+    // ── IHasHealth ─────────────────────────────────────────────────────────
+
+    public int GetMaxHealth()
     {
-        return currentStamina;
+        return maxHealth;
     }
 
-    public void SetCurrentStaminaPoints(int stamina)
-    {
-        currentStamina = stamina;
-    }
+    // ── Existing methods (unchanged) ───────────────────────────────────────
 
-    public int GetMaxStaminaPoints()
-    {
-        return maxStamina;
-    }
+    public int GetCurrentStaminaPoints()  => currentStamina;
+    public void SetCurrentStaminaPoints(int stamina) { currentStamina = stamina; }
+    public int GetMaxStaminaPoints()      => maxStamina;
 }

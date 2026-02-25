@@ -21,3 +21,6 @@ MonoBehaviour:
   - offset: {x: 2, y: -1}
   minRange: 4
   maxRange: 4
+  _previewInfo: 'Tile count: 6
+
+    Range: 4 - 4 (RANGED)'

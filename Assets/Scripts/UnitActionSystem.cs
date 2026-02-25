@@ -11,26 +11,17 @@ public class UnitActionSystem : MonoBehaviour
 {
     public static UnitActionSystem Instance { get; private set; }
 
-    // ─────────────────────────────────────────────────────────────────────
     [Header("Selection")]
     [Tooltip("Layer mask used to detect clicks on unit GameObjects.")]
     [SerializeField] private LayerMask unitLayerMask;
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Events
-    // ─────────────────────────────────────────────────────────────────────
     public event EventHandler         OnSelectedUnitChange;
     public event EventHandler         OnSelectedActionChange;
     public event EventHandler<bool>   OnBusyChanged;
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Runtime state
-    // ─────────────────────────────────────────────────────────────────────
     private Unit       selectedUnit;
     private BaseAction selectedAction;
     private bool       isBusy;
-
-    // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -55,24 +46,20 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Update
-    // ─────────────────────────────────────────────────────────────────────
-
     private void Update()
     {
         if (LevelGrid.Instance == null || !LevelGrid.Instance.IsInitialized()) return;
-        if (isBusy)       return;
-        if (selectedUnit  == null) return;
+        if (isBusy)      return;
+        if (selectedUnit == null) return;
+
+        // NEW: block all player input while enemies are taking their turns
+        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn) return;
+
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
         if (TryHandleUnitSelection()) return;
         HandleSelectedAction();
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  Input handling
-    // ─────────────────────────────────────────────────────────────────────
 
     private void HandleSelectedAction()
     {
@@ -126,10 +113,6 @@ public class UnitActionSystem : MonoBehaviour
         return false;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  State helpers
-    // ─────────────────────────────────────────────────────────────────────
-
     private void SetBusy()
     {
         isBusy = true;
@@ -148,10 +131,6 @@ public class UnitActionSystem : MonoBehaviour
         SetSelectedAction(unit.GetMoveAction());
         OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  Public API
-    // ─────────────────────────────────────────────────────────────────────
 
     public void SetSelectedAction(BaseAction baseAction)
     {
