@@ -1,10 +1,8 @@
 using UnityEngine;
 
-/// <summary>
-/// Core grid math. Tiles are CENTER-anchored — GetWorldPosition returns the
-/// center of each tile, and GetGridPosition snaps to the nearest tile center.
-/// This ensures the mouse highlight always lands on the tile you're hovering.
-/// </summary>
+// Core grid math. Tiles are CENTER-anchored — GetWorldPosition returns the
+// center of each tile, and GetGridPosition snaps to the nearest tile center.
+// This ensures the mouse highlight always lands on the tile you're hovering.
 public class GridSystem
 {
     private int width;
@@ -31,20 +29,17 @@ public class GridSystem
     public int GetWidth()  => width;
     public int GetHeight() => height;
 
-    /// <summary>
-    /// Returns the WORLD-SPACE CENTER of the tile at gridPosition.
-    /// Tiles are cellSize apart, starting at (0,0).
-    /// </summary>
+    // Returns the WORLD-SPACE CENTER of the tile at gridPosition.
+    // Tiles are cellSize apart, starting at (0,0).
     public Vector3 GetWorldPosition(GridPosition gridPosition)
     {
         return new Vector3(gridPosition.x, 0, gridPosition.z) * cellSize;
     }
 
-    /// <summary>
-    /// Converts a world position to the nearest grid position.
-    /// Rounds to the nearest tile center so hovering anywhere on a tile
-    /// returns that tile's grid position.
-    /// </summary>
+
+    // Converts a world position to the nearest grid position.
+    // Rounds to the nearest tile center so hovering anywhere on a tile
+    // returns that tile's grid position.
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {
         return new GridPosition(

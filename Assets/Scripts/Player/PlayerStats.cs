@@ -37,12 +37,25 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         if (healthComponent != null)
         {
             healthComponent.InitializeHealth(maxHealth);
+
+            // Sync immediately
+            currentHealth = healthComponent.CurrentHealth;
+
+            // Subscribe to health updates
+            healthComponent.OnHealthChanged += OnHealthChanged;
+
             Debug.Log($"[PlayerStats] Initialized health to {maxHealth} from CSV data ({playerClass}).");
         }
         else
         {
             Debug.LogWarning("[PlayerStats] No HealthComponent found on player — attach one to the player prefab.");
         }
+    }
+
+    private void OnHealthChanged(int current, int max)
+    {
+        currentHealth = current;
+        maxHealth     = max;
     }
 
     private void ApplyClassStats()
@@ -71,6 +84,12 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     {
         if (Application.isPlaying && classStatsDatabase != null)
             ApplyClassStats();
+    }
+
+    private void OnDestroy()
+    {
+        if (healthComponent != null)
+            healthComponent.OnHealthChanged -= OnHealthChanged;
     }
 
 

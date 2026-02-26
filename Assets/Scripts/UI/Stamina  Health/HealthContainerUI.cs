@@ -19,6 +19,12 @@ public class HealthContainerUI : MonoBehaviour,
     public GameObject hoverOverlay;
     public TextMeshProUGUI healthText;
 
+    [Header("Damage Flash")]
+    [SerializeField] private GameObject damageFlashUI;
+    [SerializeField] private float flashDuration = 0.25f;
+
+private int lastHealth = -1;
+
     int currentTier = -1;
 
     void OnEnable()
@@ -48,6 +54,16 @@ public class HealthContainerUI : MonoBehaviour,
     void Update()
     {
         if (!playerStats) return;
+
+        // Detect damage
+        int currentHealth = playerStats.currentHealth;
+
+        if (lastHealth != -1 && currentHealth < lastHealth)
+        {
+            TriggerDamageFlash();
+        }
+
+        lastHealth = currentHealth;
 
         UpdateFireState();
 
@@ -99,4 +115,21 @@ public class HealthContainerUI : MonoBehaviour,
     {
         healthText.text = playerStats.currentHealth.ToString();
     }
+
+    // Visual feedback of dmg taken
+
+    void TriggerDamageFlash()
+        {
+            if (!damageFlashUI) return;
+
+            StopAllCoroutines();
+            StartCoroutine(DamageFlashRoutine());
+        }
+
+        System.Collections.IEnumerator DamageFlashRoutine()
+        {
+            damageFlashUI.SetActive(true);
+            yield return new WaitForSeconds(flashDuration);
+            damageFlashUI.SetActive(false);
+        }
 }

@@ -2552,7 +2552,7 @@ MonoBehaviour:
   mousePlaneLayerMask:
     serializedVersion: 2
     m_Bits: 64
-  showDebugSphere: 0
+  showDebugSphere: 1
 --- !u!4 &370657243
 Transform:
   m_ObjectHideFlags: 0
@@ -9956,6 +9956,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 6710372886455344540, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+      propertyPath: showGizmos
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 7406849774012905454, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
       propertyPath: m_LocalPosition.x
       value: -522.5465
