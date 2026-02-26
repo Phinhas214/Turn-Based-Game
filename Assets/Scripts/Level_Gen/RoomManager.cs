@@ -6,7 +6,11 @@ public class RoomManager : MonoBehaviour
 
     private LevelGenerator.PlacedRoom currentRoom;
 
+    // Original instance event — all existing listeners unchanged
     public System.Action<LevelGenerator.PlacedRoom> OnRoomChanged;
+
+    // NEW — static version so GameStateManager can subscribe before any instance exists
+    public static System.Action<LevelGenerator.PlacedRoom> OnAnyRoomChanged;
 
     private void Awake()
     {
@@ -21,7 +25,8 @@ public class RoomManager : MonoBehaviour
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom = room;
-        OnRoomChanged?.Invoke(room);
+        OnRoomChanged?.Invoke(room);       // existing — unchanged
+        OnAnyRoomChanged?.Invoke(room);    // NEW — GameStateManager listens to this
     }
 
     public LevelGenerator.PlacedRoom GetCurrentRoom()
