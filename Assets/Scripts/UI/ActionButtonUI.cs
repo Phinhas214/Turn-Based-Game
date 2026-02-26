@@ -89,12 +89,12 @@ public class ActionButtonUI : MonoBehaviour
             if (staminaCostText != null)
                 staminaCostText.text = cost.ToString();
         }
-        else if (baseAction is SpinAction)
-        {
-            staminaCostRoot.SetActive(true);
-            if (staminaCostText != null)
-                staminaCostText.text = "1";
-        }
+        // else if (baseAction is SpinAction)
+        // {
+        //     staminaCostRoot.SetActive(true);
+        //     if (staminaCostText != null)
+        //         staminaCostText.text = "1";
+        // }
         else
         {
             staminaCostRoot.SetActive(false);
