@@ -16,7 +16,7 @@ public class TurnSystem : MonoBehaviour
     private int  turnNumber   = 1;
     private bool isPlayerTurn = true; // NEW — tracks whose turn it is
 
-    /// <summary>True while the player can act. False during the enemy phase.</summary>
+    // True while the player can act. False during the enemy phase.
     public bool IsPlayerTurn => isPlayerTurn;
 
     private void Awake()

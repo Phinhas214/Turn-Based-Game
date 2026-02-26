@@ -29,7 +29,13 @@ public class RoomGridDefinition : MonoBehaviour
         float cellSize = 2f;
 
         // Calculate the starting corner of the grid with all offsets applied
-        Vector3 gridOrigin = transform.position + new Vector3(gridOffsetX, gridOffsetY, gridOffsetZ);
+        // Vector3 gridOrigin = transform.position + new Vector3(gridOffsetX, gridOffsetY, gridOffsetZ);
+
+        // float cellSize = 2f;
+
+        Vector3 gridOrigin = transform.position + new Vector3(gridOffsetX, gridOffsetY, gridOffsetZ) + new Vector3(cellSize * 0.5f, 0f, cellSize * 0.5f);
+
+        
 
         Gizmos.color = Color.cyan;
 

@@ -2,11 +2,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Populates the action bar with one button per action on the selected unit.
-/// Refreshes affordability state every frame so stamina cost badges stay accurate.
-/// Drop-in replacement for the original UnitActionSystemUI.
-/// </summary>
+// Populates the action bar with one button per action on the selected unit.
+// Refreshes affordability state every frame so stamina cost badges stay accurate.
+// Drop-in replacement for the original UnitActionSystemUI.
 public class UnitActionSystemUI : MonoBehaviour
 {
     // -------------------------------------------------------------------------

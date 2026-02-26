@@ -315,7 +315,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RoomGridDefinition
   width: 15
   height: 15
-  gridOffsetX: -15
+  gridOffsetX: -14
   gridOffsetY: 0.5
-  gridOffsetZ: -15
+  gridOffsetZ: -14
   showGizmos: 1

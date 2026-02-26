@@ -73,10 +73,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
             ApplyClassStats();
     }
 
-    // ── IHasHealth ─────────────────────────────────────────────────────────
-    // Kept so anything else that calls GetComponent<IHasHealth>() still works.
-    // But the primary initialization path is now the explicit InitializeHealth()
-    // call in Awake, not the auto-detection in HealthComponent.Awake.
 
     public int GetMaxHealth() => maxHealth;
 

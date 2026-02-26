@@ -2,11 +2,9 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
 /// Central input handler for unit selection and action execution.
 /// Handles MoveAction, SpinAction, and the new CombatAction.
 /// Replaces the original UnitActionSystem — drop-in compatible.
-/// </summary>
 public class UnitActionSystem : MonoBehaviour
 {
     public static UnitActionSystem Instance { get; private set; }
