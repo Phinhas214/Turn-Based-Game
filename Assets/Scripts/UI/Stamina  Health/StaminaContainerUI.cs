@@ -1,6 +1,7 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using TMPro;
 
 public class StaminaContainerUI : MonoBehaviour,
     IPointerEnterHandler,
@@ -14,8 +15,9 @@ public class StaminaContainerUI : MonoBehaviour,
     float mouseForceRadius = 60f;
     float mouseForceStrength = 300f;
 
-    public GameObject hoverOverlay;
-    public TMPro.TextMeshProUGUI staminaText;
+    [Header("UI")]
+    public GameObject hoverOverlay;          // background only
+    public TextMeshProUGUI staminaText;      // always visible
 
     RectTransform rect;
     List<StaminaParticleUI> particles = new();
@@ -27,7 +29,7 @@ public class StaminaContainerUI : MonoBehaviour,
         rect = GetComponent<RectTransform>();
     }
 
-        void OnEnable()
+    void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
     }
@@ -43,7 +45,11 @@ public class StaminaContainerUI : MonoBehaviour,
         if (unit != null)
         {
             playerStats = unit.GetComponent<PlayerStats>();
-            lastStamina = -1; // force particle refresh
+
+            // Force full initial sync
+            lastStamina = playerStats.currentStamina;
+            UpdateStaminaText();
+            UpdateParticles(lastStamina);
         }
         else
         {
@@ -57,19 +63,19 @@ public class StaminaContainerUI : MonoBehaviour,
 
         if (playerStats.currentStamina != lastStamina)
         {
-            UpdateParticles(playerStats.currentStamina);
             lastStamina = playerStats.currentStamina;
+
+            UpdateParticles(lastStamina);
+            UpdateStaminaText();
         }
 
         DisturbParticlesWithMouse();
         ApplyParticleRepulsion();
-
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
         hoverOverlay.SetActive(true);
-        staminaText.text = playerStats.currentStamina.ToString();
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -77,11 +83,16 @@ public class StaminaContainerUI : MonoBehaviour,
         hoverOverlay.SetActive(false);
     }
 
+    void UpdateStaminaText()
+    {
+        staminaText.text = playerStats.currentStamina.ToString();
+        // or $"{playerStats.currentStamina}/{playerStats.maxStamina}";
+    }
+
     void DisturbParticlesWithMouse()
     {
         Vector2 localMousePos;
 
-        // Convert screen mouse position to container-local space
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             rect,
             Input.mousePosition,
@@ -89,8 +100,6 @@ public class StaminaContainerUI : MonoBehaviour,
             out localMousePos
         );
 
-
-        // Only disturb if mouse is inside container
         if (!rect.rect.Contains(localMousePos))
             return;
 
@@ -104,7 +113,6 @@ public class StaminaContainerUI : MonoBehaviour,
             {
                 float strength = 1f - (distance / mouseForceRadius);
                 Vector2 force = dir.normalized * strength * mouseForceStrength;
-
                 p.ApplyForce(force * Time.deltaTime);
             }
         }
@@ -138,17 +146,14 @@ public class StaminaContainerUI : MonoBehaviour,
         }
     }
 
-
     void UpdateParticles(int targetCount)
     {
-        // Remove extra
         while (particles.Count > targetCount)
         {
             Destroy(particles[^1].gameObject);
             particles.RemoveAt(particles.Count - 1);
         }
 
-        // Add missing
         while (particles.Count < targetCount)
         {
             SpawnParticle();
