@@ -3201,9 +3201,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FreeTacticsCameraController
   cam: {fileID: 485253842}
   panSpeed: 12
+  dragPanSpeed: 0.02
   zoomSpeed: 5
   orthoMin: 4
   orthoMax: 18
+  shakeAmplitude: 0.25
+  shakeFrequency: 20
+  shakeDuration: 0.15
 --- !u!114 &485253840
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5485,7 +5489,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1113116105
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5498,7 +5502,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3416153a5f204045be1f7e157bad76c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  unit: {fileID: 0}
+  unit: {fileID: 8805797687680868294, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
 --- !u!4 &1113116106
 Transform:
   m_ObjectHideFlags: 0
