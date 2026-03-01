@@ -66,6 +66,8 @@ public class TurnSystem : MonoBehaviour
 
     private void BeginEnemyPhase()
     {
+        Debug.Log("[TurnSystem] Enemy phase begins");
+
         OnEnemyPhaseBegin?.Invoke();
 
         if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
@@ -74,7 +76,6 @@ public class TurnSystem : MonoBehaviour
         }
         else
         {
-            // No enemies — immediately hand back to player
             HandleEnemyTurnsComplete();
         }
     }

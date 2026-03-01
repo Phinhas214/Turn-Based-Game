@@ -9,6 +9,11 @@ using UnityEngine;
 /// </summary>
 public class HealthComponent : MonoBehaviour
 {
+
+    [Header("Damage Numbers")]
+    [SerializeField] private DamageNumber damageNumberPrefab;
+    [SerializeField] private Vector3 damageNumberOffset = new Vector3(0f, 1.5f, 0f);
+
     // ─────────────────────────────────────────────────────────────
     // Damage Flash (overlay-based, same as HealthContainerUI)
     // ─────────────────────────────────────────────────────────────
@@ -109,10 +114,26 @@ public class HealthComponent : MonoBehaviour
         _currentHealth = Mathf.Max(0, _currentHealth - amount);
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
 
+        SpawnDamageNumber(amount);
         TriggerDamageFlash();
 
         if (_currentHealth == 0)
             Die();
+    }
+
+    private void SpawnDamageNumber(int amount)
+    {
+        if (!damageNumberPrefab) return;
+
+        Vector3 spawnPos = transform.position + damageNumberOffset;
+
+        DamageNumber dmg = Instantiate(
+            damageNumberPrefab,
+            spawnPos,
+            Quaternion.identity
+        );
+
+        dmg.Initialize(amount);
     }
 
     public void Heal(int amount)
