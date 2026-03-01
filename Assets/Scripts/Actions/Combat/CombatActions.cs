@@ -2,12 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Player combat action. Hits both EnemyUnits and Units on affected tiles.
-///
-/// Key fix: ApplyDamage now checks GetEnemyList() on each GridObject,
-/// which is where EnemyUnit instances are tracked.
-/// </summary>
 public class CombatAction : BaseAction
 {
     [Header("Action Configuration")]
@@ -15,8 +9,6 @@ public class CombatAction : BaseAction
     [SerializeField] private CombatActionData actionData;
 
     [Header("Facing Correction")]
-    [Tooltip("Corrects highlight rotation caused by camera orientation.\n" +
-             "North=East: set 1 | North=South: set 2 | North=West: set 3 | Correct: set 0")]
     [Range(0, 3)]
     [SerializeField] private int facingRotationSteps = 1;
 
@@ -31,8 +23,6 @@ public class CombatAction : BaseAction
 
     public override string GetActionName() =>
         actionData != null ? actionData.actionName : "Attack";
-
-    // ── Preview ────────────────────────────────────────────────────────────
 
     public List<GridPosition> GetPreviewPositions(GridPosition mouseGridPos)
     {
@@ -49,8 +39,6 @@ public class CombatAction : BaseAction
         lastPreviewPositions = positions;
         return positions;
     }
-
-    // ── Execution ──────────────────────────────────────────────────────────
 
     public void PerformAttack(GridPosition targetGridPos, Action onComplete)
     {
@@ -78,8 +66,6 @@ public class CombatAction : BaseAction
         isActive = false;
         onActionComplete?.Invoke();
     }
-
-    // ── Validity ───────────────────────────────────────────────────────────
 
     public List<GridPosition> GetValidActionGridPositionList()
     {
@@ -115,6 +101,7 @@ public class CombatAction : BaseAction
                         valid.Add(p);
         }
 
+        Debug.Log($"[CombatAction] Valid attack positions: {valid.Count}");
         return valid;
     }
 
@@ -126,8 +113,6 @@ public class CombatAction : BaseAction
         !actionData.requiresEnoughStamina ||
         playerStats.currentStamina >= actionData.staminaCost;
 
-    // ── Damage ─────────────────────────────────────────────────────────────
-
     private void ApplyDamage(List<GridPosition> positions)
     {
         RoomGrid room = unit.GetCurrentRoomGrid();
@@ -137,19 +122,19 @@ public class CombatAction : BaseAction
         {
             if (!room.IsValidGridPosition(pos)) continue;
 
-            GridObject gridObj = room.GetGridSystem().GetGridObject(pos);
+            TilemapRoomGrid tilemapGrid = room.GetTilemapRoomGrid();
+            if (tilemapGrid == null) continue;
 
-            // Hit enemies — THIS was the missing piece. Enemies are in GetEnemyList(),
-            // not GetUnitList(), so the original ApplyDamage never reached them.
-            foreach (EnemyUnit enemy in new List<EnemyUnit>(gridObj.GetEnemyList()))
+            // Hit enemies
+            foreach (EnemyUnit enemy in tilemapGrid.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
                 Debug.Log($"[CombatAction] Hit {enemy.Stats?.enemyName} for {actionData.baseDamage} dmg.");
                 enemy.Health.TakeDamage(actionData.baseDamage);
             }
 
-            // Hit friendly/other Units (self-hit, future ally damage, etc.)
-            foreach (Unit target in new List<Unit>(gridObj.GetUnitList()))
+            // Hit units
+            foreach (Unit target in tilemapGrid.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
                 HealthComponent health = target.GetComponent<HealthComponent>();
@@ -164,8 +149,6 @@ public class CombatAction : BaseAction
         if (playerStats == null) return;
         playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - actionData.staminaCost);
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private List<GridPosition> GetPatternAt(GridPosition origin, Vector2Int facing)
     {

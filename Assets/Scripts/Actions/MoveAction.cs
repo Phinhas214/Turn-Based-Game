@@ -10,7 +10,7 @@ public class MoveAction : BaseAction
 
     protected override void Awake()
     {
-        base.Awake(); // gets unit AND playerStats from BaseAction
+        base.Awake();
         targetPosition = transform.position;
     }
 
@@ -49,11 +49,13 @@ public class MoveAction : BaseAction
         RoomGrid currentRoom = unit.GetCurrentRoomGrid();
         if (currentRoom == null)
         {
-            Debug.LogError("MoveAction: Unit has no current room grid!");
+            Debug.LogError("[MoveAction] Unit has no current room grid!");
+            onActionComplete?.Invoke();
             return;
         }
 
         GridPosition oldGridPosition = unit.GetGridPosition();
+        
         currentRoom.RemoveUnitAtGridPosition(oldGridPosition, unit);
 
         int distance = Mathf.Max(
@@ -71,6 +73,8 @@ public class MoveAction : BaseAction
         
         this.targetPosition = currentRoom.GetWorldPosition(gridPosition);
         isActive = true;
+        
+        Debug.Log($"[MoveAction] Moving from {oldGridPosition} to {gridPosition}");
     }
 
     public bool isValidActionGridPosition(GridPosition gridPosition)
@@ -84,7 +88,11 @@ public class MoveAction : BaseAction
         List<GridPosition> validGridPositionList = new List<GridPosition>();
         
         RoomGrid currentRoom = unit.GetCurrentRoomGrid();
-        if (currentRoom == null) return validGridPositionList;
+        if (currentRoom == null)
+        {
+            Debug.LogError("[MoveAction] No current room!");
+            return validGridPositionList;
+        }
 
         GridPosition unitGridPosition = unit.GetGridPosition();
         int moveDistance = GetMoveDistance();
@@ -107,6 +115,7 @@ public class MoveAction : BaseAction
             }
         }
 
+        Debug.Log($"[MoveAction] Valid positions: {validGridPositionList.Count} (from {unitGridPosition})");
         return validGridPositionList;
     }
 

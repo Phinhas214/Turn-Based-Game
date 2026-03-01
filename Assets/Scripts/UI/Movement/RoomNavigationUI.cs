@@ -1,12 +1,8 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Collections.Generic;
 
-/// <summary>
-/// Navigation UI for moving between rooms.
-/// Buttons are disabled when enemies are present in the current room.
-/// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
     [Header("UI Buttons")]
@@ -22,10 +18,8 @@ public class RoomNavigationUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI westText;
 
     [Header("Enemy Lock")]
-    [Tooltip("Message shown on buttons when enemies are blocking navigation.")]
     [SerializeField] private string enemyBlockMessage = "Enemies present!";
-
-    [SerializeField] private GameObject enemyWarningPanel; // optional — shown when locked
+    [SerializeField] private GameObject enemyWarningPanel;
 
     private LevelGenerator levelGenerator;
 
@@ -70,13 +64,6 @@ public class RoomNavigationUI : MonoBehaviour
             RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
     }
 
-    // Refresh every turn end so the lock reacts when enemies die
-    private void OnEnable2()
-    {
-        if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
-    }
-
     private void Start()
     {
         if (TurnSystem.Instance != null)
@@ -92,24 +79,32 @@ public class RoomNavigationUI : MonoBehaviour
     private void OnLevelReady()
     {
         levelGenerator = FindFirstObjectByType<LevelGenerator>();
-        RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
-        RoomManager.Instance.OnRoomChanged += OnRoomChanged;
+        Debug.Log("[RoomNavigationUI] Level ready");
         UpdateButtons();
     }
 
-    private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom) => UpdateButtons();
-    private void OnTurnChanged(object sender, System.EventArgs e)  => UpdateButtons();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom)
+    {
+        Debug.Log($"[RoomNavigationUI] Room changed to {newRoom.roomInstance.name}");
+        UpdateButtons();
+    }
 
-    // ── Button state ───────────────────────────────────────────────────────
+    private void OnTurnChanged(object sender, System.EventArgs e)
+    {
+        UpdateButtons();
+    }
 
     private void UpdateButtons()
     {
         if (RoomManager.Instance == null || levelGenerator == null) return;
 
         LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
-        if (currentRoom == null) return;
+        if (currentRoom == null)
+        {
+            Debug.LogError("[RoomNavigationUI] No current room!");
+            return;
+        }
 
-        // Check if enemies are blocking navigation
         bool enemiesPresent = AreEnemiesInCurrentRoom(currentRoom.roomGrid);
 
         if (enemyWarningPanel != null)
@@ -126,7 +121,6 @@ public class RoomNavigationUI : MonoBehaviour
 
             if (enemiesPresent)
             {
-                // Lock ALL navigation when enemies are alive in this room
                 btn.interactable = false;
                 if (txt != null) txt.text = enemyBlockMessage;
             }
@@ -147,10 +141,11 @@ public class RoomNavigationUI : MonoBehaviour
     private bool AreEnemiesInCurrentRoom(RoomGrid room)
     {
         if (room == null || EnemyManager.Instance == null) return false;
-        return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+        List<EnemyUnit> enemies = EnemyManager.Instance.GetEnemiesInRoom(room);
+        bool hasEnemies = enemies.Count > 0;
+        Debug.Log($"[RoomNavigationUI] Enemies in room: {enemies.Count}");
+        return hasEnemies;
     }
-
-    // ── Travel ─────────────────────────────────────────────────────────────
 
     private void TravelToRoom(LevelGenerator.Direction direction)
     {
@@ -159,7 +154,6 @@ public class RoomNavigationUI : MonoBehaviour
         LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
         if (currentRoom == null) return;
 
-        // Double-check enemies even if button somehow got clicked
         if (AreEnemiesInCurrentRoom(currentRoom.roomGrid))
         {
             Debug.Log("[RoomNavigationUI] Cannot leave — enemies are present!");
@@ -167,18 +161,26 @@ public class RoomNavigationUI : MonoBehaviour
         }
 
         LevelGenerator.PlacedRoom targetRoom = levelGenerator.GetConnectedRoom(currentRoom, direction);
-        if (targetRoom == null) return;
+        if (targetRoom == null)
+        {
+            Debug.Log($"[RoomNavigationUI] No room connected in {direction} direction");
+            return;
+        }
 
         Unit player = FindFirstObjectByType<Unit>();
-        if (player == null) return;
+        if (player == null)
+        {
+            Debug.LogError("[RoomNavigationUI] No player found!");
+            return;
+        }
 
         int centerX = targetRoom.roomGrid.GetWidth()  / 2;
         int centerZ = targetRoom.roomGrid.GetHeight() / 2;
         GridPosition spawnPos = new GridPosition(centerX, centerZ);
+        
+        Debug.Log($"[RoomNavigationUI] Traveling {direction} to {targetRoom.roomInstance.name}, spawn at {spawnPos}");
 
         player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
         RoomManager.Instance.SetCurrentRoom(targetRoom);
-
-        Debug.Log($"[RoomNavigationUI] Traveled {direction} to {targetRoom.roomInstance.name}");
     }
 }

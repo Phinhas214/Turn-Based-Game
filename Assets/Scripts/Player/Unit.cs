@@ -21,7 +21,10 @@ public class Unit : MonoBehaviour
 
     private void Start()
     {
-        TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
+        if (TurnSystem.Instance != null)
+        {
+            TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
+        }
     }
 
     private void Update()
@@ -32,17 +35,22 @@ public class Unit : MonoBehaviour
         
         if (!currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
+            // ✅ CRITICAL: Check room changed
             RoomGrid newRoom = LevelGrid.Instance?.GetRoomAtPosition(transform.position);
             
             if (newRoom != null && newRoom != currentRoomGrid)
             {
-                Debug.Log($"Player moved from {currentRoomGrid.gameObject.name} to {newRoom.gameObject.name}");
+                Debug.Log($"[Unit] Player moved from {currentRoomGrid.gameObject.name} to {newRoom.gameObject.name}");
                 
+                // Remove from old room
                 currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+                
+                // Add to new room
                 currentRoomGrid = newRoom;
                 gridPosition = newRoom.GetGridPosition(transform.position);
                 newRoom.AddUnitAtGridPosition(gridPosition, this);
                 
+                // Update room manager
                 LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
                 if (levelGen != null)
                 {
@@ -61,6 +69,7 @@ public class Unit : MonoBehaviour
             }
         }
         
+        // ✅ CRITICAL: Update grid position as player moves
         if (newGridPosition != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
@@ -109,6 +118,7 @@ public class Unit : MonoBehaviour
         }
     }
 
+    // ✅ CRITICAL: PlaceInRoom is called by LevelGenerator
     public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
     {
         if (currentRoomGrid != null && isInitialized)
@@ -117,8 +127,31 @@ public class Unit : MonoBehaviour
         currentRoomGrid = roomGrid;
         gridPosition = newGridPosition;
 
-        transform.position = roomGrid.GetWorldPosition(newGridPosition);
+        // ✅ CRITICAL: Get world position
+        Vector3 targetPosition = roomGrid.GetWorldPosition(newGridPosition);
+        
+        // ✅ CRITICAL: Preserve player's current Y value
+        // This keeps the player at ground level, not sinking
+        float playerY = transform.position.y;
+        targetPosition.y = playerY;
+        
+        Debug.Log($"[Unit] PlaceInRoom - Grid: {newGridPosition}, World: {targetPosition}, Y Preserved: {playerY}");
+        
+        // ✅ Set position FIRST
+        transform.position = targetPosition;
+        
+        // ✅ Then update grid
         roomGrid.AddUnitAtGridPosition(newGridPosition, this);
         isInitialized = true;
+        
+        Debug.Log($"[Unit] Player placed in room {roomGrid.gameObject.name} at grid {gridPosition}, world {transform.position}");
+    }
+
+    private void OnDestroy()
+    {
+        if (TurnSystem.Instance != null)
+        {
+            TurnSystem.Instance.OnTurnChanged -= TurnSystem_OnTurnChanged;
+        }
     }
 }

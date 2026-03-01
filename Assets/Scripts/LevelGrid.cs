@@ -5,139 +5,135 @@ public class LevelGrid : MonoBehaviour
 {
     public static LevelGrid Instance { get; private set; }
 
-    // All registered room grids from the generated level
-    private List<RoomGrid> allRoomGrids = new List<RoomGrid>();
-    private RoomGrid currentRoom;
-    private bool isInitialized = false;
+    [SerializeField] private List<RoomGrid> roomGrids = new List<RoomGrid>();
+    private RoomGrid currentRoomGrid;
 
     private void Awake()
     {
-        if (Instance != null)
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
-        allRoomGrids = new List<RoomGrid>();
+        DontDestroyOnLoad(gameObject);
     }
 
-    private void OnEnable()
-    {
-        LevelGenerator.OnLevelReady += OnLevelReady;
-
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged += OnRoomChanged;
-    }
-
-    private void OnDisable()
-    {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
-
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
-    }
-
-    // Called by LevelGenerator as each room grid is created
     public void RegisterRoomGrid(RoomGrid roomGrid)
     {
-        if (!allRoomGrids.Contains(roomGrid))
+        if (!roomGrids.Contains(roomGrid))
         {
-            allRoomGrids.Add(roomGrid);
+            roomGrids.Add(roomGrid);
+            Debug.Log($"[LevelGrid] Registered room grid: {roomGrid.gameObject.name}");
         }
     }
 
-    private void OnLevelReady()
+    public void UnregisterRoomGrid(RoomGrid roomGrid)
     {
-        if (RoomManager.Instance != null)
+        if (roomGrids.Contains(roomGrid))
         {
-            currentRoom = RoomManager.Instance.GetCurrentRoomGrid();
-        }
-
-        isInitialized = true;
-        Debug.Log($"LevelGrid ready with {allRoomGrids.Count} registered room grids");
-    }
-
-    private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom)
-    {
-        if (newRoom?.roomGrid != null)
-        {
-            currentRoom = newRoom.roomGrid;
+            roomGrids.Remove(roomGrid);
+            Debug.Log($"[LevelGrid] Unregistered room grid: {roomGrid.gameObject.name}");
         }
     }
 
-    public void AddUnitAtGridPosition(GridPosition gridPosition, Unit unit)
-    {
-        if (!isInitialized || currentRoom == null) return;
-        currentRoom.AddUnitAtGridPosition(gridPosition, unit);
-    }
-
-    public List<Unit> GetUnitListAtGridPosition(GridPosition gridPosition)
-    {
-        if (!isInitialized || currentRoom == null) return new List<Unit>();
-        return currentRoom.GetGridSystem().GetGridObject(gridPosition).GetUnitList();
-    }
-
-    public void RemoveUnitAtGridPosition(GridPosition gridPosition, Unit unit)
-    {
-        if (!isInitialized || currentRoom == null) return;
-        currentRoom.RemoveUnitAtGridPosition(gridPosition, unit);
-    }
-
-    public void UnitMovedGridPosition(Unit unit, GridPosition from, GridPosition to)
-    {
-        if (!isInitialized || currentRoom == null) return;
-        currentRoom.RemoveUnitAtGridPosition(from, unit);
-        currentRoom.AddUnitAtGridPosition(to, unit);
-    }
-
-    public bool HasAnyUnitOnGridPosition(GridPosition gridPosition)
-    {
-        if (!isInitialized || currentRoom == null) return false;
-        return currentRoom.HasAnyUnitOnGridPosition(gridPosition);
-    }
-
-    public GridPosition GetGridPosition(Vector3 worldPosition)
-    {
-        if (!isInitialized || currentRoom == null) return new GridPosition(0, 0);
-        return currentRoom.GetGridPosition(worldPosition);
-    }
-
-    public Vector3 GetWorldPosition(GridPosition gridPosition)
-    {
-        if (!isInitialized || currentRoom == null) return Vector3.zero;
-        return currentRoom.GetWorldPosition(gridPosition);
-    }
-
-    public bool isValidGridPosition(GridPosition gridPosition)
-    {
-        if (!isInitialized || currentRoom == null) return false;
-        return currentRoom.IsValidGridPosition(gridPosition);
-    }
-
-    public int GetWidth()
-    {
-        if (!isInitialized || currentRoom == null) return 10;
-        return currentRoom.GetWidth();
-    }
-
-    public int GetHeight()
-    {
-        if (!isInitialized || currentRoom == null) return 10;
-        return currentRoom.GetHeight();
-    }
-
-    public bool IsInitialized() => isInitialized;
-    public RoomGrid GetCurrentRoom() => currentRoom;
-    public List<RoomGrid> GetAllRoomGrids() => allRoomGrids;
-
-    // Find which room a world position belongs to
     public RoomGrid GetRoomAtPosition(Vector3 worldPosition)
     {
-        foreach (RoomGrid room in allRoomGrids)
+        foreach (RoomGrid room in roomGrids)
         {
             if (room != null && room.IsPositionInRoom(worldPosition))
                 return room;
         }
         return null;
+    }
+
+    public RoomGrid GetCurrentRoomGrid()
+    {
+        return currentRoomGrid;
+    }
+
+    // ✅ ADDED: IsInitialized method (needed by UnitActionSystem)
+    public bool IsInitialized()
+    {
+        return currentRoomGrid != null;
+    }
+
+    public void SetCurrentRoomGrid(RoomGrid roomGrid)
+    {
+        currentRoomGrid = roomGrid;
+        Debug.Log($"[LevelGrid] Set current room to: {roomGrid?.gameObject.name}");
+    }
+
+    public List<Unit> GetUnitListAtGridPosition(GridPosition gridPosition)
+    {
+        List<Unit> unitList = new List<Unit>();
+        
+        if (currentRoomGrid == null)
+        {
+            Debug.LogError("[LevelGrid] No current room grid set!");
+            return unitList;
+        }
+
+        // ✅ FIXED: Use TilemapRoomGrid instead of GridSystem
+        TilemapRoomGrid tilemapGrid = currentRoomGrid.GetTilemapRoomGrid();
+        if (tilemapGrid == null)
+        {
+            Debug.LogError("[LevelGrid] Current room has no tilemap grid!");
+            return unitList;
+        }
+
+        return tilemapGrid.GetUnitsAtGridPosition(gridPosition);
+    }
+
+    public List<EnemyUnit> GetEnemiesAtGridPosition(GridPosition gridPosition)
+    {
+        List<EnemyUnit> enemyList = new List<EnemyUnit>();
+        
+        if (currentRoomGrid == null)
+        {
+            Debug.LogError("[LevelGrid] No current room grid set!");
+            return enemyList;
+        }
+
+        // ✅ FIXED: Use TilemapRoomGrid instead of GridSystem
+        TilemapRoomGrid tilemapGrid = currentRoomGrid.GetTilemapRoomGrid();
+        if (tilemapGrid == null)
+        {
+            Debug.LogError("[LevelGrid] Current room has no tilemap grid!");
+            return enemyList;
+        }
+
+        return tilemapGrid.GetEnemiesAtGridPosition(gridPosition);
+    }
+
+    public bool IsValidGridPosition(GridPosition gridPosition)
+    {
+        if (currentRoomGrid == null) return false;
+        return currentRoomGrid.IsValidGridPosition(gridPosition);
+    }
+
+    public bool HasAnyUnitOnGridPosition(GridPosition gridPosition)
+    {
+        if (currentRoomGrid == null) return false;
+        return currentRoomGrid.HasAnyUnitOnGridPosition(gridPosition);
+    }
+
+    public bool HasAnyEnemyOnGridPosition(GridPosition gridPosition)
+    {
+        if (currentRoomGrid == null) return false;
+        return currentRoomGrid.HasAnyEnemyOnGridPosition(gridPosition);
+    }
+
+    public Vector3 GetWorldPosition(GridPosition gridPosition)
+    {
+        if (currentRoomGrid == null) return Vector3.zero;
+        return currentRoomGrid.GetWorldPosition(gridPosition);
+    }
+
+    public GridPosition GetGridPosition(Vector3 worldPosition)
+    {
+        if (currentRoomGrid == null) return new GridPosition(0, 0);
+        return currentRoomGrid.GetGridPosition(worldPosition);
     }
 }

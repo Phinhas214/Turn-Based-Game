@@ -7,7 +7,6 @@ using UnityEngine;
 // Drop-in replacement for the original UnitActionSystemUI.
 public class UnitActionSystemUI : MonoBehaviour
 {
-    // -------------------------------------------------------------------------
     [Header("References")]
     [Tooltip("Prefab for a single action button. Must have an ActionButtonUI component.")]
     [SerializeField] private Transform actionButtonPrefab;
@@ -15,10 +14,8 @@ public class UnitActionSystemUI : MonoBehaviour
     [Tooltip("Parent transform that action buttons are spawned inside.")]
     [SerializeField] private Transform actionButtonContainerTransform;
 
-    // -------------------------------------------------------------------------
     private List<ActionButtonUI> actionButtonUIList = new List<ActionButtonUI>();
 
-    // -------------------------------------------------------------------------
 
     private void Start()
     {
@@ -47,9 +44,7 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    // -------------------------------------------------------------------------
     //  Button creation
-    // -------------------------------------------------------------------------
 
     private void CreateUnitActionButtons()
     {
@@ -71,9 +66,7 @@ public class UnitActionSystemUI : MonoBehaviour
         }
     }
 
-    // -------------------------------------------------------------------------
     //  Visual refresh
-    // -------------------------------------------------------------------------
 
     private void UpdateSelectedVisual()
     {
@@ -81,9 +74,7 @@ public class UnitActionSystemUI : MonoBehaviour
             button.UpdateSelectedVisual();
     }
 
-    // -------------------------------------------------------------------------
     //  Event handlers
-    // -------------------------------------------------------------------------
 
     private void OnSelectedUnitChanged(object sender, EventArgs e)
     {

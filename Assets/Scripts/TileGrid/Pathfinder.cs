@@ -2,9 +2,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// A* pathfinder that operates on a RoomGrid.
-/// Returns a list of GridPositions from start to end (exclusive of start, inclusive of end).
-/// Returns empty list if no path exists.
+/// A* pathfinder updated for tilemap-based rooms.
+/// 
+/// Changes from original:
+/// • Updated IsWalkable() to check tilemap walls via TilemapRoomGrid
+/// • Added optional wall-layer checking
+/// • Everything else (pathfinding algorithm) remains the same
 /// </summary>
 public class Pathfinder
 {
@@ -26,15 +29,17 @@ public class Pathfinder
     }
 
     private RoomGrid roomGrid;
+    private TilemapRoomGrid tilemapGrid; // UPDATED: Direct tilemap access
 
     public Pathfinder(RoomGrid roomGrid)
     {
         this.roomGrid = roomGrid;
+        this.tilemapGrid = roomGrid?.GetTilemapRoomGrid(); // Get tilemap interface
     }
 
     /// <summary>
     /// Find a path from start to end on the room grid.
-    /// Ignores units on tiles (pass ignoreUnits=false to treat occupied tiles as blocked).
+    /// Checks for units/enemies AND wall tiles.
     /// Returns positions from the step AFTER start up to and including end.
     /// </summary>
     public List<GridPosition> FindPath(GridPosition start, GridPosition end, bool ignoreUnits = false)
@@ -70,7 +75,10 @@ public class Pathfinder
             {
                 if (closedSet.Contains(neighbour)) continue;
                 if (!roomGrid.IsValidGridPosition(neighbour)) continue;
-                if (!ignoreUnits && neighbour != end && roomGrid.HasAnyUnitOnGridPosition(neighbour)) continue;
+
+                // UPDATED: Check both units/enemies AND walls
+                bool isWalkable = ignoreUnits || IsWalkable(neighbour, isDestination: (neighbour == end));
+                if (!isWalkable) continue;
 
                 int newGCost = current.gCost + 1;
                 Node existing = openList.Find(n => n.position == neighbour);
@@ -109,7 +117,7 @@ public class Pathfinder
             {
                 if (Mathf.Abs(x) + Mathf.Abs(z) != attackRange) continue;
                 GridPosition candidate = new GridPosition(target.x + x, target.z + z);
-                if (roomGrid.IsValidGridPosition(candidate) && !roomGrid.HasAnyUnitOnGridPosition(candidate))
+                if (roomGrid.IsValidGridPosition(candidate) && IsWalkable(candidate, isDestination: true))
                     candidates.Add(candidate);
             }
         }
@@ -127,6 +135,34 @@ public class Pathfinder
         // Fallback: path directly toward target
         return FindPath(start, target, ignoreUnits: true);
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  UPDATED: Walkability checking
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if a position is walkable (no wall, no unit/enemy).
+    /// isDestination allows standing on the destination even if occupied.
+    /// </summary>
+    private bool IsWalkable(GridPosition gridPos, bool isDestination = false)
+    {
+        // Check bounds
+        if (!roomGrid.IsValidGridPosition(gridPos)) return false;
+
+        // Check for wall tile
+        if (tilemapGrid != null && tilemapGrid.IsWallAtPosition(gridPos))
+            return false;
+
+        // Check for unit/enemy blocking (unless this is destination)
+        if (!isDestination && roomGrid.HasAnyUnitOnGridPosition(gridPos))
+            return false;
+
+        return true;
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Unchanged: Helpers
+    // ────────────────────────────────────────────────────────────────────
 
     private List<GridPosition> BuildPath(Node endNode)
     {
