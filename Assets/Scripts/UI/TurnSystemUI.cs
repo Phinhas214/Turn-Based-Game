@@ -2,16 +2,31 @@
 using UnityEngine.UI;
 using TMPro;
 using System;
-
+using System.Collections;
 public class TurnSystemUI : MonoBehaviour
 {
-    [Header("References")]
-    [SerializeField] private Button endTurnBtn;
+    // ─────────────────────────────────────────
+    // References
+    // ─────────────────────────────────────────
+
+    [Header("Core UI")]
+    [SerializeField] private Button endTurnButton;
     [SerializeField] private TextMeshProUGUI turnNumberText;
 
-    [Header("End Turn Flash")]
+    [Header("Visual States")]
+    [Tooltip("Overlay used for flashing (out of stamina) AND solid display (enemy turn).")]
     [SerializeField] private GameObject endTurnFlashOverlay;
+
+    [Tooltip("Shown briefly when clicking End Turn during enemy turn.")]
+    [SerializeField] private GameObject disabledClickFeedback;
+
+    [Header("Timings")]
     [SerializeField] private float flashInterval = 0.3f;
+    [SerializeField] private float disabledFeedbackDuration = 0.15f;
+
+    // ─────────────────────────────────────────
+    // Runtime
+    // ─────────────────────────────────────────
 
     private PlayerStats playerStats;
     private Coroutine flashRoutine;
@@ -20,98 +35,130 @@ public class TurnSystemUI : MonoBehaviour
     // Lifecycle
     // ─────────────────────────────────────────
 
-    void OnEnable()
+    private void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
+
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged += HandleTurnChanged;
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
 
         if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged -= TurnSystem_OnTurnChanged;
+            TurnSystem.Instance.OnTurnChanged -= HandleTurnChanged;
     }
 
     private void Start()
     {
-        // Button click
-        endTurnBtn.onClick.AddListener(() =>
-        {
-            TurnSystem.Instance.NextTurn();
-        });
+        // Button click handling
+        endTurnButton.onClick.AddListener(OnEndTurnClicked);
 
-        // Turn text
-        if (TurnSystem.Instance != null)
-        {
-            TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
-            UpdateTurnText();
-        }
-
-        // Safety: make sure flash starts off
+        // Initial visual safety
         if (endTurnFlashOverlay)
             endTurnFlashOverlay.SetActive(false);
+
+        if (disabledClickFeedback)
+            disabledClickFeedback.SetActive(false);
+
+        UpdateTurnText();
     }
 
     // ─────────────────────────────────────────
-    // Player discovery (CRITICAL)
+    // Player discovery
     // ─────────────────────────────────────────
 
     private void OnLevelReady()
     {
         Unit unit = FindFirstObjectByType<Unit>();
-        if (unit != null)
+        if (unit == null)
         {
-            playerStats = unit.GetComponent<PlayerStats>();
-            Debug.Log("[TurnSystemUI] PlayerStats acquired via OnLevelReady.");
+            Debug.LogWarning("[TurnSystemUI] No Unit found on level ready.");
+            return;
         }
-        else
+
+        playerStats = unit.GetComponent<PlayerStats>();
+        if (playerStats == null)
         {
-            Debug.LogWarning("[TurnSystemUI] No Unit found after level ready!");
+            Debug.LogWarning("[TurnSystemUI] Unit has no PlayerStats.");
+            return;
         }
+
+        Debug.Log("[TurnSystemUI] PlayerStats acquired.");
     }
 
     // ─────────────────────────────────────────
-    // Update
+    // Update loop (state-driven)
     // ─────────────────────────────────────────
 
-    void Update()
+    private void Update()
     {
         if (playerStats == null || TurnSystem.Instance == null)
             return;
 
-        // Debug — this SHOULD print once stamina hits 0
-        Debug.Log(
-            $"[TurnSystemUI] Stamina: {playerStats.currentStamina}, " +
-            $"IsPlayerTurn: {TurnSystem.Instance.IsPlayerTurn}"
-        );
+        bool isPlayerTurn = TurnSystem.Instance.IsPlayerTurn;
+        bool outOfStamina = playerStats.currentStamina == 0;
 
-        bool shouldFlash =
-            TurnSystem.Instance.IsPlayerTurn &&
-            playerStats.currentStamina == 0;
+        // ── ENEMY TURN ─────────────────────────
+        if (!isPlayerTurn)
+        {
+            StopFlash();
 
-        if (shouldFlash && flashRoutine == null)
-        {
-            flashRoutine = StartCoroutine(FlashEndTurn());
+            // Hold overlay ON (solid state)
+            if (endTurnFlashOverlay)
+                endTurnFlashOverlay.SetActive(true);
+
+            return;
         }
-        else if (!shouldFlash && flashRoutine != null)
+
+        // ── PLAYER TURN ────────────────────────
+
+        // Player has stamina → normal state
+        if (!outOfStamina)
         {
-            StopCoroutine(flashRoutine);
-            flashRoutine = null;
-            endTurnFlashOverlay.SetActive(false);
+            StopFlash();
+            if (endTurnFlashOverlay)
+                endTurnFlashOverlay.SetActive(false);
+
+            return;
         }
+
+        // Player turn + no stamina → flashing
+        if (flashRoutine == null)
+            flashRoutine = StartCoroutine(FlashRoutine());
+    }
+
+    // ─────────────────────────────────────────
+    // Button logic
+    // ─────────────────────────────────────────
+
+    private void OnEndTurnClicked()
+    {
+        if (TurnSystem.Instance == null)
+            return;
+
+        // Enemy turn → deny + feedback
+        if (!TurnSystem.Instance.IsPlayerTurn)
+        {
+            TriggerDisabledClickFeedback();
+            return;
+        }
+
+        // Player turn → end turn always allowed
+        TurnSystem.Instance.NextTurn();
     }
 
     // ─────────────────────────────────────────
     // Flash logic
     // ─────────────────────────────────────────
 
-    private System.Collections.IEnumerator FlashEndTurn()
+    private IEnumerator FlashRoutine()
     {
         while (true)
         {
             endTurnFlashOverlay.SetActive(true);
-            yield return null; // guarantee one rendered frame
             yield return new WaitForSeconds(flashInterval);
 
             endTurnFlashOverlay.SetActive(false);
@@ -119,18 +166,47 @@ public class TurnSystemUI : MonoBehaviour
         }
     }
 
+    private void StopFlash()
+    {
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+            flashRoutine = null;
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // Disabled click feedback
+    // ─────────────────────────────────────────
+
+    private void TriggerDisabledClickFeedback()
+    {
+        if (!disabledClickFeedback)
+            return;
+
+        StopAllCoroutines();
+        StartCoroutine(DisabledClickRoutine());
+    }
+
+    private IEnumerator DisabledClickRoutine()
+    {
+        disabledClickFeedback.SetActive(true);
+        yield return new WaitForSeconds(disabledFeedbackDuration);
+        disabledClickFeedback.SetActive(false);
+    }
+
     // ─────────────────────────────────────────
     // Turn text
     // ─────────────────────────────────────────
 
-    private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
+    private void HandleTurnChanged(object sender, EventArgs e)
     {
         UpdateTurnText();
     }
 
     private void UpdateTurnText()
     {
-        if (TurnSystem.Instance != null)
+        if (TurnSystem.Instance != null && turnNumberText != null)
             turnNumberText.text = "TURN " + TurnSystem.Instance.GetTrunNumber();
     }
 }
