@@ -63,6 +63,7 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (!Input.GetMouseButtonDown(0)) return;
 
+        // UnitActionSystem already gets grid position from MouseWorld
         GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
 
         switch (selectedAction)
@@ -83,7 +84,7 @@ public class UnitActionSystem : MonoBehaviour
             case CombatAction combatAction:
                 if (!combatAction.CanAfford())
                 {
-                    Debug.Log("[UnitActionSystem] Not enough stamina for that action.");
+                    Debug.Log("[UnitActionSystem] Not enough stamina.");
                     return;
                 }
                 if (combatAction.IsValidTarget(mouseGridPos))
