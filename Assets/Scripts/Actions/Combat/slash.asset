@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
   actionName: Attack
   icon: {fileID: 0}
-  baseDamage: 10
+  baseDamage: 15
   attackPattern: {fileID: 11400000, guid: 1ead6495335b653489c28f9d3296f9e7, type: 2}
   rotatesToFacing: 1
   minRange: 0
@@ -24,7 +24,7 @@ MonoBehaviour:
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: 'Damage      : 10
+  _summary: 'Damage      : 15
 
     Stamina cost: 2
 
