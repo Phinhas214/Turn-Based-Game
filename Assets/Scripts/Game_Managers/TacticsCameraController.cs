@@ -29,6 +29,15 @@ public class FreeTacticsCameraController : MonoBehaviour
     [SerializeField] private float shakeDuration = 0.15f;
 
     // ─────────────────────────────────────────
+    // Camera Follow
+    // ─────────────────────────────────────────
+    [Header("Follow")]
+    [SerializeField] private bool followPlayer = true;
+    [SerializeField] private Vector3 followOffset = new Vector3(0f, 10f, -2f);
+    [SerializeField] private float followSmoothness = 8f;
+
+
+    // ─────────────────────────────────────────
     // Internal state
     // ─────────────────────────────────────────
     private Vector3 basePosition;
@@ -55,10 +64,32 @@ public class FreeTacticsCameraController : MonoBehaviour
 
     void Update()
     {
-        HandleKeyboardPan();
-        HandleMouseDragPan();
+        if (followPlayer)
+        {
+            Transform player = PlayerTarget.Instance?.transform;
+            if (player != null)
+            {
+                Vector3 targetPos = player.position + followOffset;
+                basePosition = Vector3.Lerp(
+                    basePosition, targetPos, Time.deltaTime * followSmoothness
+                );
+            }
+        }
+        else
+        {
+            HandleKeyboardPan();
+            HandleMouseDragPan();
+        }
+
         HandleZoom();
     }
+
+    // void Update()
+    // {
+    //     HandleKeyboardPan();
+    //     HandleMouseDragPan();
+    //     HandleZoom();
+    // }
 
     void LateUpdate()
     {
