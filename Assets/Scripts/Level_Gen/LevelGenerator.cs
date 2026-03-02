@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Tilemaps; 
 
 public class LevelGenerator : MonoBehaviour
 {
@@ -247,29 +248,69 @@ public class LevelGenerator : MonoBehaviour
 
         if (startRoom == null || startRoom.roomGrid == null)
         {
-            Debug.LogError("No valid start room found!");
+            Debug.LogError("[LevelGenerator] No valid start room found!");
             return;
         }
 
-        int centerX = startRoom.roomGrid.GetWidth() / 2;
-        int centerZ = startRoom.roomGrid.GetHeight() / 2;
-        GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
-        Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnGridPos);
+        // Set current room FIRST so LevelGrid is ready before PlaceInRoom
+        if (RoomManager.Instance != null)
+            RoomManager.Instance.SetCurrentRoom(startRoom);
 
-        spawnedPlayer = Instantiate(playerPrefab, spawnWorldPos, Quaternion.identity);
+        if (LevelGrid.Instance != null)
+            LevelGrid.Instance.SetCurrentRoomGrid(startRoom.roomGrid);
+
+        // Try to use a painted spawn point tile
+        GridPosition spawnGridPos = GetStartRoomSpawnPosition(startRoom);
+
+        // Instantiate at a temporary position — PlaceInRoom will move them correctly
+        spawnedPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
         spawnedPlayer.name = "Player";
 
         Unit playerUnit = spawnedPlayer.GetComponent<Unit>();
         if (playerUnit != null)
         {
             playerUnit.PlaceInRoom(startRoom.roomGrid, spawnGridPos);
-            Debug.Log($"[LevelGenerator] Player spawned at {spawnGridPos} in {startRoom.roomInstance.name}");
+            Debug.Log($"[LevelGenerator] Player spawned at grid {spawnGridPos} " +
+                    $"world {startRoom.roomGrid.GetWorldPosition(spawnGridPos)} " +
+                    $"in {startRoom.roomInstance.name}");
+        }
+        else
+        {
+            Debug.LogError("[LevelGenerator] Player prefab has no Unit component!");
         }
 
-        if (RoomManager.Instance != null)
+        
+    }
+
+    /// <summary>
+    /// Gets the spawn position for the start room.
+    /// Looks for a SpawnPointTile first — falls back to room center.
+    /// Start room has no entry direction so we look for any painted spawn point.
+    /// </summary>
+    private GridPosition GetStartRoomSpawnPosition(PlacedRoom startRoom)
+    {
+        RoomSpawnPointReader reader = startRoom.roomInstance.GetComponent<RoomSpawnPointReader>();
+
+        if (reader != null)
         {
-            RoomManager.Instance.SetCurrentRoom(startRoom);
+            // For the start room, use any available spawn point
+            var allSpawnPoints = reader.GetAllSpawnPoints();
+            if (allSpawnPoints.Count > 0)
+            {
+                // Pick the first one — or you could pick a specific direction
+                foreach (var kvp in allSpawnPoints)
+                {
+                    Debug.Log($"[LevelGenerator] Using spawn point (entry: {kvp.Key}) at {kvp.Value}");
+                    return kvp.Value;
+                }
+            }
         }
+
+        // Fallback: room center
+        Debug.LogWarning("[LevelGenerator] No spawn points found in start room — using center.");
+        int centerX = startRoom.roomGrid.GetWidth() / 2;
+        int centerZ = startRoom.roomGrid.GetHeight() / 2;
+        return new GridPosition(centerX, centerZ);
     }
 
     private PlacedRoom PlaceRoom(RoomType roomType, Vector2Int gridPosition, Vector3 worldPosition)

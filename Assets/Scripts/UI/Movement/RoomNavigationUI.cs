@@ -1,4 +1,3 @@
-// RoomNavigationUI.cs
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,7 +11,7 @@ public class RoomNavigationUI : MonoBehaviour
     [SerializeField] private Button eastButton;
     [SerializeField] private Button westButton;
 
-    [Header("Button Labels (Optional)")]
+    [Header("Button Labels")]
     [SerializeField] private TextMeshProUGUI northText;
     [SerializeField] private TextMeshProUGUI southText;
     [SerializeField] private TextMeshProUGUI eastText;
@@ -52,26 +51,16 @@ public class RoomNavigationUI : MonoBehaviour
 
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady += OnLevelReady;
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged += OnRoomChanged;
-    }
-
-    private void OnDisable()
-    {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
-    }
-
-    private void Start()
-    {
+        LevelGenerator.OnLevelReady        += OnLevelReady;
+        RoomManager.OnAnyRoomChanged       += OnRoomChanged;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
     }
 
-    private void OnDestroy()
+    private void OnDisable()
     {
+        LevelGenerator.OnLevelReady        -= OnLevelReady;
+        RoomManager.OnAnyRoomChanged       -= OnRoomChanged;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }
@@ -82,7 +71,7 @@ public class RoomNavigationUI : MonoBehaviour
         UpdateButtons();
     }
 
-    private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom) => UpdateButtons();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => UpdateButtons();
     private void OnTurnChanged(object sender, System.EventArgs e) => UpdateButtons();
 
     private void UpdateButtons()
@@ -96,29 +85,28 @@ public class RoomNavigationUI : MonoBehaviour
         if (enemyWarningPanel != null)
             enemyWarningPanel.SetActive(enemiesPresent);
 
-        foreach (LevelGenerator.Direction direction in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
         {
-            Button btn = buttonMap[direction];
-            TextMeshProUGUI txt = textMap[direction];
+            Button btn = buttonMap[dir];
+            TextMeshProUGUI txt = textMap[dir];
             if (btn == null) continue;
 
-            LevelGenerator.PlacedRoom connected = levelGenerator.GetConnectedRoom(currentRoom, direction);
-            bool roomExists = connected != null;
+            LevelGenerator.PlacedRoom connected = levelGenerator.GetConnectedRoom(currentRoom, dir);
 
             if (enemiesPresent)
             {
                 btn.interactable = false;
                 if (txt != null) txt.text = enemyBlockMessage;
             }
-            else if (roomExists)
+            else if (connected != null)
             {
                 btn.interactable = true;
-                if (txt != null) txt.text = $"{direction}\n({connected.prefabData.roomType})";
+                if (txt != null) txt.text = $"{dir}\n({connected.prefabData.roomType})";
             }
             else
             {
                 btn.interactable = false;
-                if (txt != null) txt.text = direction.ToString();
+                if (txt != null) txt.text = dir.ToString();
             }
         }
     }
@@ -143,30 +131,48 @@ public class RoomNavigationUI : MonoBehaviour
         }
 
         LevelGenerator.PlacedRoom targetRoom = levelGenerator.GetConnectedRoom(currentRoom, travelDirection);
-        if (targetRoom == null) return;
+        if (targetRoom == null)
+        {
+            Debug.LogWarning($"[RoomNavigationUI] No room in direction {travelDirection}");
+            return;
+        }
+
+        if (targetRoom.roomGrid == null)
+        {
+            Debug.LogError($"[RoomNavigationUI] Target room has no RoomGrid!");
+            return;
+        }
 
         Unit player = FindFirstObjectByType<Unit>();
         if (player == null) { Debug.LogError("[RoomNavigationUI] No player found!"); return; }
 
-        // Player entered from the OPPOSITE direction of travel
-        LevelGenerator.Direction entryDirection = levelGenerator.GetOppositeDirection(travelDirection);
-        GridPosition spawnPos = GetSpawnPositionForEntry(targetRoom, entryDirection);
+        // Player entered target room from the OPPOSITE direction
+        LevelGenerator.Direction entryDir = levelGenerator.GetOppositeDirection(travelDirection);
+        GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDir);
 
-        player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
+        Debug.Log($"[RoomNavigationUI] Traveling {travelDirection} → spawn at {spawnPos} (entry from {entryDir})");
+
+        // Order matters: set room first, then place player
         RoomManager.Instance.SetCurrentRoom(targetRoom);
         LevelGrid.Instance?.SetCurrentRoomGrid(targetRoom.roomGrid);
+        player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
 
-        Debug.Log($"[RoomNavigationUI] Entered {targetRoom.roomInstance.name} from {entryDirection} at {spawnPos}");
+        UpdateButtons();
     }
 
-    private GridPosition GetSpawnPositionForEntry(LevelGenerator.PlacedRoom room, LevelGenerator.Direction entryDirection)
+    private GridPosition GetSpawnPosition(LevelGenerator.PlacedRoom room, LevelGenerator.Direction entryDir)
     {
-        // Read from the SpawnPoints tilemap layer
+        // Try SpawnPointReader first (tilemap-based spawn points)
         RoomSpawnPointReader reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
-        if (reader != null)
-            return reader.GetSpawnPosition(entryDirection, room.roomGrid);
+        if (reader != null && reader.HasSpawnPoint(entryDir))
+        {
+            GridPosition sp = reader.GetSpawnPosition(entryDir, room.roomGrid);
+            Debug.Log($"[RoomNavigationUI] Using painted spawn point at {sp}");
+            return sp;
+        }
 
-        // Fallback
+        // Fallback: room center
+        Debug.LogWarning($"[RoomNavigationUI] No spawn point for {entryDir} in {room.roomInstance.name} — using center.");
         return new GridPosition(room.roomGrid.GetWidth() / 2, room.roomGrid.GetHeight() / 2);
     }
 }

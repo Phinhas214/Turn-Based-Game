@@ -40,6 +40,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
             // Sync immediately
             currentHealth = healthComponent.CurrentHealth;
+            
 
             // Subscribe to health updates
             healthComponent.OnHealthChanged += OnHealthChanged;

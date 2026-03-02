@@ -1,4 +1,3 @@
-// EnemySpawner.cs
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -15,10 +14,7 @@ public class EnemySpawner : MonoBehaviour
 
     [Header("Spawn Configuration")]
     [SerializeField] private List<SpawnEntry> spawnEntries = new List<SpawnEntry>();
-
-    [Tooltip("Tiles from the room border excluded from spawning (prevents wall spawns).")]
     [SerializeField, Min(1)] private int borderPadding = 2;
-
     [SerializeField] private bool spawnOnLevelReady = true;
 
     private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
@@ -32,27 +28,26 @@ public class EnemySpawner : MonoBehaviour
     public void SpawnAll()
     {
         LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
-        if (levelGen == null) { Debug.LogError("[EnemySpawner] No LevelGenerator found."); return; }
+        if (levelGen == null) { Debug.LogError("[EnemySpawner] No LevelGenerator."); return; }
 
         foreach (SpawnEntry entry in spawnEntries)
         {
             if (entry.prefab == null) continue;
 
-            List<LevelGenerator.PlacedRoom> matchingRooms = levelGen.GetAllRooms()
-                .FindAll(r => r.prefabData.roomType == entry.roomType);
+            List<LevelGenerator.PlacedRoom> matching = levelGen.GetAllRooms()
+                .FindAll(r => r.prefabData.roomType == entry.roomType && r.roomGrid != null);
 
-            if (matchingRooms.Count == 0)
+            if (matching.Count == 0)
             {
-                Debug.LogWarning($"[EnemySpawner] No rooms of type {entry.roomType} found.");
+                Debug.LogWarning($"[EnemySpawner] No valid rooms of type {entry.roomType}.");
                 continue;
             }
 
             for (int i = 0; i < entry.count; i++)
             {
-                LevelGenerator.PlacedRoom targetRoom = matchingRooms[Random.Range(0, matchingRooms.Count)];
-                if (targetRoom.roomGrid == null) continue;
-
+                LevelGenerator.PlacedRoom targetRoom = matching[Random.Range(0, matching.Count)];
                 GridPosition? spawnPos = GetRandomWalkableTile(targetRoom.roomGrid, entry.preferEdgeTiles);
+
                 if (spawnPos == null)
                 {
                     Debug.LogWarning($"[EnemySpawner] No walkable tile in {targetRoom.roomInstance.name}.");
@@ -69,27 +64,31 @@ public class EnemySpawner : MonoBehaviour
         if (prefab == null || roomGrid == null) return null;
 
         TilemapRoomGrid tilemapGrid = roomGrid.GetTilemapRoomGrid();
-        if (tilemapGrid == null) return null;
+        if (tilemapGrid == null) { Debug.LogError("[EnemySpawner] No TilemapRoomGrid."); return null; }
 
         if (!tilemapGrid.IsWalkable(position))
         {
-            Debug.LogWarning($"[EnemySpawner] Position {position} is not walkable.");
+            Debug.LogWarning($"[EnemySpawner] Position {position} not walkable.");
             return null;
         }
 
+        // GetWorldPosition now returns the correct world position per room
         Vector3 worldPos = roomGrid.GetWorldPosition(position);
-        GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
 
+        GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
         EnemyUnit enemyUnit = go.GetComponent<EnemyUnit>();
+
         if (enemyUnit == null)
         {
-            Debug.LogError($"[EnemySpawner] {prefab.name} has no EnemyUnit component.");
+            Debug.LogError($"[EnemySpawner] {prefab.name} missing EnemyUnit component.");
             Destroy(go);
             return null;
         }
 
         enemyUnit.PlaceOnGrid(roomGrid, position);
         EnemyManager.Instance?.RegisterEnemy(enemyUnit);
+
+        Debug.Log($"[EnemySpawner] Spawned {prefab.name} at {position} world {worldPos}");
         return enemyUnit;
     }
 
@@ -100,18 +99,15 @@ public class EnemySpawner : MonoBehaviour
 
         int w = roomGrid.GetWidth();
         int h = roomGrid.GetHeight();
-
         List<GridPosition> candidates = new List<GridPosition>();
 
         for (int x = borderPadding; x < w - borderPadding; x++)
-        {
             for (int z = borderPadding; z < h - borderPadding; z++)
             {
                 GridPosition pos = new GridPosition(x, z);
                 if (tilemapGrid.IsWalkable(pos))
                     candidates.Add(pos);
             }
-        }
 
         if (candidates.Count == 0) return null;
 
@@ -120,8 +116,7 @@ public class EnemySpawner : MonoBehaviour
             GridPosition center = new GridPosition(w / 2, h / 2);
             candidates.Sort((a, b) =>
                 ManhattanDist(b, center).CompareTo(ManhattanDist(a, center)));
-            int poolSize = Mathf.Max(1, candidates.Count / 3);
-            return candidates[Random.Range(0, poolSize)];
+            return candidates[Random.Range(0, Mathf.Max(1, candidates.Count / 3))];
         }
 
         return candidates[Random.Range(0, candidates.Count)];
