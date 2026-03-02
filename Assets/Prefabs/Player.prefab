@@ -124,6 +124,7 @@ GameObject:
   - component: {fileID: 8805797687680868294}
   - component: {fileID: 7179144902295360574}
   - component: {fileID: 8575818164243851910}
+  - component: {fileID: 2639212505980165156}
   - component: {fileID: 4896305900031482026}
   - component: {fileID: 6502254005860565181}
   - component: {fileID: 7088535869859187341}
@@ -202,6 +203,19 @@ MonoBehaviour:
   currentHealth: 0
   maxStamina: 0
   currentStamina: 0
+--- !u!114 &2639212505980165156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922802329369371357}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60e8aa12aef6e4c948ba1e07539dc129, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MoveAction
+  maxMoveDistance: 4
 --- !u!114 &4896305900031482026
 MonoBehaviour:
   m_ObjectHideFlags: 0
