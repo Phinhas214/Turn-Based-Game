@@ -56,31 +56,29 @@ public class RoomNavigationUI : MonoBehaviour
         westButton?.onClick.AddListener(()  => TravelToRoom(LevelGenerator.Direction.West));
     }
 
-    private void OnEnable()
+    void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged += OnRoomChanged;
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnEnemyListChanged += UpdateButtons;
     }
 
-    private void OnDisable()
+    void Start()
+    {
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+    }
+
+    void OnDisable()
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
-        if (RoomManager.Instance != null)
-            RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
-    }
 
-    // Refresh every turn end so the lock reacts when enemies die
-    private void OnEnable2()
-    {
-        if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
-    }
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnEnemyListChanged -= UpdateButtons;
 
-    private void Start()
-    {
         if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+            TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }
 
     private void OnDestroy()

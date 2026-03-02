@@ -20,6 +20,7 @@ public class EnemyManager : MonoBehaviour
 
     /// <summary>Fired when all enemies have finished their turns.</summary>
     public event Action OnEnemyTurnsComplete;
+    public event Action OnEnemyListChanged;
 
     private void Awake()
     {
@@ -34,20 +35,27 @@ public class EnemyManager : MonoBehaviour
         if (!activeEnemies.Contains(enemy))
         {
             activeEnemies.Add(enemy);
+
             if (showDebugLogs)
                 Debug.Log($"[EnemyManager] Registered {enemy.Stats?.enemyName}. Total: {activeEnemies.Count}");
+
+            OnEnemyListChanged?.Invoke(); // ✅ ADD
         }
     }
 
     public void UnregisterEnemy(EnemyUnit enemy)
     {
-        activeEnemies.Remove(enemy);
-        if (showDebugLogs)
-            Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
+        if (activeEnemies.Remove(enemy))
+        {
+            if (showDebugLogs)
+                Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
+
+            OnEnemyListChanged?.Invoke(); // ✅ ADD
+        }
     }
 
-    public int             GetEnemyCount()  => activeEnemies.Count;
-    public List<EnemyUnit> GetAllEnemies()  => new List<EnemyUnit>(activeEnemies);
+    public int GetEnemyCount() => activeEnemies.Count;
+    public List<EnemyUnit> GetAllEnemies() => new List<EnemyUnit>(activeEnemies);
 
     /// <summary>
     /// Returns all enemies currently in the given room.

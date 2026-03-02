@@ -5,25 +5,24 @@ public class TurnSystem : MonoBehaviour
 {
     public static TurnSystem Instance { get; private set; }
 
-    // Original event — unchanged, all existing listeners still work
+    // Original event — unchanged
     public event EventHandler OnTurnChanged;
 
-    // New events for enemy phase
+    // Phase events
     public event Action OnPlayerTurnBegin;
     public event Action OnEnemyPhaseBegin;
     public event Action OnEnemyPhaseEnd;
 
-    private int  turnNumber   = 1;
-    private bool isPlayerTurn = true; // NEW — tracks whose turn it is
+    private int turnNumber = 1;
+    private bool isPlayerTurn = true;
 
-    // True while the player can act. False during the enemy phase.
     public bool IsPlayerTurn => isPlayerTurn;
 
     private void Awake()
     {
         if (Instance != null)
         {
-            Debug.LogError("There's more than one TurnSystem! " + transform + " - " + Instance);
+            Debug.LogError("There's more than one TurnSystem!");
             Destroy(gameObject);
             return;
         }
@@ -32,7 +31,6 @@ public class TurnSystem : MonoBehaviour
 
     private void Start()
     {
-        // Listen for EnemyManager to tell us when all enemy turns are done
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
     }
@@ -43,26 +41,25 @@ public class TurnSystem : MonoBehaviour
             EnemyManager.Instance.OnEnemyTurnsComplete -= HandleEnemyTurnsComplete;
     }
 
-    // Original NextTurn — same signature, same OnTurnChanged fire, now also kicks off enemy phase
+    // ─────────────────────────────────────────
+    // Normal turn flow
+    // ─────────────────────────────────────────
+
     public void NextTurn()
     {
-        if (!isPlayerTurn) return; // ignore if enemies are still going
+        if (!isPlayerTurn) return;
 
         isPlayerTurn = false;
         turnNumber++;
 
-        OnTurnChanged?.Invoke(this, EventArgs.Empty); // same as before — Unit stamina reset fires here
-
+        OnTurnChanged?.Invoke(this, EventArgs.Empty);
         BeginEnemyPhase();
     }
 
-    // Original method preserved — typo and all
     public int GetTrunNumber()
     {
         return turnNumber;
     }
-
-    // ── Private ───────────────────────────────────────────────────────────
 
     private void BeginEnemyPhase()
     {
@@ -71,13 +68,9 @@ public class TurnSystem : MonoBehaviour
         OnEnemyPhaseBegin?.Invoke();
 
         if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
-        {
             EnemyManager.Instance.RunEnemyTurns();
-        }
         else
-        {
             HandleEnemyTurnsComplete();
-        }
     }
 
     private void HandleEnemyTurnsComplete()
@@ -85,9 +78,24 @@ public class TurnSystem : MonoBehaviour
         isPlayerTurn = true;
 
         OnEnemyPhaseEnd?.Invoke();
-        OnTurnChanged?.Invoke(this, EventArgs.Empty); // fires again so stamina UI refreshes
+        OnTurnChanged?.Invoke(this, EventArgs.Empty);
         OnPlayerTurnBegin?.Invoke();
 
         Debug.Log($"[TurnSystem] Player turn {turnNumber} begins.");
+    }
+
+    // ─────────────────────────────────────────
+    // NEW — forced recovery (room entry, cutscenes, etc.)
+    // ─────────────────────────────────────────
+
+    public void ForcePlayerTurn()
+    {
+        isPlayerTurn = true;
+
+        OnEnemyPhaseEnd?.Invoke();
+        OnTurnChanged?.Invoke(this, EventArgs.Empty);
+        OnPlayerTurnBegin?.Invoke();
+
+        Debug.Log("[TurnSystem] Forced player turn.");
     }
 }
