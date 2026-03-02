@@ -252,17 +252,17 @@ public class LevelGenerator : MonoBehaviour
             return;
         }
 
-        // Set current room FIRST so LevelGrid is ready before PlaceInRoom
+        // Set room first
         if (RoomManager.Instance != null)
             RoomManager.Instance.SetCurrentRoom(startRoom);
-
         if (LevelGrid.Instance != null)
             LevelGrid.Instance.SetCurrentRoomGrid(startRoom.roomGrid);
 
-        // Try to use a painted spawn point tile
-        GridPosition spawnGridPos = GetStartRoomSpawnPosition(startRoom);
+        // Start room always spawns at center
+        int centerX = startRoom.roomGrid.GetWidth() / 2;
+        int centerZ = startRoom.roomGrid.GetHeight() / 2;
+        GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
 
-        // Instantiate at a temporary position — PlaceInRoom will move them correctly
         spawnedPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
         spawnedPlayer.name = "Player";
 
@@ -270,16 +270,9 @@ public class LevelGenerator : MonoBehaviour
         if (playerUnit != null)
         {
             playerUnit.PlaceInRoom(startRoom.roomGrid, spawnGridPos);
-            Debug.Log($"[LevelGenerator] Player spawned at grid {spawnGridPos} " +
-                    $"world {startRoom.roomGrid.GetWorldPosition(spawnGridPos)} " +
-                    $"in {startRoom.roomInstance.name}");
+            Debug.Log($"[LevelGenerator] Player spawned at center {spawnGridPos} " +
+                    $"world {startRoom.roomGrid.GetWorldPosition(spawnGridPos)}");
         }
-        else
-        {
-            Debug.LogError("[LevelGenerator] Player prefab has no Unit component!");
-        }
-
-        
     }
 
     /// <summary>

@@ -2,57 +2,43 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-/// <summary>
-/// Coordinates room-wide effects when combat starts/ends.
-/// - Locks doors during combat
-/// - Unlocks doors after combat
-/// - Triggers tile interactions on combat state change
-/// 
-/// Attach to each room GameObject.
-/// </summary>
 public class RoomCombatState : MonoBehaviour
 {
     private RoomGrid roomGrid;
-    private List<CombatDoor> doorsInRoom;
-    private List<TileInteraction> interactionsInRoom;
+    private List<CombatDoor> doorsInRoom = new List<CombatDoor>();
+    private List<TileInteraction> interactionsInRoom = new List<TileInteraction>();
     private bool isInCombat = false;
     private LevelGenerator.PlacedRoom currentPlacedRoom;
 
-    private void OnEnable()
-    {
-        if (TurnSystem.Instance != null)
-        {
-            TurnSystem.Instance.OnEnemyPhaseBegin += EnterCombat;
-            TurnSystem.Instance.OnEnemyPhaseEnd += ExitCombat;
-        }
-
-        if (RoomManager.Instance != null)
-        {
-            RoomManager.Instance.OnRoomChanged += OnRoomChanged;
-        }
-    }
+private void OnEnable()
+{
+    if (TurnSystem.Instance != null)
+        TurnSystem.Instance.OnEnemyPhaseBegin += OnEnemyPhaseBegin;
+    
+    if (RoomManager.Instance != null)
+        RoomManager.Instance.OnRoomChanged += OnRoomChanged;
+    
+    if (EnemyManager.Instance != null)
+        EnemyManager.Instance.OnRoomCleared += OnRoomCleared;
+}
 
     private void OnDisable()
     {
         if (TurnSystem.Instance != null)
-        {
-            TurnSystem.Instance.OnEnemyPhaseBegin -= EnterCombat;
-            TurnSystem.Instance.OnEnemyPhaseEnd -= ExitCombat;
-        }
+            TurnSystem.Instance.OnEnemyPhaseBegin -= OnEnemyPhaseBegin;
 
         if (RoomManager.Instance != null)
-        {
             RoomManager.Instance.OnRoomChanged -= OnRoomChanged;
-        }
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnRoomCleared -= OnRoomCleared;
     }
 
-    /// <summary>Called when room changes. Updates which doors/interactions to track.</summary>
     private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom)
     {
         currentPlacedRoom = newRoom;
         roomGrid = newRoom.roomGrid;
 
-        // ✅ FIXED: Use FindObjectsByType instead of FindObjectsOfType
         doorsInRoom = FindObjectsByType<CombatDoor>(FindObjectsSortMode.None)
             .Where(d => d.transform.IsChildOf(transform))
             .ToList();
@@ -64,59 +50,66 @@ public class RoomCombatState : MonoBehaviour
         Debug.Log($"[RoomCombatState] Room '{newRoom.roomInstance.name}' " +
                   $"has {doorsInRoom.Count} doors and {interactionsInRoom.Count} interactions");
 
+        // Reset combat state when entering a new room
         isInCombat = false;
     }
 
-    /// <summary>Called when enemy phase begins. Locks doors and triggers OnCombatStart.</summary>
-    private void EnterCombat()
+    private void OnEnemyPhaseBegin()
     {
-        // Only affect the current room
-        if (!isInCombat && roomGrid != null && currentPlacedRoom != null)
-        {
-            isInCombat = true;
-            
-            Debug.Log($"[RoomCombatState] Entering combat in '{currentPlacedRoom.roomInstance.name}'");
+        // Only enter combat if this room has enemies
+        if (isInCombat) return;
+        if (roomGrid == null || currentPlacedRoom == null) return;
 
-            // Lock all doors in this room
-            foreach (var door in doorsInRoom)
-            {
-                if (door != null)
-                    door.OnCombatStart();
-            }
+        // Check if there are actually enemies in THIS room before locking
+        if (EnemyManager.Instance == null) return;
+        List<EnemyUnit> enemies = EnemyManager.Instance.GetEnemiesInRoom(roomGrid);
+        if (enemies.Count == 0) return;
 
-            // Notify all tile interactions
-            foreach (var interaction in interactionsInRoom)
-            {
-                if (interaction != null)
-                    interaction.OnCombatStart();
-            }
-        }
+        EnterCombat();
     }
 
-    /// <summary>Called when enemy phase ends. Unlocks doors and triggers OnCombatEnd.</summary>
+    /// <summary>
+    /// Called by EnemyManager when the last enemy in a room dies.
+    /// Only responds if the cleared room is THIS room.
+    /// </summary>
+    private void OnRoomCleared(RoomGrid clearedRoom)
+    {
+        if (clearedRoom != roomGrid) return;
+        if (!isInCombat) return;
+
+        Debug.Log($"[RoomCombatState] All enemies dead in " +
+                  $"'{currentPlacedRoom?.roomInstance.name}' — exiting combat.");
+        ExitCombat();
+    }
+
+    private void EnterCombat()
+    {
+        isInCombat = true;
+        Debug.Log($"[RoomCombatState] Entering combat in '{currentPlacedRoom?.roomInstance.name}'");
+
+        foreach (var door in doorsInRoom)
+            door?.OnCombatStart();
+
+        foreach (var interaction in interactionsInRoom)
+            interaction?.OnCombatStart();
+    }
+
     private void ExitCombat()
     {
-        // Only affect the current room
-        if (isInCombat && roomGrid != null && currentPlacedRoom != null)
-        {
-            isInCombat = false;
-            
-            Debug.Log($"[RoomCombatState] Exiting combat in '{currentPlacedRoom.roomInstance.name}'");
+        isInCombat = false;
+        Debug.Log($"[RoomCombatState] Exiting combat in '{currentPlacedRoom?.roomInstance.name}'");
 
-            // Unlock all doors in this room
-            foreach (var door in doorsInRoom)
-            {
-                if (door != null)
-                    door.OnCombatEnd();
-            }
+        foreach (var door in doorsInRoom)
+            door?.OnCombatEnd();
 
-            // Notify all tile interactions
-            foreach (var interaction in interactionsInRoom)
-            {
-                if (interaction != null)
-                    interaction.OnCombatEnd();
-            }
-        }
+        foreach (var interaction in interactionsInRoom)
+            interaction?.OnCombatEnd();
+
+        // Force navigation UI to refresh so buttons unlock immediately
+        // RoomNavigationUI listens to OnRoomChanged and OnTurnChanged
+        // but we need it to update right now without waiting for next turn
+        RoomNavigationUI nav = FindFirstObjectByType<RoomNavigationUI>();
+        nav?.ForceUpdateButtons();
     }
 
     public bool IsInCombat => isInCombat;

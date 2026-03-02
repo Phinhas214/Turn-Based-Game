@@ -1195,7 +1195,7 @@ Transform:
   m_GameObject: {fileID: 8502985326846274534}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: -0, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: -1, y: -0.5, z: 1}
+  m_LocalPosition: {x: -1, y: 0.5, z: 1}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children:
@@ -3327,6 +3327,7 @@ GameObject:
   - component: {fileID: 313850535612712508}
   - component: {fileID: 4479848878705349806}
   - component: {fileID: 6977936896408754910}
+  - component: {fileID: 2622201153976921875}
   m_Layer: 6
   m_Name: end_room
   m_TagString: Untagged
@@ -3423,5 +3424,17 @@ MonoBehaviour:
   height: 15
   cellSize: 2
   gridOffset: {x: 0, y: 0.1, z: 0}
-  wallTilePrefab: {fileID: 0}
-  floorTilePrefab: {fileID: 0}
+--- !u!114 &2622201153976921875
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9182096418338696763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9e9cee2df8aa3144b6c1191ebc2866f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoomSpawnPointReader
+  spawnPointsTilemap: {fileID: 7774032592110078362}
+  showDebugLogs: 1

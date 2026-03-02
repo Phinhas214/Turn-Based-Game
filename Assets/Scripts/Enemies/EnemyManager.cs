@@ -3,11 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Tracks all active enemies and runs their turns sequentially.
-/// No longer needs a player reference — EnemyAI finds the player
-/// via PlayerTarget, which works regardless of spawn order.
-/// </summary>
 public class EnemyManager : MonoBehaviour
 {
     public static EnemyManager Instance { get; private set; }
@@ -18,16 +13,19 @@ public class EnemyManager : MonoBehaviour
     private List<EnemyUnit> activeEnemies = new List<EnemyUnit>();
     private bool isRunningEnemyTurns = false;
 
-    /// <summary>Fired when all enemies have finished their turns.</summary>
     public event Action OnEnemyTurnsComplete;
+
+    /// <summary>
+    /// Fired when a room is cleared of all enemies.
+    /// Passes the RoomGrid that was just cleared.
+    /// </summary>
+    public event Action<RoomGrid> OnRoomCleared;
 
     private void Awake()
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
     }
-
-    // ── Registration ───────────────────────────────────────────────────────
 
     public void RegisterEnemy(EnemyUnit enemy)
     {
@@ -41,18 +39,27 @@ public class EnemyManager : MonoBehaviour
 
     public void UnregisterEnemy(EnemyUnit enemy)
     {
+        RoomGrid roomOfDeadEnemy = enemy.CurrentRoomGrid;
         activeEnemies.Remove(enemy);
+
         if (showDebugLogs)
             Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
+
+        // Check if that room is now empty
+        if (roomOfDeadEnemy != null)
+        {
+            List<EnemyUnit> remaining = GetEnemiesInRoom(roomOfDeadEnemy);
+            if (remaining.Count == 0)
+            {
+                Debug.Log($"[EnemyManager] Room cleared: {roomOfDeadEnemy.gameObject.name}");
+                OnRoomCleared?.Invoke(roomOfDeadEnemy);
+            }
+        }
     }
 
     public int             GetEnemyCount()  => activeEnemies.Count;
     public List<EnemyUnit> GetAllEnemies()  => new List<EnemyUnit>(activeEnemies);
 
-    /// <summary>
-    /// Returns all enemies currently in the given room.
-    /// Used by RoomNavigationUI to check if navigation should be locked.
-    /// </summary>
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
         List<EnemyUnit> result = new List<EnemyUnit>();
@@ -63,8 +70,6 @@ public class EnemyManager : MonoBehaviour
         }
         return result;
     }
-
-    // ── Turn execution ─────────────────────────────────────────────────────
 
     public void RunEnemyTurns()
     {
@@ -84,12 +89,11 @@ public class EnemyManager : MonoBehaviour
         foreach (EnemyUnit enemy in snapshot)
         {
             if (enemy == null || enemy.IsDead) continue;
-
             EnemyAI ai = enemy.GetComponent<EnemyAI>();
             if (ai == null) continue;
 
             bool done = false;
-            ai.TakeTurn(() => done = true);   // no longer passes playerUnit
+            ai.TakeTurn(() => done = true);
             yield return new WaitUntil(() => done);
         }
 

@@ -1,25 +1,10 @@
-// RoomSpawnPointReader.cs
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Reads the SpawnPoints tilemap layer in this room and provides
-/// GridPositions for each entry direction.
-/// 
-/// Setup:
-/// 1. Add a child Tilemap named "SpawnPoints" to your room prefab
-/// 2. Create SpawnPointTile assets (one per direction) via Assets > Create > Tiles > SpawnPoint Tile
-/// 3. Paint the correct SpawnPointTile on the cell where the player should land for each door
-/// 4. The TilemapRenderer on SpawnPoints should be disabled at runtime (or set alpha to 0)
-/// </summary>
 public class RoomSpawnPointReader : MonoBehaviour
 {
-    [Header("Tilemap Reference")]
-    [Tooltip("The 'SpawnPoints' tilemap layer in this room prefab.")]
     [SerializeField] private Tilemap spawnPointsTilemap;
-
-    [Header("Runtime Debug")]
     [SerializeField] private bool showDebugLogs = true;
 
     private Dictionary<LevelGenerator.Direction, GridPosition> spawnPositions
@@ -27,16 +12,34 @@ public class RoomSpawnPointReader : MonoBehaviour
 
     private bool isInitialized = false;
 
-    // ── Initialization ─────────────────────────────────────────────────────
-
-    /// <summary>Call this after the room tilemap is initialized.</summary>
+    // Called by RoomTilemapSetup — we just find the tilemap here, don't scan yet
     public void Initialize()
     {
-        spawnPositions.Clear();
+        if (spawnPointsTilemap != null) return;
+
+        foreach (Tilemap tm in GetComponentsInChildren<Tilemap>())
+        {
+            if (tm.gameObject.name == "SpawnPoints")
+            {
+                spawnPointsTilemap = tm;
+                break;
+            }
+        }
+
+        if (spawnPointsTilemap == null)
+            Debug.LogWarning($"[RoomSpawnPointReader] No SpawnPoints tilemap in {gameObject.name}");
+        else
+            Debug.Log($"[RoomSpawnPointReader] Found SpawnPoints tilemap in {gameObject.name}");
+    }
+
+    // Lazy scan — only runs once, on first request
+    private void EnsureScanned()
+    {
+        if (isInitialized) return;
 
         if (spawnPointsTilemap == null)
         {
-            // Try to find it by name in children
+            // Try one more time in case Initialize() missed it
             foreach (Tilemap tm in GetComponentsInChildren<Tilemap>())
             {
                 if (tm.gameObject.name == "SpawnPoints")
@@ -49,49 +52,71 @@ public class RoomSpawnPointReader : MonoBehaviour
 
         if (spawnPointsTilemap == null)
         {
-            Debug.LogWarning($"[RoomSpawnPointReader] No 'SpawnPoints' tilemap found in {gameObject.name}.");
+            Debug.LogWarning($"[RoomSpawnPointReader] Still no SpawnPoints tilemap in {gameObject.name}");
+            isInitialized = true;
             return;
         }
 
-        TilemapRenderer renderer = spawnPointsTilemap.GetComponent<TilemapRenderer>();
-        if (renderer != null) renderer.enabled = false;
+        // Hide renderer at runtime
+        TilemapRenderer rend = spawnPointsTilemap.GetComponent<TilemapRenderer>();
+        if (rend != null) rend.enabled = false;
+
+        // Scan every cell
+        spawnPositions.Clear();
+        int found = 0;
+        int totalTiles = 0;
 
         BoundsInt bounds = spawnPointsTilemap.cellBounds;
-        for (int x = bounds.xMin; x < bounds.xMax; x++)
+        Debug.Log($"[RoomSpawnPointReader] Scanning {gameObject.name} bounds {bounds}");
+
+        foreach (Vector3Int pos in bounds.allPositionsWithin)
         {
-            for (int y = bounds.yMin; y < bounds.yMax; y++)
+            TileBase tile = spawnPointsTilemap.GetTile(pos);
+            if (tile == null) continue;
+
+            totalTiles++;
+            Debug.Log($"[RoomSpawnPointReader] Cell {pos} tile: {tile.name} ({tile.GetType().Name})");
+
+            if (tile is SpawnPointTile spawnTile)
             {
-                Vector3Int cellPos = new Vector3Int(x, y, 0);
-                TileBase tile = spawnPointsTilemap.GetTile(cellPos);
+                GridPosition gp = new GridPosition(pos.x, pos.y);
+                spawnPositions[spawnTile.entryDirection] = gp;
+                found++;
 
-                if (tile is SpawnPointTile spawnTile)
-                {
-                    GridPosition gp = new GridPosition(cellPos.x, cellPos.y);
-                    spawnPositions[spawnTile.entryDirection] = gp;
-
-                    if (showDebugLogs)
-                        Debug.Log($"[RoomSpawnPointReader] Found spawn point: entry from {spawnTile.entryDirection} at {gp}");
-                }
+                Vector3 worldPos = spawnPointsTilemap.GetCellCenterWorld(pos);
+                Debug.Log($"[RoomSpawnPointReader] ✓ SpawnPoint: {spawnTile.entryDirection} " +
+                          $"cell {pos} → GridPos {gp} world {worldPos}");
             }
         }
 
+        Debug.Log($"[RoomSpawnPointReader] {gameObject.name} — " +
+                  $"{totalTiles} tiles scanned, {found} SpawnPointTiles found.");
         isInitialized = true;
-        Debug.Log($"[RoomSpawnPointReader] {gameObject.name} — {spawnPositions.Count} spawn points loaded.");
     }
-
 
     public GridPosition GetSpawnPosition(LevelGenerator.Direction entryDirection, RoomGrid roomGrid)
     {
-        if (isInitialized && spawnPositions.TryGetValue(entryDirection, out GridPosition pos))
-            return pos;
+        EnsureScanned();
 
-        Debug.LogWarning($"[RoomSpawnPointReader] No spawn point for {entryDirection} in {gameObject.name}. Using center.");
+        if (spawnPositions.TryGetValue(entryDirection, out GridPosition pos))
+        {
+            Debug.Log($"[RoomSpawnPointReader] Returning spawn {entryDirection} → {pos}");
+            return pos;
+        }
+
+        Debug.LogWarning($"[RoomSpawnPointReader] No spawn for {entryDirection} in {gameObject.name}");
         return new GridPosition(roomGrid.GetWidth() / 2, roomGrid.GetHeight() / 2);
     }
 
     public bool HasSpawnPoint(LevelGenerator.Direction entryDirection)
-        => spawnPositions.ContainsKey(entryDirection);
+    {
+        EnsureScanned();
+        return spawnPositions.ContainsKey(entryDirection);
+    }
 
     public Dictionary<LevelGenerator.Direction, GridPosition> GetAllSpawnPoints()
-        => new Dictionary<LevelGenerator.Direction, GridPosition>(spawnPositions);
+    {
+        EnsureScanned();
+        return new Dictionary<LevelGenerator.Direction, GridPosition>(spawnPositions);
+    }
 }

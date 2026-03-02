@@ -37,73 +37,47 @@ public class TilemapRoomGrid : MonoBehaviour
                   $"bounds {bounds} primary:{primaryTilemap.gameObject.name}");
     }
 
-    // ── CRITICAL: Coordinate conversion for 3D X/Z game ──────────────────
-    //
-    // Unity Tilemap internally uses X/Y.
-    // Our game uses X/Z (Y is up, we look down).
-    // Tilemap cell (x, y, 0) = GridPosition(x, z) where z = tilemap y.
-    //
-    // GetCellCenterWorld returns a Vector3 where:
-    //   result.x = world X  ✓
-    //   result.y = world Y (tilemap plane, usually 0 or small offset)
-    //   result.z = world Z (this is 0 for 2D tilemaps!)
-    //
-    // For a 3D X/Z game the tilemap lies flat. Cell Y maps to world Z.
-    // We must use GetCellCenterLocal then transform to world ourselves.
 public Vector3 GetWorldPosition(GridPosition gridPos)
 {
     if (primaryTilemap == null) return Vector3.zero;
 
     Vector3Int cell = new Vector3Int(gridPos.x, gridPos.z, 0);
     
-    // GetCellCenterWorld already accounts for the tilemap's world position
-    Vector3 worldPos = primaryTilemap.GetCellCenterWorld(cell);
+    // GetCellCenterWorld returns (worldX, worldY, worldZ)
+    // For a flat tilemap in a 3D X/Z game:
+    //   result.x = correct world X  ✓
+    //   result.y = tiny offset (tilemap plane height, e.g. -0.5)
+    //   result.z = correct world Z  ✓
+    // So we just use x and z directly, set y to the room's floor height
+    Vector3 cellWorld = primaryTilemap.GetCellCenterWorld(cell);
     
-    // For 3D X/Z game: tilemap X = world X, tilemap Y = world Z
-    // Use the room root Y so things land on the floor
-    return new Vector3(worldPos.x, transform.position.y, worldPos.y);
+    return new Vector3(cellWorld.x, transform.position.y, cellWorld.z);
 }
 
 public GridPosition GetGridPosition(Vector3 worldPos)
 {
     if (primaryTilemap == null) return new GridPosition(0, 0);
     
-    // Feed X and Z into the tilemap as X and Y since tilemap is flat
-    Vector3 tilemapPos = new Vector3(worldPos.x, worldPos.z, 0);
-    Vector3Int cell = primaryTilemap.WorldToCell(tilemapPos);
+    // WorldToCell works correctly in 3D — just pass the world position directly
+    Vector3Int cell = primaryTilemap.WorldToCell(worldPos);
+    
+    // cell.x = grid X, cell.y = grid Z (tilemap Y = our game Z)
     return new GridPosition(cell.x, cell.y);
+}
+
+public bool IsValidGridPosition(GridPosition gridPos)
+{
+    if (!isInitialized || primaryTilemap == null) return false;
+    Vector3Int pos = new Vector3Int(gridPos.x, gridPos.z, 0);
+    return primaryTilemap.HasTile(pos);
 }
 
 public bool IsPositionInRoom(Vector3 worldPos)
 {
     if (primaryTilemap == null) return false;
-    Vector3 tilemapPos = new Vector3(worldPos.x, worldPos.z, 0);
-    Vector3Int cell = primaryTilemap.WorldToCell(tilemapPos);
+    Vector3Int cell = primaryTilemap.WorldToCell(worldPos);
     return primaryTilemap.HasTile(cell);
 }
-
-    // public GridPosition GetGridPosition(Vector3 worldPos)
-    // {
-    //     if (primaryTilemap == null) return new GridPosition(0, 0);
-    //     // WorldToCell handles world position correctly
-    //     Vector3Int cell = primaryTilemap.WorldToCell(worldPos);
-    //     return new GridPosition(cell.x, cell.y);
-    // }
-
-    public bool IsValidGridPosition(GridPosition gridPos)
-    {
-        if (!isInitialized || primaryTilemap == null) return false;
-        Vector3Int pos = new Vector3Int(gridPos.x, gridPos.z, 0);
-        // Valid = within bounds AND has a floor tile painted there
-        return primaryTilemap.cellBounds.Contains(pos) && primaryTilemap.HasTile(pos);
-    }
-
-    // public bool IsPositionInRoom(Vector3 worldPos)
-    // {
-    //     if (primaryTilemap == null) return false;
-    //     Vector3Int cell = primaryTilemap.WorldToCell(worldPos);
-    //     return primaryTilemap.HasTile(cell);
-    // }
 
     // ── Wall checking ──────────────────────────────────────────────────────
 
