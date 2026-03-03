@@ -14,6 +14,7 @@ public class EnemyManager : MonoBehaviour
     private bool isRunningEnemyTurns = false;
 
     public event Action OnEnemyTurnsComplete;
+    public event Action OnEnemyListChanged;
 
     /// <summary>
     /// Fired when a room is cleared of all enemies.
@@ -32,8 +33,11 @@ public class EnemyManager : MonoBehaviour
         if (!activeEnemies.Contains(enemy))
         {
             activeEnemies.Add(enemy);
+
             if (showDebugLogs)
                 Debug.Log($"[EnemyManager] Registered {enemy.Stats?.enemyName}. Total: {activeEnemies.Count}");
+
+            OnEnemyListChanged?.Invoke(); // ✅ ADD
         }
     }
 
@@ -54,11 +58,17 @@ public class EnemyManager : MonoBehaviour
                 Debug.Log($"[EnemyManager] Room cleared: {roomOfDeadEnemy.gameObject.name}");
                 OnRoomCleared?.Invoke(roomOfDeadEnemy);
             }
+        if (activeEnemies.Remove(enemy))
+        {
+            if (showDebugLogs)
+                Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
+
+            OnEnemyListChanged?.Invoke(); // ✅ ADD
         }
     }
 
-    public int             GetEnemyCount()  => activeEnemies.Count;
-    public List<EnemyUnit> GetAllEnemies()  => new List<EnemyUnit>(activeEnemies);
+    public int GetEnemyCount() => activeEnemies.Count;
+    public List<EnemyUnit> GetAllEnemies() => new List<EnemyUnit>(activeEnemies);
 
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {

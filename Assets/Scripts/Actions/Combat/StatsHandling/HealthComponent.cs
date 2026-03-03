@@ -9,78 +9,133 @@ using UnityEngine;
 /// </summary>
 public class HealthComponent : MonoBehaviour
 {
+
+    [Header("Damage Numbers")]
+    [SerializeField] private DamageNumber damageNumberPrefab;
+    [SerializeField] private Vector3 damageNumberOffset = new Vector3(0f, 1.5f, 0f);
+
+    // ─────────────────────────────────────────────────────────────
+    // Damage Flash (overlay-based, same as HealthContainerUI)
+    // ─────────────────────────────────────────────────────────────
+    private SpriteRenderer flashRenderer;
+
+    [Header("Damage Flash")]
+    [SerializeField] private GameObject damageFlashObject;
+    [SerializeField] private float flashDuration = 0.15f;
+    [SerializeField] private int flashCount = 1;
+
+    // ─────────────────────────────────────────────────────────────
+    // Health Settings
+    // ─────────────────────────────────────────────────────────────
+
     [Header("Health Settings")]
-    [Tooltip("Maximum hit-points. Ignored if an IHasHealth component is found on this GameObject.")]
     [Min(1)]
     [SerializeField] private int maxHealth = 100;
 
-    [Tooltip("Starting health. Defaults to maxHealth on Awake if left at 0. Ignored if IHasHealth is found.")]
     [Min(0)]
     [SerializeField] private int startingHealth = 0;
 
+    // ─────────────────────────────────────────────────────────────
+    // Death Behaviour
+    // ─────────────────────────────────────────────────────────────
+
     [Header("Death Behaviour")]
-    [Tooltip("If true the GameObject is destroyed on death.\n" +
-             "If false it is only disabled (useful for pooling or death animations).")]
     [SerializeField] private bool destroyOnDeath = false;
 
-    [Tooltip("Delay in seconds before the GameObject is destroyed/disabled after death.")]
     [Min(0f)]
     [SerializeField] private float deathDelay = 0f;
 
+    // ─────────────────────────────────────────────────────────────
+    // Debug
+    // ─────────────────────────────────────────────────────────────
+
     [Header("Debug (read-only in play mode)")]
-    [SerializeField, Min(0)] private int _currentHealth;
+    [SerializeField] private int _currentHealth;
 
-    // ── Events ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // Events
+    // ─────────────────────────────────────────────────────────────
 
-    /// <summary>Fired whenever health changes. Args: (currentHealth, maxHealth).</summary>
     public event Action<int, int> OnHealthChanged;
-
-    /// <summary>Fired once when health reaches 0.</summary>
     public event Action OnDeath;
 
-    // ── Properties ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // Runtime
+    // ─────────────────────────────────────────────────────────────
 
-    public int   CurrentHealth => _currentHealth;
-    public int   MaxHealth     => maxHealth;
-    public bool  IsDead        => _currentHealth <= 0;
+    private Coroutine flashRoutine;
+
+    // ─────────────────────────────────────────────────────────────
+    // Properties
+    // ─────────────────────────────────────────────────────────────
+
+    public int CurrentHealth => _currentHealth;
+    public int MaxHealth => maxHealth;
+    public bool IsDead => _currentHealth <= 0;
     public float HealthPercent => maxHealth > 0 ? (float)_currentHealth / maxHealth : 0f;
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // Lifecycle
+    // ─────────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        // Look for a stats provider on the same GameObject.
-        // If found, use its max health instead of the Inspector value.
         IHasHealth statsProvider = GetComponent<IHasHealth>();
         if (statsProvider != null)
         {
-            maxHealth      = statsProvider.GetMaxHealth();
+            maxHealth = statsProvider.GetMaxHealth();
             _currentHealth = maxHealth;
         }
         else
         {
-            // Fall back to Inspector values — same behaviour as before
-            _currentHealth = startingHealth > 0 ? Mathf.Min(startingHealth, maxHealth) : maxHealth;
+            _currentHealth = startingHealth > 0
+                ? Mathf.Min(startingHealth, maxHealth)
+                : maxHealth;
+        }
+
+        if (damageFlashObject)
+        {
+            flashRenderer = damageFlashObject.GetComponent<SpriteRenderer>();
+            damageFlashObject.SetActive(true);
+
+            // Start fully transparent
+            SetFlashAlpha(0f);
         }
     }
 
-    // ── Public API (all unchanged) ─────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // Public API
+    // ─────────────────────────────────────────────────────────────
 
-    /// <summary>Deal damage to this unit. Clamps to 0; triggers OnDeath if fatal.</summary>
     public void TakeDamage(int amount)
     {
         if (IsDead || amount <= 0) return;
 
         _currentHealth = Mathf.Max(0, _currentHealth - amount);
-        Debug.Log($"[HealthComponent] {gameObject.name} took {amount} dmg → {_currentHealth}/{maxHealth}");
-
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
+
+        SpawnDamageNumber(amount);
+        TriggerDamageFlash();
 
         if (_currentHealth == 0)
             Die();
     }
 
-    /// <summary>Restore health. Will not exceed maxHealth.</summary>
+    private void SpawnDamageNumber(int amount)
+    {
+        if (!damageNumberPrefab) return;
+
+        Vector3 spawnPos = transform.position + damageNumberOffset;
+
+        DamageNumber dmg = Instantiate(
+            damageNumberPrefab,
+            spawnPos,
+            Quaternion.identity
+        );
+
+        dmg.Initialize(amount);
+    }
+
     public void Heal(int amount)
     {
         if (IsDead || amount <= 0) return;
@@ -89,30 +144,80 @@ public class HealthComponent : MonoBehaviour
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
     }
 
-    /// <summary>Set health to an exact value, clamped between 0 and maxHealth.</summary>
     public void SetHealth(int value)
     {
         _currentHealth = Mathf.Clamp(value, 0, maxHealth);
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
-        if (_currentHealth == 0) Die();
+
+        if (_currentHealth == 0)
+            Die();
     }
 
-    /// <summary>
-    /// Re-initialize max health from a new value (e.g. after a level-up).
-    /// Fully restores current health to the new max.
-    /// </summary>
     public void InitializeHealth(int newMaxHealth)
     {
-        maxHealth      = Mathf.Max(1, newMaxHealth);
+        maxHealth = Mathf.Max(1, newMaxHealth);
         _currentHealth = maxHealth;
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
     }
 
-    // ── Private ────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // Damage Flash Logic (overlay toggle)
+    // ─────────────────────────────────────────────────────────────
+
+    private void TriggerDamageFlash()
+    {
+        if (!flashRenderer) return;
+
+        if (flashRoutine != null)
+            StopCoroutine(flashRoutine);
+
+        flashRoutine = StartCoroutine(DamageFlashRoutine());
+    }
+
+    private System.Collections.IEnumerator DamageFlashRoutine()
+    {
+        float half = flashDuration * 0.5f;
+
+        for (int i = 0; i < flashCount; i++)
+        {
+            // Fade in
+            yield return FadeFlash(0f, 1f, half);
+
+            // Fade out
+            yield return FadeFlash(1f, 0f, half);
+        }
+
+        flashRoutine = null;
+    }
+
+    private System.Collections.IEnumerator FadeFlash(float from, float to, float duration)
+    {
+        float t = 0f;
+
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float alpha = Mathf.Lerp(from, to, t / duration);
+            SetFlashAlpha(alpha);
+            yield return null;
+        }
+
+        SetFlashAlpha(to);
+    }
+
+    private void SetFlashAlpha(float alpha)
+    {
+        Color c = flashRenderer.color;
+        c.a = alpha;
+        flashRenderer.color = c;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Death
+    // ─────────────────────────────────────────────────────────────
 
     private void Die()
     {
-        Debug.Log($"[HealthComponent] {gameObject.name} has died.");
         OnDeath?.Invoke();
 
         if (deathDelay > 0f)

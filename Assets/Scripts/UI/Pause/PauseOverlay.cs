@@ -2,23 +2,28 @@
 
 public class PauseOverlay : MonoBehaviour
 {
-    public Canvas pauseCanvas;
-    public Canvas mainUICanvas;
-    public Canvas settingsCanvas;
+    [Header("Pause State Canvases")]
+    [SerializeField] private Canvas[] pauseCanvases;
+
+    [Header("Gameplay UI Canvases")]
+    [SerializeField] private Canvas[] gameplayCanvases;
+
+    [Header("Settings Canvases")]
+    [SerializeField] private Canvas[] settingsCanvases;
 
     bool isPaused = false;
 
     void Awake()
     {
-        pauseCanvas.enabled = false;
-        settingsCanvas.enabled = false;
+        SetCanvases(pauseCanvases, false);
+        SetCanvases(settingsCanvases, false);
     }
 
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (settingsCanvas.enabled)
+            if (AreAnyEnabled(settingsCanvases))
             {
                 CloseSettings();
             }
@@ -33,14 +38,14 @@ public class PauseOverlay : MonoBehaviour
     {
         isPaused = !isPaused;
 
-        pauseCanvas.enabled = isPaused;
-        mainUICanvas.enabled = !isPaused;
-        settingsCanvas.enabled = false;
+        SetCanvases(pauseCanvases, isPaused);
+        SetCanvases(gameplayCanvases, !isPaused);
+        SetCanvases(settingsCanvases, false);
 
         Time.timeScale = isPaused ? 0f : 1f;
     }
 
-    // -------- UI BUTTON HOOKS --------
+    // ───────── UI BUTTON HOOKS ─────────
 
     public void Resume()
     {
@@ -52,13 +57,34 @@ public class PauseOverlay : MonoBehaviour
     {
         if (!isPaused) return;
 
-        pauseCanvas.enabled = false;
-        settingsCanvas.enabled = true;
+        SetCanvases(pauseCanvases, false);
+        SetCanvases(settingsCanvases, true);
     }
 
     public void CloseSettings()
     {
-        settingsCanvas.enabled = false;
-        pauseCanvas.enabled = true;
+        SetCanvases(settingsCanvases, false);
+        SetCanvases(pauseCanvases, true);
+    }
+
+    // ───────── Helpers ─────────
+
+    void SetCanvases(Canvas[] canvases, bool enabled)
+    {
+        foreach (var canvas in canvases)
+        {
+            if (canvas != null)
+                canvas.enabled = enabled;
+        }
+    }
+
+    bool AreAnyEnabled(Canvas[] canvases)
+    {
+        foreach (var canvas in canvases)
+        {
+            if (canvas != null && canvas.enabled)
+                return true;
+        }
+        return false;
     }
 }
