@@ -10,16 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0acd3a5764e85d5458b22565e6ef901b, type: 3}
-  m_Name: AttackPattern
+  m_Name: Fireball_AP
   m_EditorClassIdentifier: Assembly-CSharp::AttackPattern
   tiles:
   - offset: {x: 1, y: 0}
-  - offset: {x: 2, y: 0}
-  - offset: {x: 1, y: 0}
-  - offset: {x: 1, y: 1}
-  - offset: {x: 2, y: 1}
-  minRange: 4
-  maxRange: 4
-  _previewInfo: 'Tile count: 5
+  minRange: 2
+  maxRange: 5
+  _previewInfo: 'Tile count: 1
 
-    Range: 4 - 4 (RANGED)'
+    Range: 2 - 5 (RANGED)'

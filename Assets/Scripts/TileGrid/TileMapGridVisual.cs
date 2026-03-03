@@ -7,28 +7,27 @@ public class TilemapGridVisual : MonoBehaviour
     public static TilemapGridVisual Instance { get; private set; }
 
     [Header("Visual Colors")]
-    [SerializeField] private Color moveColor  = new Color(0.5f, 0.8f, 1f,  0.6f);
-    [SerializeField] private Color rangeColor = new Color(1f,   0.8f, 0.2f, 0.5f);
-    [SerializeField] private Color aoeColor   = new Color(1f,   0.2f, 0.2f, 0.5f);
-    [SerializeField] private Color hoverColor = new Color(1f,   1f,   1f,   0.3f);
+    // Alpha 1.0 = fully solid, change in Inspector if you want
+    [SerializeField] private Color moveColor  = new Color(0.2f, 0.6f, 1f,   1f); 
+    [SerializeField] private Color rangeColor = new Color(1f,   0.85f, 0f,   1f); 
+    [SerializeField] private Color aoeColor   = new Color(1f,   0.15f, 0.15f,1f); 
+    [SerializeField] private Color hoverColor = new Color(1f,   1f,   1f,   0.5f); 
 
     private Tilemap currentTilemap;
-
-    // Store the tile's original color properly
     private HashSet<Vector3Int> modifiedTiles = new HashSet<Vector3Int>();
 
     private void Awake() => Instance = this;
 
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady    += OnLevelReady;
-        RoomManager.OnAnyRoomChanged   += OnRoomChanged;
+        LevelGenerator.OnLevelReady  += OnLevelReady;
+        RoomManager.OnAnyRoomChanged += OnRoomChanged;
     }
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady    -= OnLevelReady;
-        RoomManager.OnAnyRoomChanged   -= OnRoomChanged;
+        LevelGenerator.OnLevelReady  -= OnLevelReady;
+        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
     }
 
     private void OnLevelReady()
@@ -66,6 +65,7 @@ public class TilemapGridVisual : MonoBehaviour
     private void UpdateActionVisuals()
     {
         if (UnitActionSystem.Instance == null) return;
+
         Unit selectedUnit = UnitActionSystem.Instance.GetSelectedUnit();
         if (selectedUnit == null) return;
 
@@ -73,14 +73,32 @@ public class TilemapGridVisual : MonoBehaviour
         if (selectedAction == null) return;
 
         if (selectedAction is MoveAction moveAction)
+        {
             HighlightGridPositions(moveAction.GetValidActionGridPositionList(), moveColor);
+        }
         else if (selectedAction is CombatAction combatAction)
         {
-            HighlightGridPositions(combatAction.GetValidActionGridPositionList(), rangeColor);
+            // Use colors from data asset if available
+            Color rangeTint = combatAction.ActionData != null
+                ? combatAction.ActionData.rangeHighlightColor
+                : rangeColor;
+            Color aoeTint = combatAction.ActionData != null
+                ? combatAction.ActionData.aoeHighlightColor
+                : aoeColor;
+
+            // Step 1: show yellow valid target ring around player
+            HighlightGridPositions(
+                combatAction.GetValidActionGridPositionList(), rangeTint);
+
+            // Step 2: show red AoE centered on mouse — drawn AFTER yellow
+            // so it appears on top where they overlap
             if (LevelGrid.Instance != null)
             {
-                GridPosition mousePos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
-                HighlightGridPositions(combatAction.GetPreviewPositions(mousePos), aoeColor);
+                GridPosition mousePos = LevelGrid.Instance
+                    .GetGridPosition(MouseWorld.GetPosition());
+
+                List<GridPosition> preview = combatAction.GetPreviewPositions(mousePos);
+                HighlightGridPositions(preview, aoeTint);
             }
         }
     }
@@ -88,7 +106,9 @@ public class TilemapGridVisual : MonoBehaviour
     private void UpdateHoverVisual()
     {
         if (LevelGrid.Instance == null || !LevelGrid.Instance.IsInitialized()) return;
-        GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+
+        GridPosition mouseGridPos = LevelGrid.Instance
+            .GetGridPosition(MouseWorld.GetPosition());
         if (!LevelGrid.Instance.IsValidGridPosition(mouseGridPos)) return;
 
         Vector3Int tilePos = new Vector3Int(mouseGridPos.x, mouseGridPos.z, 0);
@@ -106,8 +126,6 @@ public class TilemapGridVisual : MonoBehaviour
     {
         if (currentTilemap == null) return;
         if (!currentTilemap.HasTile(tilePos)) return;
-
-        // Unlock flags so we can set color
         currentTilemap.SetTileFlags(tilePos, TileFlags.None);
         currentTilemap.SetColor(tilePos, color);
         modifiedTiles.Add(tilePos);
@@ -121,7 +139,6 @@ public class TilemapGridVisual : MonoBehaviour
             if (currentTilemap.HasTile(tilePos))
             {
                 currentTilemap.SetTileFlags(tilePos, TileFlags.None);
-                // Reset to white = full original color, no tint
                 currentTilemap.SetColor(tilePos, Color.white);
             }
         }

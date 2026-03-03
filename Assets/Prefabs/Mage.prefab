@@ -129,7 +129,7 @@ GameObject:
   - component: {fileID: 6502254005860565181}
   - component: {fileID: 7088535869859187341}
   m_Layer: 7
-  m_Name: Player
+  m_Name: Mage
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -197,7 +197,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 47ad70af5dd97ac478393e70eef207cf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
-  playerClass: 0
+  playerClass: 2
   classStatsDatabase: {fileID: 11400000, guid: 56a8e4ecc51509d409a2411fc588f9e4, type: 2}
   maxHealth: 0
   currentHealth: 0
@@ -216,6 +216,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MoveAction
   maxMoveDistance: 4
+  moveSpeed: 8
 --- !u!114 &4896305900031482026
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -228,9 +229,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: acea6ba4fad20314aada2db80248dde7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
-  actionData: {fileID: 11400000, guid: 3c98bd948d1ce4a449eae030c63833d1, type: 2}
+  actionData: {fileID: 11400000, guid: 50ea6a0245b22fa488e3c45de3ea7f65, type: 2}
   facingRotationSteps: 1
-  debugGizmos: 0
+  debugGizmos: 1
 --- !u!114 &6502254005860565181
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -339,7 +340,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 0a6e81c5fa4dfc54ea11b72a92e2c992, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 0e20546249772374aa695758d1accf32, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
