@@ -49,18 +49,39 @@ public class RoomNavigationUI : MonoBehaviour
         westButton?.onClick.AddListener(()  => TravelToRoom(LevelGenerator.Direction.West));
     }
 
-    private void OnEnable()
+    void OnEnable()
     {
         LevelGenerator.OnLevelReady        += OnLevelReady;
         RoomManager.OnAnyRoomChanged       += OnRoomChanged;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+        LevelGenerator.OnLevelReady += OnLevelReady;
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnEnemyListChanged += UpdateButtons;
     }
 
-    private void OnDisable()
+    void Start()
+    {
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+    }
+
+    void OnDisable()
     {
         LevelGenerator.OnLevelReady        -= OnLevelReady;
         RoomManager.OnAnyRoomChanged       -= OnRoomChanged;
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnEnemyListChanged -= UpdateButtons;
+
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
+    }
+
+    private void OnDestroy()
+    {
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }

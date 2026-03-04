@@ -16,16 +16,15 @@ public class HealthContainerUI : MonoBehaviour,
     public GameObject fireLow;
 
     [Header("UI")]
-    public GameObject hoverOverlay;
-    public TextMeshProUGUI healthText;
+    public GameObject hoverOverlay;          // background only
+    public TextMeshProUGUI healthText;       // always visible
 
     [Header("Damage Flash")]
     [SerializeField] private GameObject damageFlashUI;
     [SerializeField] private float flashDuration = 0.25f;
 
-private int lastHealth = -1;
-
-    int currentTier = -1;
+    private int lastHealth = -1;
+    private int currentTier = -1;
 
     void OnEnable()
     {
@@ -43,7 +42,11 @@ private int lastHealth = -1;
         if (unit != null)
         {
             playerStats = unit.GetComponent<PlayerStats>();
-            UpdateFireState(); // force initial state
+
+            // Force full initial sync
+            lastHealth = playerStats.currentHealth;
+            UpdateHealthText();
+            UpdateFireState();
         }
         else
         {
@@ -55,21 +58,18 @@ private int lastHealth = -1;
     {
         if (!playerStats) return;
 
-        // Detect damage
         int currentHealth = playerStats.currentHealth;
 
-        if (lastHealth != -1 && currentHealth < lastHealth)
+        // Health changed?
+        if (currentHealth != lastHealth)
         {
-            TriggerDamageFlash();
-        }
+            if (currentHealth < lastHealth)
+                TriggerDamageFlash();
 
-        lastHealth = currentHealth;
+            lastHealth = currentHealth;
 
-        UpdateFireState();
-
-        if (hoverOverlay.activeSelf)
-        {
             UpdateHealthText();
+            UpdateFireState();
         }
     }
 
@@ -91,19 +91,16 @@ private int lastHealth = -1;
 
     int GetHealthTier(float hp)
     {
-        if (hp > 0.75f) return 3;   // Max
-        if (hp > 0.50f) return 2;   // High
-        if (hp > 0.25f) return 1;   // Medium
-        if (hp > 0f) return 0;   // Low
+        if (hp > 0.75f) return 3;
+        if (hp > 0.50f) return 2;
+        if (hp > 0.25f) return 1;
+        if (hp > 0f) return 0;
         return 0;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (!playerStats) return;
-
         hoverOverlay.SetActive(true);
-        UpdateHealthText();
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -116,20 +113,18 @@ private int lastHealth = -1;
         healthText.text = playerStats.currentHealth.ToString();
     }
 
-    // Visual feedback of dmg taken
-
     void TriggerDamageFlash()
-        {
-            if (!damageFlashUI) return;
+    {
+        if (!damageFlashUI) return;
 
-            StopAllCoroutines();
-            StartCoroutine(DamageFlashRoutine());
-        }
+        StopAllCoroutines();
+        StartCoroutine(DamageFlashRoutine());
+    }
 
-        System.Collections.IEnumerator DamageFlashRoutine()
-        {
-            damageFlashUI.SetActive(true);
-            yield return new WaitForSeconds(flashDuration);
-            damageFlashUI.SetActive(false);
-        }
+    System.Collections.IEnumerator DamageFlashRoutine()
+    {
+        damageFlashUI.SetActive(true);
+        yield return new WaitForSeconds(flashDuration);
+        damageFlashUI.SetActive(false);
+    }
 }

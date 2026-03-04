@@ -14,6 +14,7 @@ public class EnemyManager : MonoBehaviour
     private bool isRunningEnemyTurns = false;
 
     public event Action OnEnemyTurnsComplete;
+    public event Action OnEnemyListChanged;
 
     /// <summary>
     /// Fired when a room is cleared of all enemies.
@@ -32,33 +33,43 @@ public class EnemyManager : MonoBehaviour
         if (!activeEnemies.Contains(enemy))
         {
             activeEnemies.Add(enemy);
+
             if (showDebugLogs)
                 Debug.Log($"[EnemyManager] Registered {enemy.Stats?.enemyName}. Total: {activeEnemies.Count}");
+
+            OnEnemyListChanged?.Invoke();
         }
     }
 
     public void UnregisterEnemy(EnemyUnit enemy)
     {
+        // 1. Capture the room reference before removal
         RoomGrid roomOfDeadEnemy = enemy.CurrentRoomGrid;
-        activeEnemies.Remove(enemy);
 
-        if (showDebugLogs)
-            Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
-
-        // Check if that room is now empty
-        if (roomOfDeadEnemy != null)
+        // 2. Perform the removal and check if successful (Sam's safety check)
+        if (activeEnemies.Remove(enemy))
         {
-            List<EnemyUnit> remaining = GetEnemiesInRoom(roomOfDeadEnemy);
-            if (remaining.Count == 0)
+            if (showDebugLogs)
+                Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
+
+            // 3. Notify UI/Systems that list changed
+            OnEnemyListChanged?.Invoke();
+
+            // 4. Handle Room Clearing Logic
+            if (roomOfDeadEnemy != null)
             {
-                Debug.Log($"[EnemyManager] Room cleared: {roomOfDeadEnemy.gameObject.name}");
-                OnRoomCleared?.Invoke(roomOfDeadEnemy);
+                List<EnemyUnit> remaining = GetEnemiesInRoom(roomOfDeadEnemy);
+                if (remaining.Count == 0)
+                {
+                    Debug.Log($"[EnemyManager] Room cleared: {roomOfDeadEnemy.gameObject.name}");
+                    OnRoomCleared?.Invoke(roomOfDeadEnemy);
+                }
             }
         }
-    }
+    } // End of UnregisterEnemy
 
-    public int             GetEnemyCount()  => activeEnemies.Count;
-    public List<EnemyUnit> GetAllEnemies()  => new List<EnemyUnit>(activeEnemies);
+    public int GetEnemyCount() => activeEnemies.Count;
+    public List<EnemyUnit> GetAllEnemies() => new List<EnemyUnit>(activeEnemies);
 
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
