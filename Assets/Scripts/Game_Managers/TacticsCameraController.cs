@@ -22,7 +22,7 @@ public class FreeTacticsCameraController : MonoBehaviour
     [SerializeField] private float shakeDuration = 0.15f;
 
     [Header("Auto-Focus (Room Transitions)")]
-    [SerializeField] private Vector3 followOffset = new Vector3(0f, 10f, -2f);
+    [SerializeField] private Vector3 followOffset = new Vector3(0f, 20f, -2f);
     [SerializeField] private float snapSmoothness = 5f;
 
     private Vector3 basePosition;
