@@ -139,52 +139,43 @@ public class RoomNavigationUI : MonoBehaviour
     }
 
     private void TravelToRoom(LevelGenerator.Direction travelDirection)
-    {
-        if (RoomManager.Instance == null || levelGenerator == null) return;
-
-        LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
-        if (currentRoom == null) return;
-
-        if (AreEnemiesInCurrentRoom(currentRoom.roomGrid))
         {
-            Debug.Log("[RoomNavigationUI] Cannot leave — enemies present!");
-            return;
+            if (RoomManager.Instance == null || levelGenerator == null) return;
+
+            LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
+            if (currentRoom == null) return;
+
+            if (AreEnemiesInCurrentRoom(currentRoom.roomGrid))
+            {
+                Debug.Log("[RoomNavigationUI] Cannot leave — enemies present!");
+                return;
+            }
+
+            LevelGenerator.PlacedRoom targetRoom = 
+                levelGenerator.GetConnectedRoom(currentRoom, travelDirection);
+            if (targetRoom == null) return;
+
+            Unit player = FindFirstObjectByType<Unit>();
+            if (player == null) return;
+
+            LevelGenerator.Direction entryDirection = 
+                levelGenerator.GetOppositeDirection(travelDirection);
+
+            GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDirection);
+
+            // 1. Move the data and player
+            RoomManager.Instance.SetCurrentRoom(targetRoom);
+            LevelGrid.Instance?.SetCurrentRoomGrid(targetRoom.roomGrid);
+            player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
+
+            // 2. Trigger the camera snap
+            if (FreeTacticsCameraController.Instance != null)
+            {
+                FreeTacticsCameraController.Instance.FocusOnPlayer();
+            }
+
+            UpdateButtons();
         }
-
-        LevelGenerator.PlacedRoom targetRoom = 
-            levelGenerator.GetConnectedRoom(currentRoom, travelDirection);
-        if (targetRoom == null)
-        {
-            Debug.LogWarning($"[RoomNavigationUI] No room in direction {travelDirection}");
-            return;
-        }
-
-        if (targetRoom.roomGrid == null)
-        {
-            Debug.LogError("[RoomNavigationUI] Target room has no RoomGrid!");
-            return;
-        }
-
-        Unit player = FindFirstObjectByType<Unit>();
-        if (player == null) { Debug.LogError("[RoomNavigationUI] No player!"); return; }
-
-        // Player traveled North → they enter the next room from the South
-        // So we look for the SpawnPointTile marked as "South" in the target room
-        LevelGenerator.Direction entryDirection = 
-            levelGenerator.GetOppositeDirection(travelDirection);
-
-        GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDirection);
-
-        // Set room state first, then place player
-        RoomManager.Instance.SetCurrentRoom(targetRoom);
-        LevelGrid.Instance?.SetCurrentRoomGrid(targetRoom.roomGrid);
-        player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
-
-        Debug.Log($"[RoomNavigationUI] Traveled {travelDirection} → " +
-                $"entry from {entryDirection} → spawn at {spawnPos}");
-
-        UpdateButtons();
-    }
 
     private GridPosition GetSpawnPosition(LevelGenerator.PlacedRoom room, 
                                         LevelGenerator.Direction entryDirection)
