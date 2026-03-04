@@ -2408,7 +2408,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 239138438}
-  - component: {fileID: 239138437}
   - component: {fileID: 239138439}
   - component: {fileID: 239138440}
   m_Layer: 0
@@ -2418,22 +2417,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &239138437
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 239138436}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7fe4dd12479f14fca9f149995866488e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gridSystemVisualSinglePrefab: {fileID: 8666994886348826599, guid: 7111b36424c2a45e6affb0380fa0ab46, type: 3}
-  moveColor: {r: 1, g: 1, b: 1, a: 1}
-  rangeColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  aoeColor: {r: 1, g: 0.2, b: 0.2, a: 1}
 --- !u!4 &239138438
 Transform:
   m_ObjectHideFlags: 0
@@ -2475,9 +2458,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea4752edc8ab25540984a3bc1e4cec96, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TilemapGridVisual
-  moveColor: {r: 0.6650944, g: 0.8325472, b: 1, a: 1}
-  rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
-  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
+  solidWhiteTile: {fileID: 11400000, guid: 9da22e8917d6d284e8a0426c2e84ef30, type: 2}
+  moveColor: {r: 0.6650944, g: 0.8325472, b: 1, a: 0.15686275}
+  rangeColor: {r: 1, g: 0.85, b: 0, a: 0.050980393}
+  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 0.043137256}
   hoverColor: {r: 1, g: 1, b: 1, a: 0.6}
 --- !u!1 &269447761
 GameObject:
@@ -17977,7 +17961,7 @@ MonoBehaviour:
   specialRoomChance: 0.01
   cellSize: 2
   gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
-  playerPrefab: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+  playerPrefab: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
   spawnPlayerOnGenerate: 1
 --- !u!1 &2000321972
 GameObject:

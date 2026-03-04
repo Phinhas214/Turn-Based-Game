@@ -22,14 +22,14 @@ MonoBehaviour:
   canTargetSelf: 0
   staminaCost: 2
   requiresEnoughStamina: 1
-  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
-  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 0.27058825}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 0.20392157}
   _summary: 'Damage      : 10
 
     Stamina cost: 2
 
     Pattern     : Fireball_AP
-    (1 tiles)
+    (5 tiles)
 
     Range       : Ranged 2-5 tiles
 

@@ -22,14 +22,14 @@ MonoBehaviour:
   canTargetSelf: 0
   staminaCost: 2
   requiresEnoughStamina: 1
-  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
-  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 0.02745098}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 0.019607844}
   _summary: 'Damage      : 15
 
     Stamina cost: 2
 
-    Pattern     : AttackPattern
-    (1 tiles)
+    Pattern     : Slash_AP (5
+    tiles)
 
     Range       : Melee (pattern at unit)
 
