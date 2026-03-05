@@ -9,9 +9,9 @@ public class MainMenuController : MonoBehaviour
     [Header("Panels")]
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject modePanel;
-    [SerializeField] private GameObject multiplayerSelectPanel; // NEW: Host vs Join choice
-    [SerializeField] private GameObject hostPanel;              // NEW: Just the Create widget
-    [SerializeField] private GameObject joinPanel;              // NEW: Just the Session List
+    [SerializeField] private GameObject multiplayerSelectPanel;
+    [SerializeField] private GameObject hostPanel;
+    [SerializeField] private GameObject joinPanel;
     [SerializeField] private GameObject joinByCodePanel;
     [SerializeField] private GameObject lobbyPanel;
     [SerializeField] private GameObject loadingPanel;
@@ -20,6 +20,10 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button newGameButton;
     [SerializeField] private Button multiplayerButton;
     [SerializeField] private Button backToMainButton;
+
+    [Header("Single Player Settings")]
+    [SerializeField] private Button startSinglePlayerButton; // Button inside Mode Panel to start game
+    [SerializeField] private string gameSceneName = "SinglePlayer"; // Name of your level in Build Settings
 
     [Header("Buttons: Multiplayer Selection")]
     [SerializeField] private Button selectHostButton;
@@ -44,26 +48,29 @@ public class MainMenuController : MonoBehaviour
 
     private void Awake()
     {
-        // Setup Navigation Listeners
+        // --- Navigation Listeners ---
         newGameButton?.onClick.AddListener(() => ShowPanel(modePanel));
         multiplayerButton?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
         
-        // Selection Panel
+        // --- Single Player Logic ---
+        startSinglePlayerButton?.onClick.AddListener(StartSinglePlayerGame);
+
+        // --- Selection Panel ---
         selectHostButton?.onClick.AddListener(() => ShowPanel(hostPanel));
         selectJoinButton?.onClick.AddListener(() => ShowPanel(joinPanel));
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
 
-        // Join/Host Sub-navigation
+        // --- Join/Host Sub-navigation ---
         joinByCodeButton?.onClick.AddListener(() => ShowPanel(joinByCodePanel));
 
-        // Back Buttons
+        // --- Back Buttons ---
         backToMainButton?.onClick.AddListener(() => ShowPanel(mainMenuPanel));
         backToModeButton?.onClick.AddListener(() => ShowPanel(modePanel));
         backFromHostButton?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
         backFromJoinButton?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
         backFromCodeButton?.onClick.AddListener(() => ShowPanel(joinPanel));
 
-        // Lobby
+        // --- Lobby ---
         readyButton?.onClick.AddListener(OnReadyClicked);
         startButton?.onClick.AddListener(OnStartGameClicked);
         leaveLobbyButton?.onClick.AddListener(OnLeaveLobbyClicked);
@@ -78,8 +85,20 @@ public class MainMenuController : MonoBehaviour
         ShowPanel(mainMenuPanel);
     }
 
-    // --- Logic Methods ---
+    // --- Single Player Logic ---
+    private void StartSinglePlayerGame()
+    {
+        if (!string.IsNullOrEmpty(gameSceneName))
+        {
+            SceneManager.LoadScene(2);
+        }
+        else
+        {
+            Debug.LogError("Game Scene Name is not set in the Inspector!");
+        }
+    }
 
+    // --- Logic Methods ---
     private void OnPlayerNameChanged(string newName)
     {
         if (string.IsNullOrWhiteSpace(newName)) return;
@@ -100,10 +119,8 @@ public class MainMenuController : MonoBehaviour
     public void OnLeaveLobbyClicked() => _ = NetworkGameManager.Instance?.LeaveSessionAsync();
 
     // --- Panel Management ---
-
     private void ShowPanel(GameObject target)
     {
-        // Hide all major panels
         mainMenuPanel?.SetActive(false);
         modePanel?.SetActive(false);
         multiplayerSelectPanel?.SetActive(false);
@@ -112,7 +129,6 @@ public class MainMenuController : MonoBehaviour
         joinByCodePanel?.SetActive(false);
         lobbyPanel?.SetActive(false);
 
-        // Show the one we want
         target?.SetActive(true);
     }
 

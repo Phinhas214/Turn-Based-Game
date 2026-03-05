@@ -251,6 +251,8 @@ MonoBehaviour:
   newGameButton: {fileID: 2031361701}
   multiplayerButton: {fileID: 1676430333}
   backToMainButton: {fileID: 1376469591}
+  startSinglePlayerButton: {fileID: 1489518674}
+  gameSceneName: GameScene
   selectHostButton: {fileID: 2146156008}
   selectJoinButton: {fileID: 863196298}
   playerNameInput: {fileID: 1846898718}
