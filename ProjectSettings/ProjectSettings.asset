@@ -931,11 +931,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 2
   windowsGamepadBackendHint: 0
-  cloudProjectId: dfb725f3-4684-41a8-a26e-42c4a9f64322
+  cloudProjectId: 52e933c7-256e-4400-94d6-a4ea866eaf38
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: turn_based_game
-  organizationId: phinhasasmelash
+  projectName: Hearth & Harm
+  organizationId: suramyashakya69
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
