@@ -1,0 +1,141 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7439658159945278114
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3504775156177831659}
+  - component: {fileID: 7600787424855154331}
+  - component: {fileID: 5477586667471807544}
+  - component: {fileID: 5153460706557956312}
+  m_Layer: 0
+  m_Name: NetworkLevelGen
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3504775156177831659
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7439658159945278114}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7600787424855154331
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7439658159945278114}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 788a998c9c1dfba4b82e0e5616aafb2a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  roomPrefabs:
+  - prefab: {fileID: 7211524986439877235, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+    roomType: 0
+    spawnWeight: 1
+    width: 35
+    height: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
+  - prefab: {fileID: 7815365408416092535, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+    roomType: 2
+    spawnWeight: 1
+    width: 35
+    height: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
+  - prefab: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+    roomType: 1
+    spawnWeight: 1
+    width: 35
+    height: 1
+    gridOffset: {x: 0, y: 0.1, z: 0}
+  hallwayPrefab: {fileID: 868505126936158952, guid: 06f61634c2353294fa22b66d1f4a5722, type: 3}
+  minRooms: 5
+  maxRooms: 11
+  specialRoomChance: 0.01
+  cellSize: 2
+  gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
+  playerPrefab: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
+  spawnPlayerOnGenerate: 1
+--- !u!114 &5477586667471807544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7439658159945278114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 485421114
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &5153460706557956312
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7439658159945278114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c624901297d1a4b4990ecf792afefe47, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkedLevelGenerator
+  ShowTopMostFoldoutHeaderGroup: 1
+  roomPrefabs:
+  - prefab: {fileID: 7211524986439877235, guid: 03cea2892e0ae074ebf991d8c18fa5a4, type: 3}
+    roomType: 0
+    spawnWeight: 0
+    width: 0
+    height: 0
+    gridOffset: {x: 0, y: 0, z: 0}
+  - prefab: {fileID: 7815365408416092535, guid: 05faf81f2fd488844bd719e72bdc0e9d, type: 3}
+    roomType: 2
+    spawnWeight: 0
+    width: 0
+    height: 0
+    gridOffset: {x: 0, y: 0, z: 0}
+  - prefab: {fileID: 9182096418338696763, guid: ddedf0e7b5097204bae331ec6b6e63e9, type: 3}
+    roomType: 1
+    spawnWeight: 0
+    width: 0
+    height: 0
+    gridOffset: {x: 0, y: 0, z: 0}
+  hallwayPrefab: {fileID: 868505126936158952, guid: 06f61634c2353294fa22b66d1f4a5722, type: 3}
+  playerPrefabs:
+  - {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
+  - {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+  minRooms: 5
+  maxRooms: 10
+  specialRoomChance: 0.3
+  cellSize: 2
+  fallbackPlayerPrefab: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}

@@ -237,26 +237,23 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom));
         LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
 
-        // Get character selections from lobby
-        Dictionary<string, int> characterSelections = new Dictionary<string, int>();
-        if (NetworkGameManager.Instance != null)
-            characterSelections = NetworkGameManager.Instance.GetCharacterSelections();
+        // Get the lobby player list — index i matches connected client i
+        // This is more reliable than UGS ID mapping because the order is consistent
+        var playerList = NetworkGameManager.Instance != null
+            ? NetworkGameManager.Instance.GetPlayerList()
+            : new System.Collections.Generic.List<SessionPlayerInfo>();
 
-        // Map UGS player IDs to client IDs (best-effort, ordered by connection time)
-        List<ulong> connectedClients = new List<ulong>(NetworkManager.Singleton.ConnectedClientsIds);
-        List<string> ugsIds = new List<string>(characterSelections.Keys);
+        var connectedClients = NetworkManager.Singleton.ConnectedClientsList;
 
         int centerX = startRoom.roomGrid.GetWidth() / 2;
         int centerZ = startRoom.roomGrid.GetHeight() / 2;
 
         for (int i = 0; i < connectedClients.Count; i++)
         {
-            ulong clientId = connectedClients[i];
+            ulong clientId = connectedClients[i].ClientId;
 
-            // Determine which prefab to use
-            int charIndex = 0;
-            if (i < ugsIds.Count)
-                charIndex = characterSelections[ugsIds[i]];
+            // Match lobby list index to client index — same join order
+            int charIndex = (i < playerList.Count) ? playerList[i].CharacterIndex : 0;
 
             GameObject prefabToSpawn = GetPlayerPrefab(charIndex);
 
@@ -282,12 +279,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
-            // Place on grid (works because server owns the room grid)
+            // Place on grid
             Unit unit = playerGO.GetComponent<Unit>();
             if (unit != null)
                 unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
-            Debug.Log($"[NetworkedLevelGenerator] Spawned player for client {clientId} at {spawnPos}");
+            Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
         }
     }
 

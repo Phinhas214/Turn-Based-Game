@@ -4,49 +4,42 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Lobby room UI — shown after creating or joining a lobby, before the game starts.
+/// Lobby room panel — activated automatically when a session becomes active.
 ///
-/// SCENE SETUP:
-///   LobbyPanel
-///     - LobbyCodeText        (shows the lobby ID so players can share it)
-///     - PlayerListContainer  (vertical layout group, populated at runtime)
-///     - PlayerSlotPrefab     (prefab with PlayerSlotUI component)
-///     - CharacterSelectPanel
-///         - CharacterButton0..3 (one per character)
-///     - ReadyButton
-///     - StartButton          (host only — visible only when all players ready)
-///     - LeaveLobbyButton
+/// The Multiplayer Widgets handle create/join/leave — this script handles:
+///   - Character selection with visual highlights
+///   - Ready toggle
+///   - Player list display (uses LobbyPlayerEntry prefab)
+///   - Start Game button (host only, enabled when local player is ready)
 ///
-/// Wire all references in Inspector.
+/// SCENE HIERARCHY (inside LobbyPanel GameObject):
+///   [Widget] Show Session Code         ← join code display, auto-updated by widget
+///   PlayerCountText (TMP)              ← "2 / 4 players"
+///   PlayerListContainer                ← Vertical Layout Group, holds LobbyPlayerEntry prefabs
+///   CharacterSelectPanel
+///       CharacterButton0..3            ← one Button per class
+///       CharacterHighlight0..3         ← one Image per class (enabled = selected)
+///   ReadyButton
+///   StartButton                        ← host only
+///   [Widget] Leave Session
 /// </summary>
 public class LobbyRoomUI : MonoBehaviour
 {
-    // ── Inspector ─────────────────────────────────────────────────────────
-    [Header("Lobby Info")]
-    [SerializeField] private TextMeshProUGUI lobbyCodeText;
-    [SerializeField] private TextMeshProUGUI lobbyStatusText;
-
     [Header("Player List")]
-    [SerializeField] private Transform      playerListContainer;
-    [SerializeField] private GameObject     playerSlotPrefab;   // must have PlayerSlotUI component
+    [SerializeField] private Transform           playerListContainer;
+    [SerializeField] private GameObject          playerEntryPrefab;     // has LobbyPlayerEntry component
+    [SerializeField] private TextMeshProUGUI     playerCountText;
 
     [Header("Character Select")]
-    [SerializeField] private List<Button>   characterButtons;   // index = character index
-    [SerializeField] private List<Image>    characterButtonHighlights; // shown on selected char
+    [SerializeField] private List<Button>        characterButtons;       // one per class
+    [SerializeField] private List<Image>         characterHighlights;    // one Image per class
 
     [Header("Buttons")]
-    [SerializeField] private Button         readyButton;
-    [SerializeField] private Button         startButton;        // host only
-    [SerializeField] private Button         leaveLobbyButton;
+    [SerializeField] private Button              readyButton;
+    [SerializeField] private Button              startButton;            // host only
 
-    [Header("Character Names (for display)")]
-    [SerializeField] private List<string>   characterNames = new List<string>
-        { "Knight", "Rogue", "Mage", "Cleric" };
-
-    // ── Private runtime ───────────────────────────────────────────────────
-    private int              selectedCharacterIndex = 0;
-    private bool             isReady               = false;
-    private List<GameObject> playerSlots           = new List<GameObject>();
+    private int  selectedCharacterIndex = 0;
+    private bool isReady               = false;
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -54,185 +47,140 @@ public class LobbyRoomUI : MonoBehaviour
 
     private void Awake()
     {
-        readyButton     ?.onClick.AddListener(OnReadyClicked);
-        startButton     ?.onClick.AddListener(OnStartClicked);
-        leaveLobbyButton?.onClick.AddListener(OnLeaveClicked);
-
+        // Wire character buttons
         for (int i = 0; i < characterButtons.Count; i++)
         {
-            int idx = i; // capture for lambda
+            int idx = i;
             characterButtons[i]?.onClick.AddListener(() => SelectCharacter(idx));
         }
+
+        readyButton ?.onClick.AddListener(OnReadyClicked);
+        startButton ?.onClick.AddListener(OnStartClicked);
+
+        // Hidden until session is active
+        gameObject.SetActive(false);
     }
 
     private void OnEnable()
     {
         if (NetworkGameManager.Instance == null) return;
-
-        NetworkGameManager.Instance.OnLobbyPlayersUpdated += HandlePlayersUpdated;
-        NetworkGameManager.Instance.OnGameStarting        += HandleGameStarting;
-        NetworkGameManager.Instance.OnLobbyLeft           += HandleLobbyLeft;
-
-        RefreshUI();
+        NetworkGameManager.Instance.OnSessionCreated += HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionJoined  += HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionLeft    += HandleSessionEnded;
+        NetworkGameManager.Instance.OnPlayersUpdated += HandlePlayersUpdated;
+        NetworkGameManager.Instance.OnGameStarting   += HandleGameStarting;
     }
 
     private void OnDisable()
     {
         if (NetworkGameManager.Instance == null) return;
-
-        NetworkGameManager.Instance.OnLobbyPlayersUpdated -= HandlePlayersUpdated;
-        NetworkGameManager.Instance.OnGameStarting        -= HandleGameStarting;
-        NetworkGameManager.Instance.OnLobbyLeft           -= HandleLobbyLeft;
+        NetworkGameManager.Instance.OnSessionCreated -= HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionJoined  -= HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionLeft    -= HandleSessionEnded;
+        NetworkGameManager.Instance.OnPlayersUpdated -= HandlePlayersUpdated;
+        NetworkGameManager.Instance.OnGameStarting   -= HandleGameStarting;
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Refresh
+    // Session events
     // ─────────────────────────────────────────────────────────────────────
 
-    private void RefreshUI()
+    private void HandleSessionActive()
     {
-        if (NetworkGameManager.Instance?.CurrentLobby == null) return;
-
-        var lobby = NetworkGameManager.Instance.CurrentLobby;
-
-        // Show lobby code
-        if (lobbyCodeText != null)
-            lobbyCodeText.text = $"Lobby Code: {lobby.LobbyCode}";
-
-        // Host controls
-        bool isHost = NetworkGameManager.Instance.IsHost;
-        if (startButton != null)
-            startButton.gameObject.SetActive(isHost);
-
-        RefreshPlayerList();
+        gameObject.SetActive(true);
+        startButton?.gameObject.SetActive(NetworkGameManager.Instance.IsHost);
         RefreshCharacterHighlights();
         RefreshStartButton();
     }
 
-    private void RefreshPlayerList()
+    private void HandleSessionEnded()
     {
-        // Clear old slots
-        foreach (var slot in playerSlots)
-            Destroy(slot);
-        playerSlots.Clear();
-
-        if (playerSlotPrefab == null || playerListContainer == null) return;
-
-        List<LobbyPlayerInfo> players = NetworkGameManager.Instance.GetLobbyPlayerInfos();
-
-        foreach (var info in players)
-        {
-            GameObject slotGO = Instantiate(playerSlotPrefab, playerListContainer);
-            PlayerSlotUI slotUI = slotGO.GetComponent<PlayerSlotUI>();
-
-            if (slotUI != null)
-                slotUI.SetData(info, GetCharacterName(info.CharacterIndex));
-
-            playerSlots.Add(slotGO);
-        }
-
-        // Update status text
-        if (lobbyStatusText != null)
-        {
-            int maxPlayers = NetworkGameManager.Instance.CurrentLobby.MaxPlayers;
-            lobbyStatusText.text = $"{players.Count}/{maxPlayers} players";
-        }
+        isReady = false;
+        UpdateReadyButtonText();
+        gameObject.SetActive(false);
     }
 
-    private void RefreshCharacterHighlights()
+    private void HandleGameStarting()
     {
-        for (int i = 0; i < characterButtonHighlights.Count; i++)
-        {
-            if (characterButtonHighlights[i] != null)
-                characterButtonHighlights[i].enabled = (i == selectedCharacterIndex);
-        }
+        gameObject.SetActive(false);
     }
 
-    private void RefreshStartButton()
+    private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
     {
-        if (startButton == null || !NetworkGameManager.Instance.IsHost) return;
+        // Rebuild player list
+        if (playerListContainer != null)
+            foreach (Transform child in playerListContainer)
+                Destroy(child.gameObject);
 
-        bool allReady = NetworkGameManager.Instance.AllPlayersReady();
-        startButton.interactable = allReady;
+        if (playerEntryPrefab != null && playerListContainer != null)
+            foreach (var player in players)
+            {
+                var entry = Instantiate(playerEntryPrefab, playerListContainer);
+                entry.GetComponent<LobbyPlayerEntry>()?.Setup(player);
+            }
 
-        TextMeshProUGUI startText = startButton.GetComponentInChildren<TextMeshProUGUI>();
-        if (startText != null)
-            startText.text = allReady ? "Start Game!" : "Waiting for players...";
+        if (playerCountText != null)
+            playerCountText.text = $"{players.Count} / {NetworkGameManager.Instance?.GetMaxPlayers() ?? 4} players";
+
+        RefreshStartButton();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Button handlers
+    // Character select
     // ─────────────────────────────────────────────────────────────────────
 
     private void SelectCharacter(int index)
     {
         selectedCharacterIndex = index;
+        NetworkGameManager.Instance?.SetLocalCharacterSelection(index);
         RefreshCharacterHighlights();
-
-        // Update lobby data so other players see our selection
-        _ = NetworkGameManager.Instance?.UpdatePlayerDataAsync(selectedCharacterIndex, isReady);
     }
+
+    private void RefreshCharacterHighlights()
+    {
+        for (int i = 0; i < characterHighlights.Count; i++)
+            if (characterHighlights[i] != null)
+                characterHighlights[i].enabled = (i == selectedCharacterIndex);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Ready & Start
+    // ─────────────────────────────────────────────────────────────────────
 
     private void OnReadyClicked()
     {
         isReady = !isReady;
+        NetworkGameManager.Instance?.SetLocalReadyState(isReady);
+        UpdateReadyButtonText();
+        RefreshStartButton();
+    }
 
-        // Update button text
-        TextMeshProUGUI btnText = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
-        if (btnText != null)
-            btnText.text = isReady ? "Not Ready" : "Ready!";
-
-        // Update lobby
-        _ = NetworkGameManager.Instance?.UpdatePlayerDataAsync(selectedCharacterIndex, isReady);
+    private void UpdateReadyButtonText()
+    {
+        var txt = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null) txt.text = isReady ? "Not Ready" : "Ready!";
     }
 
     private void OnStartClicked()
     {
+        if (NetworkGameManager.Instance == null || !NetworkGameManager.Instance.IsHost) return;
+        if (!NetworkGameManager.Instance.AllPlayersReady()) return;
+        NetworkGameManager.Instance.StartGame();
+    }
+
+    private void RefreshStartButton()
+    {
+        if (startButton == null || NetworkGameManager.Instance == null) return;
         if (!NetworkGameManager.Instance.IsHost) return;
-        if (!NetworkGameManager.Instance.AllPlayersReady())
+
+        bool allReady = NetworkGameManager.Instance.AllPlayersReady();
+        startButton.interactable = allReady;
+
+        var txt = startButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null)
         {
-            Debug.Log("[LobbyRoomUI] Not all players are ready yet.");
-            return;
+            txt.text  = allReady ? "START ADVENTURE" : "WAITING FOR TEAM...";
+            txt.color = allReady ? Color.white : new Color(1f, 1f, 1f, 0.5f);
         }
-        _ = NetworkGameManager.Instance.StartGameAsync();
-    }
-
-    private void OnLeaveClicked()
-    {
-        _ = NetworkGameManager.Instance?.LeaveLobbyAsync();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Event handlers
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void HandlePlayersUpdated(List<Unity.Services.Lobby.Models.Player> players)
-    {
-        RefreshPlayerList();
-        RefreshStartButton();
-    }
-
-    private void HandleGameStarting()
-    {
-        Debug.Log("[LobbyRoomUI] Game is starting — hiding lobby UI.");
-        gameObject.SetActive(false);
-    }
-
-    private void HandleLobbyLeft()
-    {
-        // Return to main menu
-        gameObject.SetActive(false);
-        // You may want to load the main menu scene here
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────
-
-    private string GetCharacterName(int index)
-    {
-        if (index >= 0 && index < characterNames.Count)
-            return characterNames[index];
-        return "Unknown";
     }
 }

@@ -30,7 +30,7 @@ public class PlayerSlotUI : MonoBehaviour
 
     // ─────────────────────────────────────────────────────────────────────
 
-    public void SetData(LobbyPlayerInfo info, string characterName)
+    public void SetData(SessionPlayerInfo info, string characterName)
     {
         if (playerNameText != null)
         {

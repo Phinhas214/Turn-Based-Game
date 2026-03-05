@@ -1,85 +1,42 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Netcode;
-using Unity.Netcode.Transports.UTP;
-using Unity.Networking.Transport.Relay;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
-using Unity.Services.Lobby;
-using Unity.Services.Lobby.Models;
-using Unity.Services.Relay;
-using Unity.Services.Relay.Models;
+using Unity.Services.Multiplayer;
 using UnityEngine;
 
-/// <summary>
-/// Central manager for Unity Gaming Services + Netcode for GameObjects.
-///
-/// Responsibilities:
-///   1. Anonymous sign-in via Authentication service
-///   2. Create / join a Lobby (player list, ready state, character choices)
-///   3. Allocate / join a Relay server so players don't need port forwarding
-///   4. Start NGO as Host or Client
-///   5. Expose simple events that UI listens to
-///
-/// Setup:
-///   - Attach to a persistent GameObject in your Main Menu scene
-///   - Assign the NetworkManager reference in the Inspector
-///   - Call CreateLobby() or JoinLobby() from your UI buttons
-/// </summary>
 public class NetworkGameManager : MonoBehaviour
 {
     // ── Singleton ─────────────────────────────────────────────────────────
     public static NetworkGameManager Instance { get; private set; }
 
     // ── Inspector ─────────────────────────────────────────────────────────
-    [Header("References")]
-    [SerializeField] private NetworkManager networkManager;
-
-    [Header("Lobby Settings")]
-    [Tooltip("Lobby name shown in the browser (overridden by host input at runtime).")]
-    [SerializeField] private string defaultLobbyName = "Dungeon Run";
+    [Header("Session Settings")]
     [SerializeField] private int maxPlayers = 4;
 
-    [Tooltip("How often (seconds) the host heartbeats the lobby to keep it alive.")]
-    [SerializeField] private float lobbyHeartbeatInterval = 15f;
-
-    [Tooltip("How often (seconds) all clients poll lobby data for updates.")]
-    [SerializeField] private float lobbyPollInterval = 2f;
-
-    // ── Lobby data keys ───────────────────────────────────────────────────
-    // These string constants are written into Lobby custom data so all players
-    // can read them without a direct RPC before NGO is started.
-    private const string KEY_RELAY_CODE     = "RelayCode";
-    private const string KEY_GAME_STARTED   = "GameStarted";
-    // Per-player data keys
-    public const string KEY_PLAYER_NAME     = "PlayerName";
-    public const string KEY_CHARACTER_INDEX = "CharacterIndex";
-    public const string KEY_IS_READY        = "IsReady";
-
     // ── Public state ──────────────────────────────────────────────────────
-    public Lobby    CurrentLobby    { get; private set; }
-    public Player   LocalPlayer     { get; private set; }
+    public ISession CurrentSession  { get; private set; }
     public bool     IsHost          { get; private set; }
     public string   LocalPlayerId   { get; private set; }
-    public string   LocalPlayerName { get; private set; } = "Player";
+    public string   LocalPlayerName { get; set; } = "Player";
+
+    private Dictionary<string, int> characterSelections = new Dictionary<string, int>();
+    private int  localCharacterIndex = 0;
+    private bool localIsReady        = false;
 
     // ── Events ─────────────────────────────────────────────────────────────
-    public event Action                OnSignedIn;
-    public event Action<string>        OnSignInFailed;
-    public event Action<Lobby>         OnLobbyCreated;
-    public event Action<Lobby>         OnLobbyJoined;
-    public event Action<List<Player>>  OnLobbyPlayersUpdated;
-    public event Action                OnGameStarting;
-    public event Action<string>        OnLobbyError;
-    public event Action                OnLobbyLeft;
-    public event Action<string>        OnConnectionError;
+    public event Action         OnSignedIn;
+    public event Action<string> OnSignInFailed;
+    public event Action         OnSessionCreated;
+    public event Action         OnSessionJoined;
+    public event Action         OnGameStarting;
+    public event Action         OnSessionLeft;
+    public event Action<string> OnSessionError;
+    public event Action<List<SessionPlayerInfo>> OnPlayersUpdated;
 
-    // ── Private runtime ───────────────────────────────────────────────────
-    private Coroutine heartbeatCoroutine;
-    private Coroutine pollCoroutine;
-    private bool      servicesInitialized = false;
+    private List<SessionPlayerInfo> cachedPlayerList = new List<SessionPlayerInfo>();
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -87,439 +44,277 @@ public class NetworkGameManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-
-        if (networkManager == null)
-            networkManager = FindFirstObjectByType<NetworkManager>();
     }
 
-    private void Start()
-    {
-        _ = InitializeServicesAsync();
-    }
+    private void Start() => _ = InitializeAsync();
 
-    private void OnDestroy()
-    {
-        StopAllCoroutines();
-
-        // Cleanly leave lobby on quit
-        _ = LeaveLobbyAsync();
-    }
+    private void OnDestroy() => _ = LeaveSessionAsync();
 
     // ─────────────────────────────────────────────────────────────────────
-    // Initialization
+    // Init & sign-in
     // ─────────────────────────────────────────────────────────────────────
 
-    private async Task InitializeServicesAsync()
+    private async Task InitializeAsync()
     {
         try
         {
             await UnityServices.InitializeAsync();
-            Debug.Log("[NetworkGameManager] Unity Services initialized.");
 
-            await SignInAnonymouslyAsync();
+            if (!AuthenticationService.Instance.IsSignedIn)
+                await AuthenticationService.Instance.SignInAnonymouslyAsync();
+
+            LocalPlayerId = AuthenticationService.Instance.PlayerId;
+            Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
+            OnSignedIn?.Invoke();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[NetworkGameManager] Service init failed: {e.Message}");
+            Debug.LogError($"[NetworkGameManager] Sign-in failed: {e.Message}");
             OnSignInFailed?.Invoke(e.Message);
         }
     }
 
-    private async Task SignInAnonymouslyAsync()
-    {
-        if (AuthenticationService.Instance.IsSignedIn)
-        {
-            LocalPlayerId   = AuthenticationService.Instance.PlayerId;
-            servicesInitialized = true;
-            OnSignedIn?.Invoke();
-            return;
-        }
-
-        await AuthenticationService.Instance.SignInAnonymouslyAsync();
-        LocalPlayerId       = AuthenticationService.Instance.PlayerId;
-        servicesInitialized = true;
-
-        Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
-        OnSignedIn?.Invoke();
-    }
-
     // ─────────────────────────────────────────────────────────────────────
-    // Lobby — Create
+    // Create session
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Creates a lobby and a Relay allocation, then starts NGO as Host.</summary>
-    public async Task CreateLobbyAsync(string lobbyName = null)
+    public async Task CreateSessionAsync()
     {
-        if (!servicesInitialized)
-        {
-            OnLobbyError?.Invoke("Services not ready yet. Please wait.");
-            return;
-        }
-
         try
         {
-            // 1. Allocate Relay
-            Allocation relayAllocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers - 1);
-            string joinCode = await RelayService.Instance.GetJoinCodeAsync(relayAllocation.AllocationId);
-            Debug.Log($"[NetworkGameManager] Relay join code: {joinCode}");
-
-            // 2. Create Lobby with relay code stored as custom data
-            var lobbyOptions = new CreateLobbyOptions
+            var options = new SessionOptions
             {
-                IsPrivate = false,
-                Player    = BuildLocalPlayer(),
-                Data = new Dictionary<string, DataObject>
-                {
-                    { KEY_RELAY_CODE,   new DataObject(DataObject.VisibilityOptions.Member, joinCode) },
-                    { KEY_GAME_STARTED, new DataObject(DataObject.VisibilityOptions.Member, "false") }
-                }
-            };
+                MaxPlayers = maxPlayers,
+                Name       = $"{LocalPlayerName}'s Game"
+            }.WithRelayNetwork();
 
-            string name = string.IsNullOrEmpty(lobbyName) ? defaultLobbyName : lobbyName;
-            CurrentLobby = await LobbyService.Instance.CreateLobbyAsync(name, maxPlayers, lobbyOptions);
-            IsHost       = true;
+            CurrentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
+            IsHost = true;
 
-            Debug.Log($"[NetworkGameManager] Lobby created: {CurrentLobby.Id}");
+            SubscribeToSessionEvents();
+            characterSelections[LocalPlayerId] = localCharacterIndex;
 
-            // 3. Start NGO as Host using Relay
-            SetRelayHostData(relayAllocation);
-            networkManager.StartHost();
-
-            // 4. Start lobby maintenance
-            StartLobbyCoroutines();
-
-            OnLobbyCreated?.Invoke(CurrentLobby);
+            Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
+            OnSessionCreated?.Invoke();
+            RefreshPlayerList();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[NetworkGameManager] CreateLobby failed: {e.Message}");
-            OnLobbyError?.Invoke($"Failed to create lobby: {e.Message}");
+            Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
+            OnSessionError?.Invoke($"Failed to create session: {e.Message}");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Lobby — Join by code
+    // Join session
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Joins a lobby by its short join code (shown in the lobby browser).</summary>
-    public async Task JoinLobbyByCodeAsync(string lobbyCode)
+    public async Task JoinSessionAsync(string joinCode)
     {
-        if (!servicesInitialized)
+        if (string.IsNullOrWhiteSpace(joinCode))
         {
-            OnLobbyError?.Invoke("Services not ready yet.");
+            OnSessionError?.Invoke("Please enter a join code.");
             return;
         }
 
         try
         {
-            var joinOptions = new JoinLobbyByCodeOptions { Player = BuildLocalPlayer() };
-            CurrentLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(lobbyCode.ToUpper(), joinOptions);
-            IsHost       = false;
+            CurrentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode.Trim().ToUpper());
+            IsHost = false;
 
-            Debug.Log($"[NetworkGameManager] Joined lobby: {CurrentLobby.Id}");
+            SubscribeToSessionEvents();
+            characterSelections[LocalPlayerId] = localCharacterIndex;
 
-            // Get relay join code from lobby data and connect via NGO
-            string relayCode = CurrentLobby.Data[KEY_RELAY_CODE].Value;
-            await JoinRelayAsync(relayCode);
-
-            StartLobbyCoroutines();
-            OnLobbyJoined?.Invoke(CurrentLobby);
+            Debug.Log($"[NetworkGameManager] Joined session: {CurrentSession.Id}");
+            OnSessionJoined?.Invoke();
+            RefreshPlayerList();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[NetworkGameManager] JoinLobby failed: {e.Message}");
-            OnLobbyError?.Invoke($"Failed to join lobby: {e.Message}");
+            Debug.LogError($"[NetworkGameManager] JoinSession failed: {e.Message}");
+            OnSessionError?.Invoke($"Failed to join: {e.Message}");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Lobby — Quick join (for testing)
+    // Start game
     // ─────────────────────────────────────────────────────────────────────
 
-    public async Task QuickJoinAsync()
-    {
-        if (!servicesInitialized)
-        {
-            OnLobbyError?.Invoke("Services not ready yet.");
-            return;
-        }
-
-        try
-        {
-            var quickJoinOptions = new QuickJoinLobbyOptions { Player = BuildLocalPlayer() };
-            CurrentLobby = await LobbyService.Instance.QuickJoinLobbyAsync(quickJoinOptions);
-            IsHost       = false;
-
-            string relayCode = CurrentLobby.Data[KEY_RELAY_CODE].Value;
-            await JoinRelayAsync(relayCode);
-
-            StartLobbyCoroutines();
-            OnLobbyJoined?.Invoke(CurrentLobby);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NetworkGameManager] QuickJoin failed: {e.Message}");
-            OnLobbyError?.Invoke($"Could not find a lobby to join.");
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Relay — Join as Client
-    // ─────────────────────────────────────────────────────────────────────
-
-    private async Task JoinRelayAsync(string joinCode)
-    {
-        JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCode);
-        SetRelayClientData(joinAllocation);
-        networkManager.StartClient();
-        Debug.Log("[NetworkGameManager] NGO Client started via Relay.");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Game start — Host triggers this
-    // ─────────────────────────────────────────────────────────────────────
-
-    /// <summary>Host calls this once all players are ready. Loads the game scene.</summary>
-    public async Task StartGameAsync()
+    public void StartGame()
     {
         if (!IsHost)
         {
-            Debug.LogWarning("[NetworkGameManager] Only the host can start the game.");
+            Debug.LogWarning("[NetworkGameManager] Only host can start the game.");
             return;
         }
 
-        try
-        {
-            // Mark game as started in lobby so late joiners know
-            await LobbyService.Instance.UpdateLobbyAsync(CurrentLobby.Id, new UpdateLobbyOptions
-            {
-                Data = new Dictionary<string, DataObject>
-                {
-                    { KEY_GAME_STARTED, new DataObject(DataObject.VisibilityOptions.Member, "true") }
-                }
-            });
-
-            OnGameStarting?.Invoke();
-
-            // NGO scene load — all clients load the same scene
-            networkManager.SceneManager.LoadScene("GameScene", UnityEngine.SceneManagement.LoadSceneMode.Single);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NetworkGameManager] StartGame failed: {e.Message}");
-        }
+        OnGameStarting?.Invoke();
+        NetworkManager.Singleton.SceneManager.LoadScene(
+            "GameScene",
+            UnityEngine.SceneManagement.LoadSceneMode.Single);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Player data — update character selection or ready state
+    // Character selection
+    // FIX: Replaced UpdatePlayerOptionsAsync (wrong API) with
+    //      CurrentPlayer.SetProperty() + SaveCurrentPlayerDataAsync()
     // ─────────────────────────────────────────────────────────────────────
 
-    public async Task UpdatePlayerDataAsync(int characterIndex, bool isReady)
+    public void SetLocalCharacterSelection(int index)
     {
-        if (CurrentLobby == null) return;
+        localCharacterIndex = index;
+        characterSelections[LocalPlayerId] = index;
+        _ = SyncPlayerDataAsync();
+        RefreshPlayerList();
+    }
 
+    public void SetLocalReadyState(bool ready)
+    {
+        localIsReady = ready;
+        _ = SyncPlayerDataAsync();
+        RefreshPlayerList();
+    }
+
+    private async Task SyncPlayerDataAsync()
+    {
+        if (CurrentSession == null) return;
         try
         {
-            await LobbyService.Instance.UpdatePlayerAsync(CurrentLobby.Id, LocalPlayerId,
-                new UpdatePlayerOptions
-                {
-                    Data = new Dictionary<string, PlayerDataObject>
-                    {
-                        { KEY_CHARACTER_INDEX, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, characterIndex.ToString()) },
-                        { KEY_IS_READY,        new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, isReady.ToString()) },
-                        { KEY_PLAYER_NAME,     new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, LocalPlayerName) }
-                    }
-                });
+            // CORRECT API: set properties on CurrentPlayer then save
+            CurrentSession.CurrentPlayer.SetProperty("CharIdx", new PlayerProperty(localCharacterIndex.ToString()));
+            CurrentSession.CurrentPlayer.SetProperty("IsReady", new PlayerProperty(localIsReady.ToString()));
+            CurrentSession.CurrentPlayer.SetProperty("Name",    new PlayerProperty(LocalPlayerName));
+            await CurrentSession.SaveCurrentPlayerDataAsync();
         }
         catch (Exception e)
         {
-            Debug.LogError($"[NetworkGameManager] UpdatePlayerData failed: {e.Message}");
+            Debug.LogWarning($"[NetworkGameManager] SyncPlayerData failed: {e.Message}");
         }
+    }
+
+    public Dictionary<string, int> GetCharacterSelections() => new Dictionary<string, int>(characterSelections);
+
+    public void RegisterCharacterSelection(string playerId, int characterIndex)
+    {
+        characterSelections[playerId] = characterIndex;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Player list
+    // FIX: Replaced player.Data with player.Properties (correct API)
+    //      Replaced CurrentSession.HostId with IsHost (correct API)
+    // ─────────────────────────────────────────────────────────────────────
+
+    public List<SessionPlayerInfo> GetPlayerList() => cachedPlayerList;
+    public string GetJoinCode()     => CurrentSession?.Code ?? "N/A";
+    public int    GetMaxPlayers()   => maxPlayers;
+    public bool   AllPlayersReady() => localIsReady;
+
+    private void RefreshPlayerList()
+    {
+        cachedPlayerList.Clear();
+        if (CurrentSession == null) { OnPlayersUpdated?.Invoke(cachedPlayerList); return; }
+
+        foreach (var player in CurrentSession.Players)
+        {
+            bool isLocal = player.Id == LocalPlayerId;
+
+            int    charIdx = isLocal ? localCharacterIndex : 0;
+            bool   ready   = isLocal ? localIsReady : false;
+            string name    = isLocal ? LocalPlayerName : "Player";
+
+            // CORRECT API: player.Properties not player.Data
+            if (player.Properties != null)
+            {
+                if (player.Properties.TryGetValue("CharIdx", out var charProp))
+                    int.TryParse(charProp.Value, out charIdx);
+
+                if (player.Properties.TryGetValue("IsReady", out var readyProp))
+                    bool.TryParse(readyProp.Value, out ready);
+
+                if (player.Properties.TryGetValue("Name", out var nameProp) && !string.IsNullOrEmpty(nameProp.Value))
+                    name = nameProp.Value;
+            }
+
+            // CORRECT API: IsHost is a bool on ISession meaning "am I the host"
+            // There is no per-player HostId — only the local player can be identified as host
+            bool isHostPlayer = isLocal && IsHost;
+
+            cachedPlayerList.Add(new SessionPlayerInfo(player.Id, name, charIdx, ready, isLocal, isHostPlayer));
+        }
+
+        OnPlayersUpdated?.Invoke(cachedPlayerList);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Leave
+    // ─────────────────────────────────────────────────────────────────────
+
+    public async Task LeaveSessionAsync()
+    {
+        if (CurrentSession == null) return;
+
+        UnsubscribeFromSessionEvents();
+
+        try { await CurrentSession.LeaveAsync(); }
+        catch (Exception e) { Debug.LogWarning($"[NetworkGameManager] Leave error: {e.Message}"); }
+
+        CurrentSession = null;
+        NetworkManager.Singleton?.Shutdown();
+        OnSessionLeft?.Invoke();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Session events
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void SubscribeToSessionEvents()
+    {
+        if (CurrentSession == null) return;
+        CurrentSession.PlayerJoined  += HandlePlayerJoined;
+        CurrentSession.PlayerLeaving += HandlePlayerLeft;
+        CurrentSession.Changed       += HandleSessionChanged;
+    }
+
+    private void UnsubscribeFromSessionEvents()
+    {
+        if (CurrentSession == null) return;
+        CurrentSession.PlayerJoined  -= HandlePlayerJoined;
+        CurrentSession.PlayerLeaving -= HandlePlayerLeft;
+        CurrentSession.Changed       -= HandleSessionChanged;
+    }
+
+    private void HandlePlayerJoined(string playerId)
+    {
+        Debug.Log($"[NetworkGameManager] Player joined: {playerId}");
+        RefreshPlayerList();
+    }
+
+    private void HandlePlayerLeft(string playerId)
+    {
+        Debug.Log($"[NetworkGameManager] Player left: {playerId}");
+        characterSelections.Remove(playerId);
+        RefreshPlayerList();
+    }
+
+    private void HandleSessionChanged()
+    {
+        RefreshPlayerList();
     }
 
     public void SetLocalPlayerName(string name)
     {
         LocalPlayerName = string.IsNullOrWhiteSpace(name) ? "Player" : name;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Lobby maintenance
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void StartLobbyCoroutines()
-    {
-        StopLobbyCoroutines();
-
-        if (IsHost)
-            heartbeatCoroutine = StartCoroutine(HeartbeatLobbyRoutine());
-
-        pollCoroutine = StartCoroutine(PollLobbyRoutine());
-    }
-
-    private void StopLobbyCoroutines()
-    {
-        if (heartbeatCoroutine != null) StopCoroutine(heartbeatCoroutine);
-        if (pollCoroutine      != null) StopCoroutine(pollCoroutine);
-    }
-
-    private IEnumerator HeartbeatLobbyRoutine()
-    {
-        var wait = new WaitForSeconds(lobbyHeartbeatInterval);
-        while (true)
-        {
-            yield return wait;
-            if (CurrentLobby == null) yield break;
-            _ = LobbyService.Instance.SendHeartbeatPingAsync(CurrentLobby.Id);
-        }
-    }
-
-    private IEnumerator PollLobbyRoutine()
-    {
-        var wait = new WaitForSeconds(lobbyPollInterval);
-        while (true)
-        {
-            yield return wait;
-            if (CurrentLobby == null) yield break;
-            _ = PollLobbyAsync();
-        }
-    }
-
-    private async Task PollLobbyAsync()
-    {
-        try
-        {
-            CurrentLobby = await LobbyService.Instance.GetLobbyAsync(CurrentLobby.Id);
-            OnLobbyPlayersUpdated?.Invoke(CurrentLobby.Players);
-
-            // Check if host started the game (non-host clients pick this up here)
-            if (!IsHost && CurrentLobby.Data.TryGetValue(KEY_GAME_STARTED, out var started))
-            {
-                if (started.Value == "true")
-                {
-                    StopLobbyCoroutines();
-                    OnGameStarting?.Invoke();
-                }
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"[NetworkGameManager] Poll failed: {e.Message}");
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Leave lobby
-    // ─────────────────────────────────────────────────────────────────────
-
-    public async Task LeaveLobbyAsync()
-    {
-        if (CurrentLobby == null) return;
-
-        StopLobbyCoroutines();
-
-        try
-        {
-            if (IsHost)
-                await LobbyService.Instance.DeleteLobbyAsync(CurrentLobby.Id);
-            else
-                await LobbyService.Instance.RemovePlayerAsync(CurrentLobby.Id, LocalPlayerId);
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"[NetworkGameManager] LeaveLobby error: {e.Message}");
-        }
-
-        CurrentLobby = null;
-        networkManager?.Shutdown();
-        OnLobbyLeft?.Invoke();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers — Relay transport setup
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void SetRelayHostData(Allocation allocation)
-    {
-        var relayServerData = new RelayServerData(allocation, "dtls");
-        networkManager.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
-    }
-
-    private void SetRelayClientData(JoinAllocation allocation)
-    {
-        var relayServerData = new RelayServerData(allocation, "dtls");
-        networkManager.GetComponent<UnityTransport>().SetRelayServerData(relayServerData);
-    }
-
-    private Player BuildLocalPlayer()
-    {
-        return new Player
-        {
-            Data = new Dictionary<string, PlayerDataObject>
-            {
-                { KEY_PLAYER_NAME,     new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, LocalPlayerName) },
-                { KEY_CHARACTER_INDEX, new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, "0") },
-                { KEY_IS_READY,        new PlayerDataObject(PlayerDataObject.VisibilityOptions.Member, "false") }
-            }
-        };
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Utility — read lobby player list into a friendlier struct
-    // ─────────────────────────────────────────────────────────────────────
-
-    public List<LobbyPlayerInfo> GetLobbyPlayerInfos()
-    {
-        var list = new List<LobbyPlayerInfo>();
-        if (CurrentLobby == null) return list;
-
-        foreach (Player p in CurrentLobby.Players)
-        {
-            string name    = p.Data.TryGetValue(KEY_PLAYER_NAME,     out var n) ? n.Value : "Player";
-            int    charIdx = p.Data.TryGetValue(KEY_CHARACTER_INDEX,  out var c) ? int.Parse(c.Value) : 0;
-            bool   ready   = p.Data.TryGetValue(KEY_IS_READY,         out var r) && r.Value == "True";
-            bool   isLocal = p.Id == LocalPlayerId;
-
-            list.Add(new LobbyPlayerInfo(p.Id, name, charIdx, ready, isLocal, p.Id == CurrentLobby.HostId));
-        }
-
-        return list;
-    }
-
-    public bool AllPlayersReady()
-    {
-        if (CurrentLobby == null) return false;
-        foreach (Player p in CurrentLobby.Players)
-        {
-            if (!p.Data.TryGetValue(KEY_IS_READY, out var r) || r.Value != "True")
-                return false;
-        }
-        return CurrentLobby.Players.Count >= 1; // at least 1 player needed
-    }
-
-    /// <summary>Returns the character index chosen by each player, keyed by their UGS Player ID.</summary>
-    public Dictionary<string, int> GetCharacterSelections()
-    {
-        var dict = new Dictionary<string, int>();
-        if (CurrentLobby == null) return dict;
-        foreach (Player p in CurrentLobby.Players)
-        {
-            int idx = p.Data.TryGetValue(KEY_CHARACTER_INDEX, out var c) ? int.Parse(c.Value) : 0;
-            dict[p.Id] = idx;
-        }
-        return dict;
+        _ = SyncPlayerDataAsync();
     }
 }
 
-// ── Simple data struct ─────────────────────────────────────────────────────────
+// ── Player info struct ────────────────────────────────────────────────────────
 [Serializable]
-public struct LobbyPlayerInfo
+public struct SessionPlayerInfo
 {
     public string PlayerUgsId;
     public string DisplayName;
@@ -528,7 +323,7 @@ public struct LobbyPlayerInfo
     public bool   IsLocalPlayer;
     public bool   IsHost;
 
-    public LobbyPlayerInfo(string id, string name, int charIdx, bool ready, bool isLocal, bool isHost)
+    public SessionPlayerInfo(string id, string name, int charIdx, bool ready, bool isLocal, bool isHost)
     {
         PlayerUgsId    = id;
         DisplayName    = name;
