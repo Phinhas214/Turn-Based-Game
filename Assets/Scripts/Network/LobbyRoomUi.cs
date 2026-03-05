@@ -4,40 +4,69 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Lobby room panel — activated automatically when a session becomes active.
+/// Handles everything inside the Lobby Panel.
 ///
-/// The Multiplayer Widgets handle create/join/leave — this script handles:
-///   - Character selection with visual highlights
-///   - Ready toggle
-///   - Player list display (uses LobbyPlayerEntry prefab)
-///   - Start Game button (host only, enabled when local player is ready)
+/// FIX: We no longer disable the LobbyPanel GameObject itself because if it starts
+/// inactive, Awake never runs and the session events never get subscribed to.
+/// Instead, LobbyPanel stays ACTIVE in the scene always, and we show/hide a
+/// child "LobbyContent" GameObject that contains all the visible UI.
 ///
-/// SCENE HIERARCHY (inside LobbyPanel GameObject):
-///   [Widget] Show Session Code         ← join code display, auto-updated by widget
-///   PlayerCountText (TMP)              ← "2 / 4 players"
-///   PlayerListContainer                ← Vertical Layout Group, holds LobbyPlayerEntry prefabs
-///   CharacterSelectPanel
-///       CharacterButton0..3            ← one Button per class
-///       CharacterHighlight0..3         ← one Image per class (enabled = selected)
-///   ReadyButton
-///   StartButton                        ← host only
-///   [Widget] Leave Session
+/// REQUIRED HIERARCHY:
+///
+///   LobbyPanel                        ← ACTIVE at start, has LobbyRoomUI component
+///     LobbyContent                    ← INACTIVE at start — this is what we show/hide
+///       ShowSessionCode               ← Widget
+///       PlayerCountText               ← TextMeshProUGUI  e.g. "2 / 4 players"
+///       PlayerList                    ← empty GO + Vertical Layout Group (player slots spawn here)
+///       CharacterSelectPanel          ← empty GO + Horizontal Layout Group
+///           KnightButton              ← Button (index 0)
+///               CharacterImage        ← child Image (portrait sprite goes here)
+///           RogueButton               ← Button (index 1)
+///           MageButton                ← Button (index 2)
+///           ClericButton              ← Button (index 3)
+///       SelectedCharacterName         ← TextMeshProUGUI
+///       ReadyButton                   ← Button
+///       StartButton                   ← Button (host only)
+///       Exit (4)                      ← already your leave widget/button
+///
+/// INSPECTOR WIRING:
+///   Lobby Content        → LobbyContent GameObject
+///   Player List          → PlayerList Transform
+///   Player Entry Prefab  → your Slot prefab (has LobbyPlayerEntry component)
+///   Player Count Text    → PlayerCountText
+///   Character Buttons    → KnightButton, RogueButton, MageButton, ClericButton (in order)
+///   Character Sprites    → 4 portrait sprites (same order)
+///   Selected Char Text   → SelectedCharacterName
+///   Ready Button         → ReadyButton
+///   Start Button         → StartButton
 /// </summary>
 public class LobbyRoomUI : MonoBehaviour
 {
+    // ── Content container (we show/hide this, not LobbyPanel itself) ──────
+    [Header("Content Root")]
+    [SerializeField] private GameObject lobbyContent;  // the child that holds all lobby UI
+
+    // ── Player List ───────────────────────────────────────────────────────
     [Header("Player List")]
-    [SerializeField] private Transform           playerListContainer;
-    [SerializeField] private GameObject          playerEntryPrefab;     // has LobbyPlayerEntry component
-    [SerializeField] private TextMeshProUGUI     playerCountText;
+    [SerializeField] private Transform       playerList;
+    [SerializeField] private GameObject      playerEntryPrefab;
+    [SerializeField] private TextMeshProUGUI playerCountText;
 
+    // ── Character Selection ───────────────────────────────────────────────
     [Header("Character Select")]
-    [SerializeField] private List<Button>        characterButtons;       // one per class
-    [SerializeField] private List<Image>         characterHighlights;    // one Image per class
+    [SerializeField] private List<Button>    characterButtons;   // Knight=0, Rogue=1, Mage=2, Cleric=3
+    [SerializeField] private List<Sprite>    characterSprites;   // same order
+    [SerializeField] private TextMeshProUGUI selectedCharacterNameText;
+    [SerializeField] private Color selectedColor   = new Color(1f, 0.85f, 0.2f, 1f);
+    [SerializeField] private Color deselectedColor = new Color(1f, 1f, 1f, 0.4f);
 
+    // ── Buttons ───────────────────────────────────────────────────────────
     [Header("Buttons")]
-    [SerializeField] private Button              readyButton;
-    [SerializeField] private Button              startButton;            // host only
+    [SerializeField] private Button readyButton;
+    [SerializeField] private Button startButton;
 
+    // ── Runtime ───────────────────────────────────────────────────────────
+    private static readonly string[] CharacterNames = { "Knight", "Rogue", "Mage", "Cleric" };
     private int  selectedCharacterIndex = 0;
     private bool isReady               = false;
 
@@ -47,20 +76,30 @@ public class LobbyRoomUI : MonoBehaviour
 
     private void Awake()
     {
-        // Wire character buttons
+        // Wire character buttons and apply sprites
         for (int i = 0; i < characterButtons.Count; i++)
         {
             int idx = i;
             characterButtons[i]?.onClick.AddListener(() => SelectCharacter(idx));
+
+            // Apply portrait sprite to the child Image inside the button
+            if (i < characterSprites.Count && characterSprites[i] != null)
+            {
+                var images = characterButtons[i]?.GetComponentsInChildren<Image>();
+                // images[0] = button background, images[1] = portrait child Image
+                if (images != null && images.Length > 1)
+                    images[1].sprite = characterSprites[i];
+            }
         }
 
         readyButton ?.onClick.AddListener(OnReadyClicked);
         startButton ?.onClick.AddListener(OnStartClicked);
 
-        // Hidden until session is active
-        gameObject.SetActive(false);
+        // Hide the content — NOT the panel itself
+        lobbyContent?.SetActive(false);
     }
 
+    // Awake runs because LobbyPanel is ACTIVE — now OnEnable can subscribe
     private void OnEnable()
     {
         if (NetworkGameManager.Instance == null) return;
@@ -87,37 +126,46 @@ public class LobbyRoomUI : MonoBehaviour
 
     private void HandleSessionActive()
     {
-        gameObject.SetActive(true);
-        startButton?.gameObject.SetActive(NetworkGameManager.Instance.IsHost);
-        RefreshCharacterHighlights();
-        RefreshStartButton();
+        lobbyContent?.SetActive(true);
+
+        // Reset for new session
+        isReady = false;
+        selectedCharacterIndex = 0;
+        UpdateReadyButtonVisual();
+        RefreshCharacterButtons();
+
+        // Start button: visible only to host, disabled until all ready
+        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
+        startButton?.gameObject.SetActive(isHost);
+        if (startButton != null) startButton.interactable = false;
     }
 
     private void HandleSessionEnded()
     {
         isReady = false;
-        UpdateReadyButtonText();
-        gameObject.SetActive(false);
+        lobbyContent?.SetActive(false);
     }
 
     private void HandleGameStarting()
     {
-        gameObject.SetActive(false);
+        lobbyContent?.SetActive(false);
     }
 
     private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
     {
         // Rebuild player list
-        if (playerListContainer != null)
-            foreach (Transform child in playerListContainer)
+        if (playerList != null)
+        {
+            foreach (Transform child in playerList)
                 Destroy(child.gameObject);
 
-        if (playerEntryPrefab != null && playerListContainer != null)
-            foreach (var player in players)
-            {
-                var entry = Instantiate(playerEntryPrefab, playerListContainer);
-                entry.GetComponent<LobbyPlayerEntry>()?.Setup(player);
-            }
+            if (playerEntryPrefab != null)
+                foreach (var player in players)
+                {
+                    var entry = Instantiate(playerEntryPrefab, playerList);
+                    entry.GetComponent<LobbyPlayerEntry>()?.Setup(player);
+                }
+        }
 
         if (playerCountText != null)
             playerCountText.text = $"{players.Count} / {NetworkGameManager.Instance?.GetMaxPlayers() ?? 4} players";
@@ -126,21 +174,38 @@ public class LobbyRoomUI : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Character select
+    // Character selection
     // ─────────────────────────────────────────────────────────────────────
 
     private void SelectCharacter(int index)
     {
         selectedCharacterIndex = index;
         NetworkGameManager.Instance?.SetLocalCharacterSelection(index);
-        RefreshCharacterHighlights();
+        RefreshCharacterButtons();
     }
 
-    private void RefreshCharacterHighlights()
+    private void RefreshCharacterButtons()
     {
-        for (int i = 0; i < characterHighlights.Count; i++)
-            if (characterHighlights[i] != null)
-                characterHighlights[i].enabled = (i == selectedCharacterIndex);
+        for (int i = 0; i < characterButtons.Count; i++)
+        {
+            if (characterButtons[i] == null) continue;
+
+            bool selected = (i == selectedCharacterIndex);
+
+            // Tint button background
+            var btnImg = characterButtons[i].GetComponent<Image>();
+            if (btnImg != null) btnImg.color = selected ? selectedColor : deselectedColor;
+
+            // Scale selected button up
+            characterButtons[i].transform.localScale = selected
+                ? new Vector3(1.1f, 1.1f, 1f)
+                : Vector3.one;
+        }
+
+        if (selectedCharacterNameText != null)
+            selectedCharacterNameText.text = selectedCharacterIndex < CharacterNames.Length
+                ? CharacterNames[selectedCharacterIndex]
+                : "";
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -151,14 +216,19 @@ public class LobbyRoomUI : MonoBehaviour
     {
         isReady = !isReady;
         NetworkGameManager.Instance?.SetLocalReadyState(isReady);
-        UpdateReadyButtonText();
+        UpdateReadyButtonVisual();
         RefreshStartButton();
     }
 
-    private void UpdateReadyButtonText()
+    private void UpdateReadyButtonVisual()
     {
         var txt = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
         if (txt != null) txt.text = isReady ? "Not Ready" : "Ready!";
+
+        var img = readyButton?.GetComponent<Image>();
+        if (img != null) img.color = isReady
+            ? new Color(0.2f, 0.85f, 0.3f, 1f)
+            : Color.white;
     }
 
     private void OnStartClicked()
@@ -170,8 +240,7 @@ public class LobbyRoomUI : MonoBehaviour
 
     private void RefreshStartButton()
     {
-        if (startButton == null || NetworkGameManager.Instance == null) return;
-        if (!NetworkGameManager.Instance.IsHost) return;
+        if (startButton == null || !(NetworkGameManager.Instance?.IsHost ?? false)) return;
 
         bool allReady = NetworkGameManager.Instance.AllPlayersReady();
         startButton.interactable = allReady;
