@@ -36,6 +36,9 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         {
             healthComponent.InitializeHealth(maxHealth);
             currentHealth = healthComponent.CurrentHealth;
+            
+
+            // Subscribe to health updates
             healthComponent.OnHealthChanged += OnHealthChanged;
         }
         else

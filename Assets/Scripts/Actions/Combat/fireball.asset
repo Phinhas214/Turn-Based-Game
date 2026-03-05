@@ -15,13 +15,22 @@ MonoBehaviour:
   actionName: Attack
   icon: {fileID: 0}
   baseDamage: 10
-  attackPattern: {fileID: 0}
+  attackPattern: {fileID: 11400000, guid: 56c38d11e42b7e34ebe794a95c639bd4, type: 2}
   rotatesToFacing: 1
-  minRange: 0
-  maxRange: 0
+  minRange: 2
+  maxRange: 5
   canTargetSelf: 0
   staminaCost: 2
   requiresEnoughStamina: 1
-  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
-  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: 
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 0.27058825}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 0.20392157}
+  _summary: 'Damage      : 10
+
+    Stamina cost: 2
+
+    Pattern     : Fireball_AP
+    (5 tiles)
+
+    Range       : Ranged 2-5 tiles
+
+    Rotates     : True'

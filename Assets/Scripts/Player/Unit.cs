@@ -13,15 +13,16 @@ public class Unit : MonoBehaviour
 
     private void Awake()
     {
-        moveAction = GetComponent<MoveAction>();
-        spinAction = GetComponent<SpinAction>();
+        moveAction      = GetComponent<MoveAction>();
+        spinAction      = GetComponent<SpinAction>();
         baseActionArray = GetComponents<BaseAction>();
-        playerStats = GetComponent<PlayerStats>();
+        playerStats     = GetComponent<PlayerStats>();
     }
 
     private void Start()
     {
-        TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
     }
 
     private void Update()
@@ -29,38 +30,7 @@ public class Unit : MonoBehaviour
         if (!isInitialized || currentRoomGrid == null) return;
 
         GridPosition newGridPosition = currentRoomGrid.GetGridPosition(transform.position);
-        
-        if (!currentRoomGrid.IsValidGridPosition(newGridPosition))
-        {
-            RoomGrid newRoom = LevelGrid.Instance?.GetRoomAtPosition(transform.position);
-            
-            if (newRoom != null && newRoom != currentRoomGrid)
-            {
-                Debug.Log($"Player moved from {currentRoomGrid.gameObject.name} to {newRoom.gameObject.name}");
-                
-                currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
-                currentRoomGrid = newRoom;
-                gridPosition = newRoom.GetGridPosition(transform.position);
-                newRoom.AddUnitAtGridPosition(gridPosition, this);
-                
-                LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
-                if (levelGen != null)
-                {
-                    var rooms = levelGen.GetAllRooms();
-                    foreach (var room in rooms)
-                    {
-                        if (room.roomGrid == newRoom)
-                        {
-                            RoomManager.Instance?.SetCurrentRoom(room);
-                            break;
-                        }
-                    }
-                }
-                
-                return;
-            }
-        }
-        
+
         if (newGridPosition != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPosition))
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
@@ -72,16 +42,38 @@ public class Unit : MonoBehaviour
     private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
     {
         if (playerStats != null)
-        {
             playerStats.SetCurrentStaminaPoints(playerStats.GetMaxStaminaPoints());
-        }
     }
 
-    public MoveAction GetMoveAction() => moveAction;
-    public SpinAction GetSpinAction() => spinAction;
-    public BaseAction[] GetBaseActionArray() => baseActionArray;
-    public RoomGrid GetCurrentRoomGrid() => currentRoomGrid;
-    public bool IsInitialized() => isInitialized;
+    public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
+    {
+        // Remove from old room
+        if (currentRoomGrid != null && isInitialized)
+            currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+
+        currentRoomGrid = roomGrid;
+        gridPosition    = newGridPosition;
+
+        // Get world position from the room's tilemap
+        Vector3 targetPos = roomGrid.GetWorldPosition(newGridPosition);
+
+        // In 3D X/Z game — keep the player's current Y (ground level)
+        targetPos.y = transform.position.y;
+
+        transform.position = targetPos;
+        roomGrid.AddUnitAtGridPosition(newGridPosition, this);
+        isInitialized = true;
+
+        Debug.Log($"[Unit] Placed in {roomGrid.gameObject.name} at grid {newGridPosition}, world {targetPos}");
+    }
+
+    // ── Getters ────────────────────────────────────────────────────────────
+
+    public MoveAction   GetMoveAction()        => moveAction;
+    public SpinAction   GetSpinAction()        => spinAction;
+    public BaseAction[] GetBaseActionArray()   => baseActionArray;
+    public RoomGrid     GetCurrentRoomGrid()   => currentRoomGrid;
+    public bool         IsInitialized()        => isInitialized;
 
     public GridPosition GetGridPosition()
     {
@@ -96,7 +88,7 @@ public class Unit : MonoBehaviour
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
 
         currentRoomGrid = roomGrid;
-        
+
         if (currentRoomGrid != null)
         {
             gridPosition = currentRoomGrid.GetGridPosition(transform.position);
@@ -109,16 +101,9 @@ public class Unit : MonoBehaviour
         }
     }
 
-    public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
+    private void OnDestroy()
     {
-        if (currentRoomGrid != null && isInitialized)
-            currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
-
-        currentRoomGrid = roomGrid;
-        gridPosition = newGridPosition;
-
-        transform.position = roomGrid.GetWorldPosition(newGridPosition);
-        roomGrid.AddUnitAtGridPosition(newGridPosition, this);
-        isInitialized = true;
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged -= TurnSystem_OnTurnChanged;
     }
 }

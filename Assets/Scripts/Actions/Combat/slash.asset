@@ -28,8 +28,8 @@ MonoBehaviour:
 
     Stamina cost: 2
 
-    Pattern     : AttackPattern
-    (1 tiles)
+    Pattern     : Slash_AP (5
+    tiles)
 
     Range       : Melee (pattern at unit)
 
