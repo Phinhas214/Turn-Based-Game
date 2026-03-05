@@ -8971,7 +8971,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1005475518
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8990,6 +8990,7 @@ MonoBehaviour:
   - {fileID: 849865426}
   - {fileID: 1602214789}
   - {fileID: 327911737}
+  - {fileID: 1347767140}
   settingsCanvases:
   - {fileID: 1348339759}
 --- !u!114 &1005475519
@@ -12714,7 +12715,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!223 &1348339759
 Canvas:
   m_ObjectHideFlags: 0
