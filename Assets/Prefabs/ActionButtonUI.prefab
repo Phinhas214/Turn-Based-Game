@@ -378,6 +378,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2dce4b4468562470d8a1203f232f0e5d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  textMeshPro: {fileID: 5955462959834576266}
   button: {fileID: 1533686391129330328}
+  actionNameText: {fileID: 5955462959834576266}
   selectedGameObject: {fileID: 1119296110889199234}
+  staminaCostRoot: {fileID: 0}
+  staminaCostText: {fileID: 0}
+  staminaIcon: {fileID: 0}
+  unaffordableAlpha: 0.4
+  canvasGroup: {fileID: 0}
