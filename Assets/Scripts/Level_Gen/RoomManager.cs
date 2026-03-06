@@ -6,10 +6,7 @@ public class RoomManager : MonoBehaviour
 
     private LevelGenerator.PlacedRoom currentRoom;
 
-    // Original instance event — all existing listeners unchanged
     public System.Action<LevelGenerator.PlacedRoom> OnRoomChanged;
-
-    // NEW — static version so GameStateManager can subscribe before any instance exists
     public static System.Action<LevelGenerator.PlacedRoom> OnAnyRoomChanged;
 
     private void Awake()
@@ -19,14 +16,40 @@ public class RoomManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
     }
 
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
+        Debug.Log("ROOM MANAGER SET CURRENT ROOM: " + room.roomInstance.name);
+
         currentRoom = room;
-        OnRoomChanged?.Invoke(room);       // existing — unchanged
-        OnAnyRoomChanged?.Invoke(room);    // NEW — GameStateManager listens to this
+
+        OnRoomChanged?.Invoke(room);
+        OnAnyRoomChanged?.Invoke(room);
+
+        // --- CAMERA UPDATE ---
+        if (FreeTacticsCameraController.Instance == null)
+        {
+            Debug.LogWarning("⚠ Camera controller missing");
+            return;
+        }
+
+        CameraRoomBounds bounds = room.roomInstance.GetComponentInChildren<CameraRoomBounds>();
+
+        if (bounds == null)
+        {
+            Debug.LogError("❌ CameraRoomBounds NOT FOUND in room: " + room.roomInstance.name);
+            return;
+        }
+
+        Bounds b = bounds.GetBounds();
+
+        Debug.Log("📦 Camera bounds set: Center=" + b.center + " Size=" + b.size);
+
+        FreeTacticsCameraController.Instance.SetRoomBounds(b);
+        FreeTacticsCameraController.Instance.FocusOnPlayer();
     }
 
     public LevelGenerator.PlacedRoom GetCurrentRoom()
@@ -43,20 +66,61 @@ public class RoomManager : MonoBehaviour
     {
         if (targetRoom == null)
         {
-            Debug.LogError("Cannot transition to null room!");
+            Debug.LogError("❌ Cannot transition to null room!");
             return;
         }
 
+        Debug.Log("➡ Transitioning to room: " + targetRoom.roomInstance.name);
+
         Unit player = FindFirstObjectByType<Unit>();
+
         if (player == null)
         {
-            Debug.LogError("RoomManager: No player unit found!");
+            Debug.LogError("❌ RoomManager: No player unit found!");
             return;
         }
 
         GridPosition spawnGridPosition = targetRoom.roomGrid.GetGridPosition(doorWorldPosition);
+
         player.PlaceInRoom(targetRoom.roomGrid, spawnGridPosition);
 
         SetCurrentRoom(targetRoom);
+
+        // 🔎 DEBUG — list children in this room
+        Debug.Log("---- CHILDREN OF ROOM INSTANCE ----");
+        foreach (Transform t in targetRoom.roomInstance.GetComponentsInChildren<Transform>(true))
+        {
+            Debug.Log("Child: " + t.name);
+        }
+        Debug.Log("-----------------------------------");
+
+        CameraRoomBounds bounds = targetRoom.roomInstance.GetComponentInChildren<CameraRoomBounds>();
+
+        if (bounds == null)
+        {
+            Debug.LogError("❌ No CameraRoomBounds found in room: " + targetRoom.roomInstance.name);
+            return;
+        }
+
+        Debug.Log("✅ CameraRoomBounds FOUND in: " + bounds.gameObject.name);
+
+        Bounds b = bounds.GetBounds();
+
+        Debug.Log(
+            "📦 Room Bounds → Center: " + b.center +
+            " Size: " + b.size
+        );
+
+        if (FreeTacticsCameraController.Instance == null)
+        {
+            Debug.LogError("❌ Camera controller instance missing!");
+            return;
+        }
+
+        FreeTacticsCameraController.Instance.SetRoomBounds(b);
+
+        Debug.Log("🎥 Camera received bounds");
+
+        FreeTacticsCameraController.Instance.FocusOnPlayer();
     }
 }
