@@ -9,24 +9,18 @@ using UnityEngine;
 
 public class NetworkGameManager : MonoBehaviour
 {
-    // ── Singleton ─────────────────────────────────────────────────────────
     public static NetworkGameManager Instance { get; private set; }
-
-    // ── Inspector ─────────────────────────────────────────────────────────
     [Header("Session Settings")]
     [SerializeField] private int maxPlayers = 4;
-
-    // ── Public state ──────────────────────────────────────────────────────
     public ISession CurrentSession  { get; private set; }
-    public bool     IsHost          { get; private set; }
+    public bool     IsHost          => NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
     public string   LocalPlayerId   { get; private set; }
-    public string   LocalPlayerName { get; set; } = "Player";
+    public string   LocalPlayerName     { get; set; } = "Player";
+    public int      LocalCharacterIndex { get; private set; } = 0;
 
     private Dictionary<string, int> characterSelections = new Dictionary<string, int>();
     private int  localCharacterIndex = 0;
     private bool localIsReady        = false;
-
-    // ── Events ─────────────────────────────────────────────────────────────
     public event Action         OnSignedIn;
     public event Action<string> OnSignInFailed;
     public event Action         OnSessionCreated;
@@ -37,10 +31,6 @@ public class NetworkGameManager : MonoBehaviour
     public event Action<List<SessionPlayerInfo>> OnPlayersUpdated;
 
     private List<SessionPlayerInfo> cachedPlayerList = new List<SessionPlayerInfo>();
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -53,10 +43,6 @@ public class NetworkGameManager : MonoBehaviour
 
     private void OnDestroy() => _ = LeaveSessionAsync();
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Init & sign-in
-    // ─────────────────────────────────────────────────────────────────────
-
     private async Task InitializeAsync()
     {
         try
@@ -68,10 +54,10 @@ public class NetworkGameManager : MonoBehaviour
 
             LocalPlayerId = AuthenticationService.Instance.PlayerId;
             Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
-
-            // Set display name immediately after sign-in
-            string savedName = PlayerPrefs.GetString("PlayerName", "Player" + UnityEngine.Random.Range(100, 999));
+            string nameKey  = $"PlayerName_{LocalPlayerId}";
+            string savedName = PlayerPrefs.GetString(nameKey, "Player" + UnityEngine.Random.Range(100, 999));
             LocalPlayerName = savedName;
+            PlayerPrefs.SetString(nameKey, savedName);
             await SetAuthDisplayNameAsync(savedName);
 
             OnSignedIn?.Invoke();
@@ -82,10 +68,6 @@ public class NetworkGameManager : MonoBehaviour
             OnSignInFailed?.Invoke(e.Message);
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Create session
-    // ─────────────────────────────────────────────────────────────────────
 
     public async Task CreateSessionAsync()
     {
@@ -98,8 +80,6 @@ public class NetworkGameManager : MonoBehaviour
             }.WithRelayNetwork();
 
             CurrentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
-            IsHost = true;
-
             SubscribeToSessionEvents();
             characterSelections[LocalPlayerId] = localCharacterIndex;
 
@@ -114,10 +94,6 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Join session
-    // ─────────────────────────────────────────────────────────────────────
-
     public async Task JoinSessionAsync(string joinCode)
     {
         if (string.IsNullOrWhiteSpace(joinCode))
@@ -129,8 +105,6 @@ public class NetworkGameManager : MonoBehaviour
         try
         {
             CurrentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode.Trim().ToUpper());
-            IsHost = false;
-
             SubscribeToSessionEvents();
             characterSelections[LocalPlayerId] = localCharacterIndex;
 
@@ -145,34 +119,28 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Start game
-    // ─────────────────────────────────────────────────────────────────────
-
     public void StartGame()
     {
-        if (!IsHost)
-        {
-            Debug.LogWarning("[NetworkGameManager] Only host can start the game.");
-            return;
-        }
-
         OnGameStarting?.Invoke();
-        NetworkManager.Singleton.SceneManager.LoadScene(
-            "GameScene",
-            UnityEngine.SceneManagement.LoadSceneMode.Single);
-    }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Character selection
-    // FIX: Replaced UpdatePlayerOptionsAsync (wrong API) with
-    //      CurrentPlayer.SetProperty() + SaveCurrentPlayerDataAsync()
-    // ─────────────────────────────────────────────────────────────────────
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+        {
+            NetworkManager.Singleton.SceneManager.LoadScene(
+                "GameScene",
+                UnityEngine.SceneManagement.LoadSceneMode.Single);
+        }
+        else
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene("GameScene");
+        }
+    }
 
     public void SetLocalCharacterSelection(int index)
     {
-        localCharacterIndex = index;
-        characterSelections[LocalPlayerId] = index;
+        localCharacterIndex    = index;
+        LocalCharacterIndex    = index;
+        if (LocalPlayerId != null)
+            characterSelections[LocalPlayerId] = index;
         _ = SyncPlayerDataAsync();
         RefreshPlayerList();
     }
@@ -202,8 +170,6 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     public Dictionary<string, int> GetCharacterSelections() => new Dictionary<string, int>(characterSelections);
-
-    // ── Lobby phase flag — host sets it, clients detect it via Update polling ──
     private bool lobbyPhaseActive = false;
     public void SetLobbyPhase(bool active)
     {
@@ -223,8 +189,6 @@ public class NetworkGameManager : MonoBehaviour
         }
         catch (Exception e) { Debug.LogWarning($"SyncPhase failed: {e.Message}"); }
     }
-
-    // ── Char select phase flag — host sets it, clients read it via OnPlayersUpdated ──
     private bool charSelectPhaseActive = false;
     public void SetCharSelectPhase(bool active)
     {
@@ -233,19 +197,10 @@ public class NetworkGameManager : MonoBehaviour
     }
     public bool IsCharSelectPhase() => charSelectPhaseActive;
 
-    /// <summary>
-    /// Called by WidgetSessionBridge when a widget creates/joins a session
-    /// outside of our own CreateSessionAsync/JoinSessionAsync methods.
-    /// </summary>
     public void SyncExternalSession(Unity.Services.Multiplayer.ISession session)
     {
-        if (CurrentSession != null) return; // already have one
+        if (CurrentSession != null) return;
         CurrentSession = session;
-
-        // Determine if we are host by checking if we created it
-        // Widgets don't expose this directly so we check player count
-        // — if we're the only player we must be host
-        IsHost = session.Players.Count <= 1;
 
         SubscribeToSessionEvents();
         characterSelections[LocalPlayerId] = localCharacterIndex;
@@ -264,12 +219,6 @@ public class NetworkGameManager : MonoBehaviour
     {
         characterSelections[playerId] = characterIndex;
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Player list
-    // FIX: Replaced player.Data with player.Properties (correct API)
-    //      Replaced CurrentSession.HostId with IsHost (correct API)
-    // ─────────────────────────────────────────────────────────────────────
 
     public List<SessionPlayerInfo> GetPlayerList() => cachedPlayerList;
     public string GetJoinCode()     => CurrentSession?.Code ?? "N/A";
@@ -294,9 +243,7 @@ public class NetworkGameManager : MonoBehaviour
             int    charIdx = isLocal ? localCharacterIndex : 0;
             bool   ready   = isLocal ? localIsReady : false;
             string name    = isLocal ? LocalPlayerName : "Player";
-            // Note: for remote players, properties below will override these defaults
 
-            // CORRECT API: player.Properties not player.Data
             if (player.Properties != null)
             {
                 if (player.Properties.TryGetValue("CharIdx", out var charProp))
@@ -309,8 +256,6 @@ public class NetworkGameManager : MonoBehaviour
                     name = nameProp.Value;
             }
 
-            // CORRECT API: IsHost is a bool on ISession meaning "am I the host"
-            // There is no per-player HostId — only the local player can be identified as host
             bool isHostPlayer = isLocal && IsHost;
 
             cachedPlayerList.Add(new SessionPlayerInfo(player.Id, name, charIdx, ready, isLocal, isHostPlayer));
@@ -318,10 +263,6 @@ public class NetworkGameManager : MonoBehaviour
 
         OnPlayersUpdated?.Invoke(cachedPlayerList);
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Leave
-    // ─────────────────────────────────────────────────────────────────────
 
     public async Task LeaveSessionAsync()
     {
@@ -336,10 +277,6 @@ public class NetworkGameManager : MonoBehaviour
         NetworkManager.Singleton?.Shutdown();
         OnSessionLeft?.Invoke();
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Session events
-    // ─────────────────────────────────────────────────────────────────────
 
     private void SubscribeToSessionEvents()
     {
@@ -378,6 +315,8 @@ public class NetworkGameManager : MonoBehaviour
     public void SetLocalPlayerName(string name)
     {
         LocalPlayerName = string.IsNullOrWhiteSpace(name) ? "Player" : name;
+        string nameKey = $"PlayerName_{LocalPlayerId}";
+        PlayerPrefs.SetString(nameKey, LocalPlayerName);
         _ = SyncPlayerDataAsync();
         _ = SetAuthDisplayNameAsync(LocalPlayerName);
     }
@@ -395,8 +334,6 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 }
-
-// ── Player info struct ────────────────────────────────────────────────────────
 [Serializable]
 public struct SessionPlayerInfo
 {
