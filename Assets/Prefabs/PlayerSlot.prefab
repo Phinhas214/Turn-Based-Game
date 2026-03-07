@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3594517888175782869}
   - component: {fileID: 4809884691067298451}
   - component: {fileID: 5269105243656602101}
+  - component: {fileID: 3692908714867512817}
   m_Layer: 5
   m_Name: PlayerSlot
   m_TagString: Untagged
@@ -100,6 +101,26 @@ MonoBehaviour:
   youIndicator: {fileID: 0}
   readyColor: {r: 0.2, g: 0.9, b: 0.3, a: 1}
   notReadyColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.6}
+--- !u!114 &3692908714867512817
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4240679773057327650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 0
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: 300
+  m_PreferredHeight: 80
+  m_FlexibleWidth: -1
+  m_FlexibleHeight: -1
+  m_LayoutPriority: 1
 --- !u!1 &5288605614976059652
 GameObject:
   m_ObjectHideFlags: 0
