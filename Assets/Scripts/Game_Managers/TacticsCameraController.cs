@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 
 public class FreeTacticsCameraController : MonoBehaviour
@@ -31,7 +32,6 @@ public class FreeTacticsCameraController : MonoBehaviour
     private Vector3 lastMousePosition;
     private float targetOrthoSize;
 
-    // State for snapping
     private bool isSnappingToPlayer = false;
 
     void Awake()
@@ -52,16 +52,11 @@ public class FreeTacticsCameraController : MonoBehaviour
 
     void Update()
     {
-        // If the player tries to move the camera manually, cancel the auto-snap
         if (HasManualInput())
-        {
             isSnappingToPlayer = false;
-        }
 
         if (isSnappingToPlayer)
-        {
             SnapToPlayerLogic();
-        }
         else
         {
             HandleKeyboardPan();
@@ -73,26 +68,62 @@ public class FreeTacticsCameraController : MonoBehaviour
 
     private bool HasManualInput()
     {
-        return Input.GetAxisRaw("Horizontal") != 0 || 
-               Input.GetAxisRaw("Vertical") != 0 || 
+        return Input.GetAxisRaw("Horizontal") != 0 ||
+               Input.GetAxisRaw("Vertical")   != 0 ||
                Input.GetMouseButton(1);
     }
 
     private void SnapToPlayerLogic()
     {
-        Transform player = PlayerTarget.Instance?.transform; // Ensure PlayerTarget.Instance exists!
+        Transform player = FindLocalPlayerTransform();
+
         if (player != null)
         {
             Vector3 targetPos = player.position + followOffset;
             basePosition = Vector3.Lerp(basePosition, targetPos, Time.deltaTime * snapSmoothness);
 
-            // Stop snapping once we are pixel-perfect (or very close)
             if (Vector3.Distance(basePosition, targetPos) < 0.01f)
             {
                 basePosition = targetPos;
                 isSnappingToPlayer = false;
             }
         }
+        else
+        {
+            // No local player found yet — stop snapping so we don't freeze
+            isSnappingToPlayer = false;
+        }
+    }
+
+    /// <summary>
+    /// Finds the Transform of the player owned by this client.
+    /// Works in both single-player (no NetworkObject) and multiplayer (IsOwner check).
+    /// </summary>
+    private Transform FindLocalPlayerTransform()
+    {
+        // Look through all PlayerTarget components in the scene
+        foreach (PlayerTarget pt in FindObjectsByType<PlayerTarget>(FindObjectsSortMode.None))
+        {
+            NetworkObject netObj = pt.GetComponent<NetworkObject>();
+
+            if (netObj != null)
+            {
+                // Multiplayer: only follow the unit this client owns
+                if (netObj.IsOwner)
+                    return pt.transform;
+            }
+            else
+            {
+                // Single-player / editor testing: no NetworkObject, just use it
+                return pt.transform;
+            }
+        }
+
+        // Fallback: try the old singleton in case PlayerTarget.Instance is still used
+        if (PlayerTarget.Instance != null)
+            return PlayerTarget.Instance.transform;
+
+        return null;
     }
 
     void LateUpdate()
@@ -100,7 +131,7 @@ public class FreeTacticsCameraController : MonoBehaviour
         ApplyShake();
     }
 
-    // --- Public API ---
+    // ── Public API ────────────────────────────────────────────────────────
 
     public void FocusOnPlayer()
     {
@@ -112,7 +143,7 @@ public class FreeTacticsCameraController : MonoBehaviour
         shakeTimeRemaining = shakeDuration;
     }
 
-    // --- Movement Logic ---
+    // ── Movement ──────────────────────────────────────────────────────────
 
     void HandleKeyboardPan()
     {
@@ -139,11 +170,10 @@ public class FreeTacticsCameraController : MonoBehaviour
     void HandleZoom()
     {
         if (!cam) return;
+
         float scroll = Input.mouseScrollDelta.y;
         if (Mathf.Abs(scroll) > 0.01f)
-        {
             targetOrthoSize = Mathf.Clamp(targetOrthoSize - scroll * zoomSpeed, orthoMin, orthoMax);
-        }
 
         cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, targetOrthoSize, Time.deltaTime * 8f);
     }
@@ -153,13 +183,16 @@ public class FreeTacticsCameraController : MonoBehaviour
         if (shakeTimeRemaining > 0f)
         {
             shakeTimeRemaining -= Time.deltaTime;
-            float t = shakeTimeRemaining / shakeDuration;
+            float t        = shakeTimeRemaining / shakeDuration;
             float strength = shakeAmplitude * t;
-            float noiseX = (Mathf.PerlinNoise(Time.time * shakeFrequency, 0f) - 0.5f) * 2f;
-            float noiseZ = (Mathf.PerlinNoise(0f, Time.time * shakeFrequency) - 0.5f) * 2f;
-            shakeOffset = new Vector3(noiseX, 0f, noiseZ) * strength;
+            float noiseX   = (Mathf.PerlinNoise(Time.time * shakeFrequency, 0f) - 0.5f) * 2f;
+            float noiseZ   = (Mathf.PerlinNoise(0f, Time.time * shakeFrequency) - 0.5f) * 2f;
+            shakeOffset    = new Vector3(noiseX, 0f, noiseZ) * strength;
         }
-        else { shakeOffset = Vector3.zero; }
+        else
+        {
+            shakeOffset = Vector3.zero;
+        }
 
         transform.position = basePosition + shakeOffset;
     }

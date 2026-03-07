@@ -3,7 +3,16 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-
+/// <summary>
+/// Syncs character selection, ready state, and phase transitions to all clients
+/// using NGO NetworkVariables and ServerRpcs — no UGS session needed.
+///
+/// SETUP:
+///   - Create a GameObject in your Menu scene called "LobbySync"
+///   - Add NetworkObject + this component to it
+///   - Make it a prefab and add to NetworkManager's NetworkPrefabs list
+///   - Host spawns it automatically on connect (see Awake below)
+/// </summary>
 public class LobbySync : NetworkBehaviour
 {
     public static LobbySync Instance { get; private set; }
@@ -21,12 +30,24 @@ public class LobbySync : NetworkBehaviour
 
     private void Awake()
     {
-
+        // Don't destroy here — NGO manages this object's lifecycle
+        // Instance is set in OnNetworkSpawn instead
     }
 
     public override void OnNetworkSpawn()
     {
+        // If another LobbySync already exists (carried over from menu scene), destroy this one.
+        if (Instance != null && Instance != this)
+        {
+            NetworkObject.Despawn();
+            return;
+        }
+
         Instance = this;
+
+        // Persist into the game scene so NetworkedLevelGenerator can read character selections.
+        DontDestroyOnLoad(gameObject);
+
         charSelectPhaseActive.OnValueChanged += OnCharSelectPhaseChanged;
         RegisterClientServerRpc(NetworkManager.Singleton.LocalClientId);
     }

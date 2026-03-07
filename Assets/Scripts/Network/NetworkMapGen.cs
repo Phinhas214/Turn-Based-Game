@@ -237,12 +237,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom));
         LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
 
-        // Get the lobby player list — index i matches connected client i
-        // This is more reliable than UGS ID mapping because the order is consistent
-        var playerList = NetworkGameManager.Instance != null
-            ? NetworkGameManager.Instance.GetPlayerList()
-            : new System.Collections.Generic.List<SessionPlayerInfo>();
-
+        // Read character selections directly from LobbySync — it persists from the menu scene
+        // via DontDestroyOnLoad so the data is guaranteed to be here when we spawn.
         var connectedClients = NetworkManager.Singleton.ConnectedClientsList;
 
         int centerX = startRoom.roomGrid.GetWidth() / 2;
@@ -252,8 +248,13 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         {
             ulong clientId = connectedClients[i].ClientId;
 
-            // Match lobby list index to client index — same join order
-            int charIndex = (i < playerList.Count) ? playerList[i].CharacterIndex : 0;
+            // LobbySync holds the char index each client chose in the menu.
+            // Falls back to 0 if LobbySync is missing or the client never registered.
+            int charIndex = (LobbySync.Instance != null)
+                ? LobbySync.Instance.GetCharacterIndex(clientId)
+                : 0;
+
+            Debug.Log($"[NetworkedLevelGenerator] Client {clientId} → charIndex {charIndex}");
 
             GameObject prefabToSpawn = GetPlayerPrefab(charIndex);
 
