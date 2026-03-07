@@ -46,6 +46,11 @@ public class MainMenuController : MonoBehaviour
     [Header("Player Name")]
     [SerializeField] private TMP_InputField playerNameInput;
 
+    [Header("Enter Lobby")]
+    [SerializeField] private Button enterLobbyButton; // everyone clicks this after connecting
+
+
+
     // ── Phase 1: Waiting Lobby ────────────────────────────────────────────
     // WaitingLobbyPanel = always active parent
     // WaitingLobbyContent = inactive at start, shown when session is active
@@ -95,6 +100,7 @@ public class MainMenuController : MonoBehaviour
         backToModeButton       ?.onClick.AddListener(() => ShowNavPanel(modePanel));
 
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
+        enterLobbyButton?.onClick.AddListener(OnEnterLobbyClicked);
 
         // Waiting lobby
         beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
@@ -147,6 +153,7 @@ public class MainMenuController : MonoBehaviour
         loadingPanel          ?.SetActive(false);
         startButton           ?.gameObject.SetActive(false);
         beginCharSelectButton ?.gameObject.SetActive(false);
+        enterLobbyButton      ?.gameObject.SetActive(false);
 
         RefreshCharacterButtons();
         ShowNavPanel(mainMenuPanel);
@@ -197,6 +204,23 @@ public class MainMenuController : MonoBehaviour
         SceneManager.LoadScene(2);
     }
 
+
+
+    private void Update()
+    {
+        // Show Enter Lobby whenever MultiplayerPanel is active
+        if (enterLobbyButton != null)
+            enterLobbyButton.gameObject.SetActive(multiplayerPanel != null && multiplayerPanel.activeSelf);
+    }
+
+    private void OnEnterLobbyClicked()
+    {
+        // Host clicked — show lobby locally, sync phase so clients follow
+        if (NetworkGameManager.Instance != null)
+            NetworkGameManager.Instance.SetLobbyPhase(true);
+        HandleSessionActive();
+    }
+
     private void OnPlayerNameChanged(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
@@ -215,18 +239,18 @@ public class MainMenuController : MonoBehaviour
 
         HideAllNavPanels();
 
-        // Show the waiting lobby
+        // Show lobby — hide character select
         waitingLobbyPanel     ?.SetActive(true);
         waitingLobbyContent   ?.SetActive(true);
         characterSelectPanel  ?.SetActive(false);
         characterSelectContent?.SetActive(false);
 
-        // Begin button — host only
-        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
-        beginCharSelectButton?.gameObject.SetActive(isHost);
+        // Show BeginCharSelect for everyone for now
+        // (host-only logic can be added later once networking is confirmed working)
+        beginCharSelectButton?.gameObject.SetActive(true);
     }
 
-    private void HandleSessionLeft()
+    public void HandleSessionLeft()
     {
         inCharSelectPhase = false;
         isReady           = false;
@@ -250,13 +274,14 @@ public class MainMenuController : MonoBehaviour
 
     private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
     {
-        // If ALL players have a character selection set, host has begun char select —
-        // switch clients to char select phase automatically
-        // (Host sets this via OnBeginCharSelectClicked, clients detect it here)
-        if (!inCharSelectPhase && NetworkGameManager.Instance != null)
+        if (NetworkGameManager.Instance != null)
         {
-            bool hostBeganCharSelect = NetworkGameManager.Instance.IsCharSelectPhase();
-            if (hostBeganCharSelect)
+            // Client detects host moved to lobby
+            if (!waitingLobbyContent.activeSelf && NetworkGameManager.Instance.IsLobbyPhase())
+                HandleSessionActive();
+
+            // Client detects host moved to char select
+            if (!inCharSelectPhase && NetworkGameManager.Instance.IsCharSelectPhase())
                 SwitchToCharSelectPhase();
         }
 
@@ -297,10 +322,9 @@ public class MainMenuController : MonoBehaviour
         RefreshCharacterButtons();
         UpdateReadyVisual();
 
-        // Start button only for host
-        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
-        startButton?.gameObject.SetActive(isHost);
-        if (startButton != null) startButton.interactable = false;
+        // Show start button for everyone for now
+        startButton?.gameObject.SetActive(true);
+        if (startButton != null) startButton.interactable = true;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -309,11 +333,6 @@ public class MainMenuController : MonoBehaviour
 
     private void OnBeginCharSelectClicked()
     {
-        if (!(NetworkGameManager.Instance?.IsHost ?? false)) return;
-
-        // Tell NetworkGameManager to flag char select phase so clients detect it
-        NetworkGameManager.Instance.SetCharSelectPhase(true);
-
         SwitchToCharSelectPhase();
     }
 
