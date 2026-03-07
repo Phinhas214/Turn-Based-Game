@@ -68,6 +68,12 @@ public class NetworkGameManager : MonoBehaviour
 
             LocalPlayerId = AuthenticationService.Instance.PlayerId;
             Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
+
+            // Set display name immediately after sign-in
+            string savedName = PlayerPrefs.GetString("PlayerName", "Player" + UnityEngine.Random.Range(100, 999));
+            LocalPlayerName = savedName;
+            await SetAuthDisplayNameAsync(savedName);
+
             OnSignedIn?.Invoke();
         }
         catch (Exception e)
@@ -197,6 +203,43 @@ public class NetworkGameManager : MonoBehaviour
 
     public Dictionary<string, int> GetCharacterSelections() => new Dictionary<string, int>(characterSelections);
 
+    // ── Char select phase flag — host sets it, clients read it via OnPlayersUpdated ──
+    private bool charSelectPhaseActive = false;
+    public void SetCharSelectPhase(bool active)
+    {
+        charSelectPhaseActive = active;
+        // Trigger a player update so all clients pick up the phase change
+        _ = SyncPlayerDataAsync();
+    }
+    public bool IsCharSelectPhase() => charSelectPhaseActive;
+
+    /// <summary>
+    /// Called by WidgetSessionBridge when a widget creates/joins a session
+    /// outside of our own CreateSessionAsync/JoinSessionAsync methods.
+    /// </summary>
+    public void SyncExternalSession(Unity.Services.Multiplayer.ISession session)
+    {
+        if (CurrentSession != null) return; // already have one
+        CurrentSession = session;
+
+        // Determine if we are host by checking if we created it
+        // Widgets don't expose this directly so we check player count
+        // — if we're the only player we must be host
+        IsHost = session.Players.Count <= 1;
+
+        SubscribeToSessionEvents();
+        characterSelections[LocalPlayerId] = localCharacterIndex;
+
+        Debug.Log($"[NetworkGameManager] Synced external session. IsHost={IsHost}");
+
+        if (IsHost)
+            OnSessionCreated?.Invoke();
+        else
+            OnSessionJoined?.Invoke();
+
+        RefreshPlayerList();
+    }
+
     public void RegisterCharacterSelection(string playerId, int characterIndex)
     {
         characterSelections[playerId] = characterIndex;
@@ -211,7 +254,13 @@ public class NetworkGameManager : MonoBehaviour
     public List<SessionPlayerInfo> GetPlayerList() => cachedPlayerList;
     public string GetJoinCode()     => CurrentSession?.Code ?? "N/A";
     public int    GetMaxPlayers()   => maxPlayers;
-    public bool   AllPlayersReady() => localIsReady;
+    public bool AllPlayersReady()
+    {
+        if (cachedPlayerList.Count == 0) return false;
+        foreach (var player in cachedPlayerList)
+            if (!player.IsReady) return false;
+        return true;
+    }
 
     private void RefreshPlayerList()
     {
@@ -225,6 +274,7 @@ public class NetworkGameManager : MonoBehaviour
             int    charIdx = isLocal ? localCharacterIndex : 0;
             bool   ready   = isLocal ? localIsReady : false;
             string name    = isLocal ? LocalPlayerName : "Player";
+            // Note: for remote players, properties below will override these defaults
 
             // CORRECT API: player.Properties not player.Data
             if (player.Properties != null)
@@ -309,6 +359,20 @@ public class NetworkGameManager : MonoBehaviour
     {
         LocalPlayerName = string.IsNullOrWhiteSpace(name) ? "Player" : name;
         _ = SyncPlayerDataAsync();
+        _ = SetAuthDisplayNameAsync(LocalPlayerName);
+    }
+
+    private async System.Threading.Tasks.Task SetAuthDisplayNameAsync(string name)
+    {
+        try
+        {
+            await AuthenticationService.Instance.UpdatePlayerNameAsync(name);
+            Debug.Log($"[NetworkGameManager] Display name set to: {name}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[NetworkGameManager] Could not set display name: {e.Message}");
+        }
     }
 }
 

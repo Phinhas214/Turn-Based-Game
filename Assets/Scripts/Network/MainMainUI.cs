@@ -5,185 +5,316 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Main Menu Controller — handles all panel flow + multiplayer lobby.
+/// FULL FLOW:
+///   MainMenuPanel → ModePanel
+///     → SinglePlayer → loads game
+///     → Multiplayer  → HostPanel (Create Session widget)   ─┐
+///                    → JoinPanel (Session List widget)      ├→ WaitingLobbyContent appears
+///                    → JoinByCodePanel (Join By Code widget)┘
 ///
-/// LOBBY PANEL HIERARCHY:
-///   LobbyPanel
-///     ShowSessionCode          ← Widget (no wiring needed)
-///     PlayerListContainer      ← Transform with Vertical Layout Group
-///     CharacterSelectPanel
-///       KnightButton           ← Button with Image child (your sprite)
-///       RogueButton            ← Button with Image child
-///       MageButton             ← Button with Image child
-///       ClericButton           ← Button with Image child
-///     SelectedCharacterName    ← TextMeshProUGUI ("Knight", "Rogue" etc)
-///     ReadyButton
-///     StartButton              ← host only, hidden for clients
-///     LeaveLobbyButton
+///   WaitingLobbyContent (all players wait here, see each other's names)
+///     Host sees "Begin Character Select" button
+///     → host clicks it → CharacterSelectContent appears for everyone
 ///
-/// CHARACTER SELECTION:
-///   Each character button highlights when selected (colored border / tint).
-///   Calling SetLocalCharacterSelection(0-3) feeds into NetworkGameManager
-///   which syncs it to the session so NetworkedLevelGenerator picks the right prefab.
-///   Index order MUST match NetworkedLevelGenerator.playerPrefabs:
-///     0 = Knight, 1 = Rogue, 2 = Mage, 3 = Cleric
+///   CharacterSelectContent
+///     All players pick a character (Knight/Rogue/Mage/Cleric) and click Ready
+///     Host sees Start button when all are ready
+///     → Start → loads multiplayer scene, NetworkedLevelGenerator spawns correct prefabs
+///
+/// KEY DESIGN:
+///   WaitingLobbyPanel and CharacterSelectPanel are ALWAYS ACTIVE GameObjects.
+///   Their child "Content" objects start INACTIVE and get shown/hidden.
+///   This ensures Awake() runs and events get subscribed properly.
 /// </summary>
 public class MainMenuController : MonoBehaviour
 {
-    // ── Panels ────────────────────────────────────────────────────────────
-    [Header("Panels")]
+    // ── Navigation Panels ─────────────────────────────────────────────────
+    [Header("Navigation Panels")]
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject modePanel;
-    [SerializeField] private GameObject multiplayerSelectPanel;
-    [SerializeField] private GameObject hostPanel;
-    [SerializeField] private GameObject joinPanel;
-    [SerializeField] private GameObject joinByCodePanel;
-    [SerializeField] private GameObject lobbyPanel;
+    [SerializeField] private GameObject multiplayerPanel; // has BOTH Create Session + Join By Code widgets
     [SerializeField] private GameObject loadingPanel;
 
-    // ── Main & Mode buttons ───────────────────────────────────────────────
-    [Header("Buttons: Main & Mode")]
+    // ── Navigation Buttons ────────────────────────────────────────────────
+    [Header("Navigation Buttons")]
     [SerializeField] private Button newGameButton;
     [SerializeField] private Button multiplayerButton;
-    [SerializeField] private Button backToMainButton;
     [SerializeField] private Button startSinglePlayerButton;
-    [SerializeField] private string gameSceneName = "SinglePlayer";
+    [SerializeField] private Button backToMainButton;
+    [SerializeField] private Button backToModeButton;
 
-    // ── Multiplayer select ────────────────────────────────────────────────
-    [Header("Buttons: Multiplayer Selection")]
-    [SerializeField] private Button         selectHostButton;
-    [SerializeField] private Button         selectJoinButton;
+    [Header("Player Name")]
     [SerializeField] private TMP_InputField playerNameInput;
-    [SerializeField] private Button         backToModeButton;
 
-    // ── Host / Join sub-panels ────────────────────────────────────────────
-    [Header("Buttons: Host/Join Sub-Panels")]
-    [SerializeField] private Button joinByCodeButton;
-    [SerializeField] private Button backFromHostButton;
-    [SerializeField] private Button backFromJoinButton;
-    [SerializeField] private Button backFromCodeButton;
+    // ── Phase 1: Waiting Lobby ────────────────────────────────────────────
+    // WaitingLobbyPanel = always active parent
+    // WaitingLobbyContent = inactive at start, shown when session is active
+    [Header("Phase 1 — Waiting Lobby")]
+    [SerializeField] private GameObject      waitingLobbyPanel;    // always active
+    [SerializeField] private GameObject      waitingLobbyContent;  // inactive at start
 
-    // ── Lobby ─────────────────────────────────────────────────────────────
-    [Header("Lobby Panel")]
-    [SerializeField] private Transform  playerListContainer;
-    [SerializeField] private GameObject playerSlotPrefab;
-    [SerializeField] private Button     readyButton;
-    [SerializeField] private Button     startButton;
-    [SerializeField] private Button     leaveLobbyButton;
+    [SerializeField] private TextMeshProUGUI waitingPlayerCount;   // "2 / 4 players"
+    [SerializeField] private Transform       waitingPlayerList;    // spawns PlayerSlot prefabs
+    [SerializeField] private GameObject      playerSlotPrefab;     // your Slot prefab
+    [SerializeField] private Button          beginCharSelectButton; // host only
+    [SerializeField] private Button          waitingLeaveButton;
 
-    // ── Character Selection ───────────────────────────────────────────────
-    [Header("Character Selection")]
-    [Tooltip("Four buttons in order: Knight(0), Rogue(1), Mage(2), Cleric(3)")]
-    [SerializeField] private List<Button> characterButtons;
+    // ── Phase 2: Character Select ─────────────────────────────────────────
+    // CharacterSelectPanel = always active parent
+    // CharacterSelectContent = inactive at start, shown after host hits Begin
+    [Header("Phase 2 — Character Select")]
+    [SerializeField] private GameObject      characterSelectPanel;    // always active
+    [SerializeField] private GameObject      characterSelectContent;  // inactive at start
+    [SerializeField] private Transform       charSelectPlayerList;    // player list showing chosen classes
+    [SerializeField] private List<Button>    characterButtons;        // Knight=0 Rogue=1 Mage=2 Cleric=3
+    [SerializeField] private List<Sprite>    characterSprites;        // same order as above
+    [SerializeField] private TextMeshProUGUI selectedCharacterName;   // "Knight", "Rogue" etc.
+    [SerializeField] private Color           selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
+    [SerializeField] private Color           deselectedTint = new Color(1f, 1f, 1f, 0.4f);
+    [SerializeField] private Button          readyButton;
+    [SerializeField] private Button          startButton;             // host only
+    [SerializeField] private Button          charSelectLeaveButton;
 
-    [Tooltip("Sprites shown on each character button — same order as above")]
-    [SerializeField] private List<Sprite> characterSprites;
-
-    [Tooltip("Name shown below the selected character portrait")]
-    [SerializeField] private TextMeshProUGUI selectedCharacterNameText;
-
-    [Tooltip("Color applied to the selected button to highlight it")]
-    [SerializeField] private Color selectedColor   = new Color(1f, 0.85f, 0.2f, 1f);  // gold
-    [SerializeField] private Color deselectedColor = new Color(1f, 1f, 1f, 0.45f);     // dim
-
-    private static readonly string[] CharacterNames = { "Knight", "Rogue", "Mage", "Cleric" };
-    private int selectedCharacterIndex = 0;
-
-    // ── Runtime ───────────────────────────────────────────────────────────
-    private bool isReady = false;
+    // ── Runtime state ─────────────────────────────────────────────────────
+    private static readonly string[] ClassNames = { "Knight", "Rogue", "Mage", "Cleric" };
+    private int  selectedCharIndex  = 0;
+    private bool isReady            = false;
+    private bool inCharSelectPhase  = false;
 
     // ─────────────────────────────────────────────────────────────────────
-    // Lifecycle
+    // Awake — wire all buttons
     // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        // Main / Mode
-        newGameButton           ?.onClick.AddListener(() => ShowPanel(modePanel));
-        multiplayerButton       ?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
-        startSinglePlayerButton ?.onClick.AddListener(StartSinglePlayerGame);
+        // Navigation
+        newGameButton          ?.onClick.AddListener(() => ShowNavPanel(modePanel));
+        multiplayerButton      ?.onClick.AddListener(() => ShowNavPanel(multiplayerPanel));
+        startSinglePlayerButton?.onClick.AddListener(StartSinglePlayer);
+        backToMainButton       ?.onClick.AddListener(() => ShowNavPanel(mainMenuPanel));
+        backToModeButton       ?.onClick.AddListener(() => ShowNavPanel(modePanel));
 
-        // Multiplayer select
-        selectHostButton?.onClick.AddListener(() => ShowPanel(hostPanel));
-        selectJoinButton?.onClick.AddListener(() => ShowPanel(joinPanel));
-        playerNameInput ?.onEndEdit.AddListener(OnPlayerNameChanged);
+        playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
 
-        // Sub-panel navigation
-        joinByCodeButton  ?.onClick.AddListener(() => ShowPanel(joinByCodePanel));
-        backToMainButton  ?.onClick.AddListener(() => ShowPanel(mainMenuPanel));
-        backToModeButton  ?.onClick.AddListener(() => ShowPanel(modePanel));
-        backFromHostButton?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
-        backFromJoinButton?.onClick.AddListener(() => ShowPanel(multiplayerSelectPanel));
-        backFromCodeButton?.onClick.AddListener(() => ShowPanel(joinPanel));
-
-        // Lobby buttons
-        readyButton     ?.onClick.AddListener(OnReadyClicked);
-        startButton     ?.onClick.AddListener(OnStartGameClicked);
-        leaveLobbyButton?.onClick.AddListener(OnLeaveLobbyClicked);
+        // Waiting lobby
+        beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
+        waitingLeaveButton   ?.onClick.AddListener(OnLeaveClicked);
 
         // Character select buttons
         for (int i = 0; i < characterButtons.Count; i++)
         {
-            int index = i; // capture for lambda
-            characterButtons[i]?.onClick.AddListener(() => SelectCharacter(index));
+            int idx = i;
+            characterButtons[i]?.onClick.AddListener(() => SelectCharacter(idx));
 
-            // Apply sprite if provided
+            // Apply portrait sprite to the child Image (images[1] = child, images[0] = button bg)
             if (i < characterSprites.Count && characterSprites[i] != null)
             {
-                var img = characterButtons[i]?.GetComponentInChildren<Image>();
-                if (img != null) img.sprite = characterSprites[i];
+                var imgs = characterButtons[i]?.GetComponentsInChildren<Image>();
+                if (imgs != null && imgs.Length > 1)
+                    imgs[1].sprite = characterSprites[i];
             }
         }
+
+        readyButton         ?.onClick.AddListener(OnReadyClicked);
+        startButton         ?.onClick.AddListener(OnStartClicked);
+        charSelectLeaveButton?.onClick.AddListener(OnLeaveClicked);
+
+        // Hide content at startup
+        waitingLobbyContent   ?.SetActive(false);
+        characterSelectContent?.SetActive(false);
     }
 
-    private void OnEnable()
-    {
-        if (NetworkGameManager.Instance == null) return;
-        NetworkGameManager.Instance.OnSessionCreated += HandleSessionActive;
-        NetworkGameManager.Instance.OnSessionJoined  += HandleSessionActive;
-        NetworkGameManager.Instance.OnSessionLeft    += HandleSessionLeft;
-        NetworkGameManager.Instance.OnPlayersUpdated += HandlePlayersUpdated;
-    }
-
-    private void OnDisable()
+    private void OnDestroy()
     {
         if (NetworkGameManager.Instance == null) return;
         NetworkGameManager.Instance.OnSessionCreated -= HandleSessionActive;
         NetworkGameManager.Instance.OnSessionJoined  -= HandleSessionActive;
         NetworkGameManager.Instance.OnSessionLeft    -= HandleSessionLeft;
         NetworkGameManager.Instance.OnPlayersUpdated -= HandlePlayersUpdated;
+        NetworkGameManager.Instance.OnGameStarting   -= HandleGameStarting;
     }
 
     private void Start()
     {
-        string savedName = PlayerPrefs.GetString("PlayerName", "Player" + Random.Range(100, 999));
-        if (playerNameInput != null) playerNameInput.text = savedName;
+        string saved = PlayerPrefs.GetString("PlayerName", "Player" + Random.Range(100, 999));
+        if (playerNameInput != null) playerNameInput.text = saved;
 
-        // Default to Knight selected
+        // Force clean state regardless of how the scene was saved in the editor
+        waitingLobbyPanel     ?.SetActive(false);
+        waitingLobbyContent   ?.SetActive(false);
+        characterSelectPanel  ?.SetActive(false);
+        characterSelectContent?.SetActive(false);
+        loadingPanel          ?.SetActive(false);
+        startButton           ?.gameObject.SetActive(false);
+        beginCharSelectButton ?.gameObject.SetActive(false);
+
         RefreshCharacterButtons();
+        ShowNavPanel(mainMenuPanel);
 
-        ShowPanel(mainMenuPanel);
+        // Start a coroutine to wait for NetworkGameManager to be ready then subscribe
+        StartCoroutine(SubscribeWhenReady());
+    }
+
+    private System.Collections.IEnumerator SubscribeWhenReady()
+    {
+        // Wait until NetworkGameManager exists — it might initialize after us
+        while (NetworkGameManager.Instance == null)
+            yield return null;
+
+        NetworkGameManager.Instance.OnSessionCreated += HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionJoined  += HandleSessionActive;
+        NetworkGameManager.Instance.OnSessionLeft    += HandleSessionLeft;
+        NetworkGameManager.Instance.OnPlayersUpdated += HandlePlayersUpdated;
+        NetworkGameManager.Instance.OnGameStarting   += HandleGameStarting;
+
+        Debug.Log("[MainMenuController] Subscribed to NetworkGameManager events.");
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Single Player
+    // Navigation helpers
     // ─────────────────────────────────────────────────────────────────────
 
-    private void StartSinglePlayerGame()
+    private void ShowNavPanel(GameObject target)
+    {
+        mainMenuPanel   ?.SetActive(false);
+        modePanel       ?.SetActive(false);
+        multiplayerPanel?.SetActive(false);
+        target          ?.SetActive(true);
+    }
+
+    private void HideAllNavPanels()
+    {
+        mainMenuPanel   ?.SetActive(false);
+        modePanel       ?.SetActive(false);
+        multiplayerPanel?.SetActive(false);
+        waitingLobbyPanel    ?.SetActive(false);
+        characterSelectPanel ?.SetActive(false);
+    }
+
+    private void StartSinglePlayer()
     {
         loadingPanel?.SetActive(true);
         SceneManager.LoadScene(2);
     }
 
+    private void OnPlayerNameChanged(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        NetworkGameManager.Instance?.SetLocalPlayerName(name);
+        PlayerPrefs.SetString("PlayerName", name);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
-    // Player name
+    // Session events
     // ─────────────────────────────────────────────────────────────────────
 
-    private void OnPlayerNameChanged(string newName)
+    private void HandleSessionActive()
     {
-        if (string.IsNullOrWhiteSpace(newName)) return;
-        NetworkGameManager.Instance?.SetLocalPlayerName(newName);
-        PlayerPrefs.SetString("PlayerName", newName);
+        inCharSelectPhase = false;
+        isReady           = false;
+
+        HideAllNavPanels();
+
+        // Show the waiting lobby
+        waitingLobbyPanel     ?.SetActive(true);
+        waitingLobbyContent   ?.SetActive(true);
+        characterSelectPanel  ?.SetActive(false);
+        characterSelectContent?.SetActive(false);
+
+        // Begin button — host only
+        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
+        beginCharSelectButton?.gameObject.SetActive(isHost);
+    }
+
+    private void HandleSessionLeft()
+    {
+        inCharSelectPhase = false;
+        isReady           = false;
+
+        waitingLobbyPanel     ?.SetActive(false);
+        waitingLobbyContent   ?.SetActive(false);
+        characterSelectPanel  ?.SetActive(false);
+        characterSelectContent?.SetActive(false);
+
+        ShowNavPanel(mainMenuPanel);
+    }
+
+    private void HandleGameStarting()
+    {
+        loadingPanel          ?.SetActive(true);
+        waitingLobbyPanel     ?.SetActive(false);
+        waitingLobbyContent   ?.SetActive(false);
+        characterSelectPanel  ?.SetActive(false);
+        characterSelectContent?.SetActive(false);
+    }
+
+    private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
+    {
+        // If ALL players have a character selection set, host has begun char select —
+        // switch clients to char select phase automatically
+        // (Host sets this via OnBeginCharSelectClicked, clients detect it here)
+        if (!inCharSelectPhase && NetworkGameManager.Instance != null)
+        {
+            bool hostBeganCharSelect = NetworkGameManager.Instance.IsCharSelectPhase();
+            if (hostBeganCharSelect)
+                SwitchToCharSelectPhase();
+        }
+
+        // Update the active player list
+        Transform list = inCharSelectPhase ? charSelectPlayerList : waitingPlayerList;
+
+        if (list != null)
+        {
+            foreach (Transform child in list)
+                Destroy(child.gameObject);
+
+            if (playerSlotPrefab != null)
+                foreach (var p in players)
+                {
+                    var go = Instantiate(playerSlotPrefab, list);
+                    go.GetComponent<PlayerSlotUI>()?.Setup(p);
+                }
+        }
+
+        if (waitingPlayerCount != null && !inCharSelectPhase)
+            waitingPlayerCount.text = $"{players.Count} / {NetworkGameManager.Instance?.GetMaxPlayers() ?? 4} players";
+
+        if (inCharSelectPhase)
+            RefreshStartButton();
+    }
+
+    private void SwitchToCharSelectPhase()
+    {
+        inCharSelectPhase = true;
+        isReady           = false;
+        selectedCharIndex = 0;
+
+        waitingLobbyPanel     ?.SetActive(false);
+        waitingLobbyContent   ?.SetActive(false);
+        characterSelectPanel  ?.SetActive(true);
+        characterSelectContent?.SetActive(true);
+
+        RefreshCharacterButtons();
+        UpdateReadyVisual();
+
+        // Start button only for host
+        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
+        startButton?.gameObject.SetActive(isHost);
+        if (startButton != null) startButton.interactable = false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase 1 → Phase 2 transition
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void OnBeginCharSelectClicked()
+    {
+        if (!(NetworkGameManager.Instance?.IsHost ?? false)) return;
+
+        // Tell NetworkGameManager to flag char select phase so clients detect it
+        NetworkGameManager.Instance.SetCharSelectPhase(true);
+
+        SwitchToCharSelectPhase();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -192,7 +323,7 @@ public class MainMenuController : MonoBehaviour
 
     private void SelectCharacter(int index)
     {
-        selectedCharacterIndex = index;
+        selectedCharIndex = index;
         NetworkGameManager.Instance?.SetLocalCharacterSelection(index);
         RefreshCharacterButtons();
     }
@@ -203,137 +334,70 @@ public class MainMenuController : MonoBehaviour
         {
             if (characterButtons[i] == null) continue;
 
-            bool isSelected = (i == selectedCharacterIndex);
+            bool sel = (i == selectedCharIndex);
 
-            // Tint the whole button
-            var btn = characterButtons[i].GetComponent<Image>();
-            if (btn != null) btn.color = isSelected ? selectedColor : deselectedColor;
+            var img = characterButtons[i].GetComponent<Image>();
+            if (img != null) img.color = sel ? selectedTint : deselectedTint;
 
-            // Scale up the selected button slightly
-            characterButtons[i].transform.localScale = isSelected
+            characterButtons[i].transform.localScale = sel
                 ? new Vector3(1.1f, 1.1f, 1f)
                 : Vector3.one;
         }
 
-        // Update name label
-        if (selectedCharacterNameText != null)
-            selectedCharacterNameText.text = selectedCharacterIndex < CharacterNames.Length
-                ? CharacterNames[selectedCharacterIndex]
-                : "";
+        if (selectedCharacterName != null)
+            selectedCharacterName.text = selectedCharIndex < ClassNames.Length
+                ? ClassNames[selectedCharIndex] : "";
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Lobby — Ready & Start
+    // Ready & Start
     // ─────────────────────────────────────────────────────────────────────
 
-    public void OnReadyClicked()
+    private void OnReadyClicked()
     {
         isReady = !isReady;
         NetworkGameManager.Instance?.SetLocalReadyState(isReady);
+        UpdateReadyVisual();
+        RefreshStartButton();
+    }
 
+    private void UpdateReadyVisual()
+    {
         var txt = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
-        if (txt != null) txt.text = isReady ? "Not Ready" : "Ready";
+        if (txt != null) txt.text = isReady ? "Not Ready" : "Ready!";
 
-        // Tint ready button to give clear feedback
         var img = readyButton?.GetComponent<Image>();
         if (img != null) img.color = isReady
-            ? new Color(0.2f, 0.85f, 0.3f, 1f)   // green when ready
+            ? new Color(0.2f, 0.85f, 0.3f, 1f)
             : Color.white;
     }
 
-    public void OnStartGameClicked()
+    private void OnStartClicked()
     {
-        if (NetworkGameManager.Instance == null || !NetworkGameManager.Instance.IsHost) return;
-        if (!NetworkGameManager.Instance.AllPlayersReady())
-        {
-            Debug.Log("[MainMenuController] Not all players are ready.");
-            return;
-        }
+        if (!(NetworkGameManager.Instance?.IsHost ?? false)) return;
+        if (!NetworkGameManager.Instance.AllPlayersReady()) return;
         NetworkGameManager.Instance.StartGame();
     }
 
-    public void OnLeaveLobbyClicked()
+    private void RefreshStartButton()
     {
-        isReady = false;
-        selectedCharacterIndex = 0;
+        if (startButton == null || !(NetworkGameManager.Instance?.IsHost ?? false)) return;
+
+        bool allReady = NetworkGameManager.Instance.AllPlayersReady();
+        startButton.interactable = allReady;
+
+        var txt = startButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null)
+        {
+            txt.text  = allReady ? "START ADVENTURE" : "Waiting for players...";
+            txt.color = allReady ? Color.white : new Color(1f, 1f, 1f, 0.4f);
+        }
+    }
+
+    private void OnLeaveClicked()
+    {
+        isReady           = false;
+        inCharSelectPhase = false;
         _ = NetworkGameManager.Instance?.LeaveSessionAsync();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // NetworkGameManager events
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void HandleSessionActive()
-    {
-        isReady = false;
-        selectedCharacterIndex = 0;
-
-        ShowPanel(lobbyPanel);
-        RefreshCharacterButtons();
-
-        // Reset ready button appearance
-        var txt = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
-        if (txt != null) txt.text = "Ready";
-        var img = readyButton?.GetComponent<Image>();
-        if (img != null) img.color = Color.white;
-
-        // Start button — host only
-        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
-        startButton?.gameObject.SetActive(isHost);
-        if (startButton != null) startButton.interactable = false; // disabled until all ready
-    }
-
-    private void HandleSessionLeft()
-    {
-        isReady = false;
-        ShowPanel(mainMenuPanel);
-    }
-
-    private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
-    {
-        // Rebuild player list
-        if (playerListContainer != null)
-        {
-            foreach (Transform child in playerListContainer)
-                Destroy(child.gameObject);
-
-            if (playerSlotPrefab != null)
-                foreach (var player in players)
-                {
-                    var entry = Instantiate(playerSlotPrefab, playerListContainer);
-                    entry.GetComponent<LobbyPlayerEntry>()?.Setup(player);
-                }
-        }
-
-        // Host: enable Start only when all players are ready
-        if (startButton != null && (NetworkGameManager.Instance?.IsHost ?? false))
-        {
-            bool allReady = NetworkGameManager.Instance.AllPlayersReady();
-            startButton.interactable = allReady;
-
-            var txt = startButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (txt != null)
-            {
-                txt.text  = allReady ? "Start Game!" : "Waiting for players...";
-                txt.color = allReady ? Color.white : new Color(1f, 1f, 1f, 0.4f);
-            }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Panel helper
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void ShowPanel(GameObject target)
-    {
-        mainMenuPanel          ?.SetActive(false);
-        modePanel              ?.SetActive(false);
-        multiplayerSelectPanel ?.SetActive(false);
-        hostPanel              ?.SetActive(false);
-        joinPanel              ?.SetActive(false);
-        joinByCodePanel        ?.SetActive(false);
-        lobbyPanel             ?.SetActive(false);
-
-        target?.SetActive(true);
     }
 }
