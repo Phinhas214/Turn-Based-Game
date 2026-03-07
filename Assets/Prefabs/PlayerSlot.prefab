@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2548152326331328001}
   - component: {fileID: 3594517888175782869}
   - component: {fileID: 4809884691067298451}
-  - component: {fileID: 2788226646071578060}
+  - component: {fileID: 5269105243656602101}
   m_Layer: 5
   m_Name: PlayerSlot
   m_TagString: Untagged
@@ -79,7 +79,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &2788226646071578060
+--- !u!114 &5269105243656602101
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

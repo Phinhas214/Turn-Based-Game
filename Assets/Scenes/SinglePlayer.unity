@@ -18098,7 +18098,9 @@ MonoBehaviour:
   specialRoomChance: 0.01
   cellSize: 2
   gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
-  playerPrefab: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
+  playerPrefabs:
+  - {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+  - {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
   spawnPlayerOnGenerate: 1
 --- !u!1 &2000321972
 GameObject:

@@ -187,12 +187,12 @@ public class NetworkGameManager : MonoBehaviour
     private async Task SyncPlayerDataAsync()
     {
         if (CurrentSession == null) return;
+        if (string.IsNullOrEmpty(LocalPlayerId)) return;
         try
         {
-            // CORRECT API: set properties on CurrentPlayer then save
             CurrentSession.CurrentPlayer.SetProperty("CharIdx", new PlayerProperty(localCharacterIndex.ToString()));
             CurrentSession.CurrentPlayer.SetProperty("IsReady", new PlayerProperty(localIsReady.ToString()));
-            CurrentSession.CurrentPlayer.SetProperty("Name",    new PlayerProperty(LocalPlayerName));
+            CurrentSession.CurrentPlayer.SetProperty("Name",    new PlayerProperty(LocalPlayerName ?? "Player"));
             await CurrentSession.SaveCurrentPlayerDataAsync();
         }
         catch (Exception e)
@@ -215,6 +215,7 @@ public class NetworkGameManager : MonoBehaviour
     private async System.Threading.Tasks.Task SyncPhaseAsync(string phase)
     {
         if (CurrentSession == null) return;
+        if (string.IsNullOrEmpty(phase)) return;
         try
         {
             CurrentSession.CurrentPlayer.SetProperty("Phase", new PlayerProperty(phase));
@@ -296,17 +297,15 @@ public class NetworkGameManager : MonoBehaviour
             // Note: for remote players, properties below will override these defaults
 
             // CORRECT API: player.Properties not player.Data
-            // Inside RefreshPlayerList loop:
             if (player.Properties != null)
             {
-                // Use "Contains" or "TryGetValue" safely
-                if (player.Properties.TryGetValue("CharIdx", out var charProp) && charProp.Value != null)
+                if (player.Properties.TryGetValue("CharIdx", out var charProp))
                     int.TryParse(charProp.Value, out charIdx);
 
-                if (player.Properties.TryGetValue("IsReady", out var readyProp) && readyProp.Value != null)
+                if (player.Properties.TryGetValue("IsReady", out var readyProp))
                     bool.TryParse(readyProp.Value, out ready);
 
-                if (player.Properties.TryGetValue("Name", out var nameProp) && nameProp.Value != null)
+                if (player.Properties.TryGetValue("Name", out var nameProp) && !string.IsNullOrEmpty(nameProp.Value))
                     name = nameProp.Value;
             }
 

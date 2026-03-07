@@ -33,7 +33,8 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private Transform gridDebugObjectPrefab;
 
     [Header("Player Spawn")]
-    [SerializeField] private GameObject playerPrefab;
+    [Tooltip("Index matches character select: 0=SmokeStack, 1=Sconstance, 2=Wip, 3=Wip-2")]
+    [SerializeField] private List<GameObject> playerPrefabs;
     [SerializeField] private bool spawnPlayerOnGenerate = true;
 
     private List<PlacedRoom> placedRooms;
@@ -59,20 +60,12 @@ public class LevelGenerator : MonoBehaviour
         Invoke(nameof(GenerateLevel), 0.1f);
     }
 
-    // ════════════════════════════════════════════════════════════════════════════════
-    // METHOD 1: ReadRoomPrefabDefinitions() - READS TILEMAP DIMENSIONS
-    // ════════════════════════════════════════════════════════════════════════════════
-    
     private void ReadRoomPrefabDefinitions()
     {
         foreach (RoomPrefabData data in roomPrefabs)
         {
             if (data.prefab == null) continue;
 
-            // ─────────────────────────────────────────────────────────────────────────
-            // 🔄 TILEMAP CHANGE: Check for RoomTilemapSetup instead of RoomGridDefinition
-            // ─────────────────────────────────────────────────────────────────────────
-            
             RoomTilemapSetup tilemapSetup = data.prefab.GetComponent<RoomTilemapSetup>();
             if (tilemapSetup != null)
             {
@@ -83,7 +76,6 @@ public class LevelGenerator : MonoBehaviour
             }
             else
             {
-                // Fallback if RoomTilemapSetup not found
                 data.width = 10;
                 data.height = 10;
                 data.gridOffset = new Vector3(0, 0.1f, 0);
@@ -104,10 +96,8 @@ public class LevelGenerator : MonoBehaviour
         InitializeRoomGrids();
         InitializeDoors();
 
-        if (spawnPlayerOnGenerate && playerPrefab != null)
-        {
+        if (spawnPlayerOnGenerate && playerPrefabs != null && playerPrefabs.Count > 0)
             SpawnPlayer();
-        }
 
         OnLevelReady?.Invoke();
     }
@@ -115,9 +105,7 @@ public class LevelGenerator : MonoBehaviour
     private void ClearLevel()
     {
         foreach (Transform child in transform)
-        {
             Destroy(child.gameObject);
-        }
 
         if (spawnedPlayer != null)
         {
@@ -179,52 +167,38 @@ public class LevelGenerator : MonoBehaviour
         }
 
         if (endRoom == null && placedRooms.Count > 1)
-        {
             ConvertToEndRoom(placedRooms[placedRooms.Count - 1]);
-        }
 
         Debug.Log($"Generated {placedRooms.Count} rooms");
     }
 
-    // ════════════════════════════════════════════════════════════════════════════════
-    // METHOD 2: InitializeRoomGrids() - INITIALIZES TILEMAPS
-    // ════════════════════════════════════════════════════════════════════════════════
-    
     private void InitializeRoomGrids()
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            // TILEMAP CHANGE: Initialize tilemap structure and TilemapRoomGrid
             RoomTilemapSetup tilemapSetup = room.roomInstance.GetComponent<RoomTilemapSetup>();
             if (tilemapSetup == null)
-            {
                 tilemapSetup = room.roomInstance.AddComponent<RoomTilemapSetup>();
-            }
 
             tilemapSetup.Initialize();
 
             RoomGrid roomGridComponent = room.roomInstance.GetComponent<RoomGrid>();
             if (roomGridComponent == null)
-            {
                 roomGridComponent = room.roomInstance.AddComponent<RoomGrid>();
-            }
 
             roomGridComponent.Initialize(
-                width:          tilemapSetup.GetWidth(),
-                height:         tilemapSetup.GetHeight(),
-                cellSize:       tilemapSetup.GetCellSize(),
-                worldPosition:  room.worldPosition,
-                gridOffset:     tilemapSetup.GetGridOffset(),
-                debugPrefab:    null  // Tilemap has built-in debug visualization
+                width:         tilemapSetup.GetWidth(),
+                height:        tilemapSetup.GetHeight(),
+                cellSize:      tilemapSetup.GetCellSize(),
+                worldPosition: room.worldPosition,
+                gridOffset:    tilemapSetup.GetGridOffset(),
+                debugPrefab:   null
             );
 
-            
             room.roomGrid = roomGridComponent;
 
             if (LevelGrid.Instance != null)
-            {
                 LevelGrid.Instance.RegisterRoomGrid(room.roomGrid);
-            }
 
             Debug.Log($"[LevelGenerator] Room '{room.roomInstance.name}' tilemap initialized");
         }
@@ -236,9 +210,7 @@ public class LevelGenerator : MonoBehaviour
         {
             RoomDoor[] doors = room.roomInstance.GetComponentsInChildren<RoomDoor>();
             foreach (RoomDoor door in doors)
-            {
                 door.Initialize(room);
-            }
         }
     }
 
@@ -252,45 +224,50 @@ public class LevelGenerator : MonoBehaviour
             return;
         }
 
-        // Set room first
         if (RoomManager.Instance != null)
             RoomManager.Instance.SetCurrentRoom(startRoom);
         if (LevelGrid.Instance != null)
             LevelGrid.Instance.SetCurrentRoomGrid(startRoom.roomGrid);
 
-        // Start room always spawns at center
+        // ── Pick prefab based on character selection ───────────────────────
+        int charIndex = CharacterSelection.Index;
+
+        GameObject prefabToSpawn = (charIndex >= 0 && charIndex < playerPrefabs.Count)
+            ? playerPrefabs[charIndex]
+            : playerPrefabs[0]; // fallback to first
+
+        if (prefabToSpawn == null)
+        {
+            Debug.LogError($"[LevelGenerator] No prefab at index {charIndex}!");
+            return;
+        }
+
+        Debug.Log($"[LevelGenerator] Spawning character index {charIndex}: {prefabToSpawn.name}");
+
         int centerX = startRoom.roomGrid.GetWidth() / 2;
         int centerZ = startRoom.roomGrid.GetHeight() / 2;
         GridPosition spawnGridPos = new GridPosition(centerX, centerZ);
 
-        spawnedPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
+        spawnedPlayer = Instantiate(prefabToSpawn, Vector3.zero, Quaternion.identity);
         spawnedPlayer.name = "Player";
 
         Unit playerUnit = spawnedPlayer.GetComponent<Unit>();
         if (playerUnit != null)
         {
             playerUnit.PlaceInRoom(startRoom.roomGrid, spawnGridPos);
-            Debug.Log($"[LevelGenerator] Player spawned at center {spawnGridPos} " +
-                    $"world {startRoom.roomGrid.GetWorldPosition(spawnGridPos)}");
+            Debug.Log($"[LevelGenerator] Player spawned at {spawnGridPos}");
         }
     }
 
-    /// <summary>
-    /// Gets the spawn position for the start room.
-    /// Looks for a SpawnPointTile first — falls back to room center.
-    /// Start room has no entry direction so we look for any painted spawn point.
-    /// </summary>
     private GridPosition GetStartRoomSpawnPosition(PlacedRoom startRoom)
     {
         RoomSpawnPointReader reader = startRoom.roomInstance.GetComponent<RoomSpawnPointReader>();
 
         if (reader != null)
         {
-            // For the start room, use any available spawn point
             var allSpawnPoints = reader.GetAllSpawnPoints();
             if (allSpawnPoints.Count > 0)
             {
-                // Pick the first one — or you could pick a specific direction
                 foreach (var kvp in allSpawnPoints)
                 {
                     Debug.Log($"[LevelGenerator] Using spawn point (entry: {kvp.Key}) at {kvp.Value}");
@@ -299,8 +276,7 @@ public class LevelGenerator : MonoBehaviour
             }
         }
 
-        // Fallback: room center
-        Debug.LogWarning("[LevelGenerator] No spawn points found in start room — using center.");
+        Debug.LogWarning("[LevelGenerator] No spawn points found — using center.");
         int centerX = startRoom.roomGrid.GetWidth() / 2;
         int centerZ = startRoom.roomGrid.GetHeight() / 2;
         return new GridPosition(centerX, centerZ);
@@ -438,8 +414,8 @@ public class LevelGenerator : MonoBehaviour
         {
             case Direction.North: return new Vector2Int(0, 1);
             case Direction.South: return new Vector2Int(0, -1);
-            case Direction.East: return new Vector2Int(1, 0);
-            case Direction.West: return new Vector2Int(-1, 0);
+            case Direction.East:  return new Vector2Int(1, 0);
+            case Direction.West:  return new Vector2Int(-1, 0);
             default: return Vector2Int.zero;
         }
     }
@@ -450,8 +426,8 @@ public class LevelGenerator : MonoBehaviour
         {
             case Direction.North: return Direction.South;
             case Direction.South: return Direction.North;
-            case Direction.East: return Direction.West;
-            case Direction.West: return Direction.East;
+            case Direction.East:  return Direction.West;
+            case Direction.West:  return Direction.East;
             default: return Direction.North;
         }
     }

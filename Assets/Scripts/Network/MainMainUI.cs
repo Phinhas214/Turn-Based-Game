@@ -65,26 +65,25 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button          waitingLeaveButton;
 
     // ── Phase 2: Character Select ─────────────────────────────────────────
-    // CharacterSelectPanel = always active parent
-    // CharacterSelectContent = inactive at start, shown after host hits Begin
     [Header("Phase 2 — Character Select")]
-    [SerializeField] private GameObject      characterSelectPanel;    // always active
-    [SerializeField] private GameObject      characterSelectContent;  // inactive at start
-    [SerializeField] private Transform       charSelectPlayerList;    // player list showing chosen classes
-    [SerializeField] private List<Button>    characterButtons;        // Knight=0 Rogue=1 Mage=2 Cleric=3
-    [SerializeField] private List<Sprite>    characterSprites;        // same order as above
-    [SerializeField] private TextMeshProUGUI selectedCharacterName;   // "Knight", "Rogue" etc.
+    [SerializeField] private GameObject      characterSelectPanel;
+    [SerializeField] private GameObject      characterSelectContent;
+    [SerializeField] private Transform       charSelectPlayerList;
+    [SerializeField] private List<Button> characterButtons;  // assign buttons in order
+    [SerializeField] private List<string> characterNames;   // type names to match each button e.g. "SmokeStack"
+    [SerializeField] private List<Sprite> characterSprites; // portraits in same order
+    [SerializeField] private TextMeshProUGUI selectedCharacterName;
     [SerializeField] private Color           selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
     [SerializeField] private Color           deselectedTint = new Color(1f, 1f, 1f, 0.4f);
     [SerializeField] private Button          readyButton;
-    [SerializeField] private Button          startButton;             // host only
+    [SerializeField] private Button          startButton;
     [SerializeField] private Button          charSelectLeaveButton;
 
     // ── Runtime state ─────────────────────────────────────────────────────
-    private static readonly string[] ClassNames = { "Knight", "Rogue", "Mage", "Cleric" };
     private int  selectedCharIndex  = 0;
     private bool isReady            = false;
     private bool inCharSelectPhase  = false;
+    private bool isSinglePlayer     = false;
 
     // ─────────────────────────────────────────────────────────────────────
     // Awake — wire all buttons
@@ -95,7 +94,7 @@ public class MainMenuController : MonoBehaviour
         // Navigation
         newGameButton          ?.onClick.AddListener(() => ShowNavPanel(modePanel));
         multiplayerButton      ?.onClick.AddListener(() => ShowNavPanel(multiplayerPanel));
-        startSinglePlayerButton?.onClick.AddListener(StartSinglePlayer);
+        startSinglePlayerButton?.onClick.AddListener(GoToSinglePlayerCharSelect);
         backToMainButton       ?.onClick.AddListener(() => ShowNavPanel(mainMenuPanel));
         backToModeButton       ?.onClick.AddListener(() => ShowNavPanel(modePanel));
 
@@ -112,7 +111,6 @@ public class MainMenuController : MonoBehaviour
             int idx = i;
             characterButtons[i]?.onClick.AddListener(() => SelectCharacter(idx));
 
-            // Apply portrait sprite to the child Image (images[1] = child, images[0] = button bg)
             if (i < characterSprites.Count && characterSprites[i] != null)
             {
                 var imgs = characterButtons[i]?.GetComponentsInChildren<Image>();
@@ -198,8 +196,15 @@ public class MainMenuController : MonoBehaviour
         characterSelectPanel ?.SetActive(false);
     }
 
+    public void GoToSinglePlayerCharSelect()
+    {
+        isSinglePlayer = true;
+        SwitchToCharSelectPhase();
+    }
+
     private void StartSinglePlayer()
     {
+        CharacterSelection.Index = selectedCharIndex;
         loadingPanel?.SetActive(true);
         SceneManager.LoadScene(2);
     }
@@ -250,7 +255,7 @@ public class MainMenuController : MonoBehaviour
         beginCharSelectButton?.gameObject.SetActive(true);
     }
 
-    public void HandleSessionLeft()
+    private void HandleSessionLeft()
     {
         inCharSelectPhase = false;
         isReady           = false;
@@ -297,7 +302,10 @@ public class MainMenuController : MonoBehaviour
                 foreach (var p in players)
                 {
                     var go = Instantiate(playerSlotPrefab, list);
-                    go.GetComponent<PlayerSlotUI>()?.Setup(p);
+                    string charName = (p.CharacterIndex >= 0 && p.CharacterIndex < characterNames.Count)
+                        ? characterNames[p.CharacterIndex]
+                        : "Selecting...";
+                    go.GetComponent<PlayerSlotUI>()?.Setup(p, charName);
                 }
         }
 
@@ -314,6 +322,7 @@ public class MainMenuController : MonoBehaviour
         isReady           = false;
         selectedCharIndex = 0;
 
+        HideAllNavPanels();
         waitingLobbyPanel     ?.SetActive(false);
         waitingLobbyContent   ?.SetActive(false);
         characterSelectPanel  ?.SetActive(true);
@@ -322,9 +331,20 @@ public class MainMenuController : MonoBehaviour
         RefreshCharacterButtons();
         UpdateReadyVisual();
 
-        // Show start button for everyone for now
-        startButton?.gameObject.SetActive(true);
-        if (startButton != null) startButton.interactable = true;
+        if (isSinglePlayer)
+        {
+            // Single player: hide Ready (no one to wait for), show Start immediately
+            readyButton?.gameObject.SetActive(false);
+            startButton?.gameObject.SetActive(true);
+            if (startButton != null) startButton.interactable = true;
+        }
+        else
+        {
+            // Multiplayer: show Ready, show Start for host
+            readyButton?.gameObject.SetActive(true);
+            startButton?.gameObject.SetActive(true);
+            if (startButton != null) startButton.interactable = true;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -343,7 +363,9 @@ public class MainMenuController : MonoBehaviour
     private void SelectCharacter(int index)
     {
         selectedCharIndex = index;
-        NetworkGameManager.Instance?.SetLocalCharacterSelection(index);
+        // Only sync if NetworkGameManager has an active session
+        if (NetworkGameManager.Instance?.CurrentSession != null)
+            NetworkGameManager.Instance.SetLocalCharacterSelection(index);
         RefreshCharacterButtons();
     }
 
@@ -352,20 +374,15 @@ public class MainMenuController : MonoBehaviour
         for (int i = 0; i < characterButtons.Count; i++)
         {
             if (characterButtons[i] == null) continue;
-
             bool sel = (i == selectedCharIndex);
-
             var img = characterButtons[i].GetComponent<Image>();
             if (img != null) img.color = sel ? selectedTint : deselectedTint;
-
-            characterButtons[i].transform.localScale = sel
-                ? new Vector3(1.1f, 1.1f, 1f)
-                : Vector3.one;
+            characterButtons[i].transform.localScale = sel ? new Vector3(1.1f, 1.1f, 1f) : Vector3.one;
         }
 
         if (selectedCharacterName != null)
-            selectedCharacterName.text = selectedCharIndex < ClassNames.Length
-                ? ClassNames[selectedCharIndex] : "";
+            selectedCharacterName.text = (selectedCharIndex < characterNames.Count)
+                ? characterNames[selectedCharIndex] : "";
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -375,7 +392,8 @@ public class MainMenuController : MonoBehaviour
     private void OnReadyClicked()
     {
         isReady = !isReady;
-        NetworkGameManager.Instance?.SetLocalReadyState(isReady);
+        if (NetworkGameManager.Instance?.CurrentSession != null)
+            NetworkGameManager.Instance.SetLocalReadyState(isReady);
         UpdateReadyVisual();
         RefreshStartButton();
     }
@@ -393,9 +411,14 @@ public class MainMenuController : MonoBehaviour
 
     private void OnStartClicked()
     {
-        if (!(NetworkGameManager.Instance?.IsHost ?? false)) return;
-        if (!NetworkGameManager.Instance.AllPlayersReady()) return;
-        NetworkGameManager.Instance.StartGame();
+        if (isSinglePlayer)
+        {
+            StartSinglePlayer();
+            return;
+        }
+
+        // Multiplayer — load scene for all clients
+        NetworkGameManager.Instance?.StartGame();
     }
 
     private void RefreshStartButton()
@@ -417,6 +440,16 @@ public class MainMenuController : MonoBehaviour
     {
         isReady           = false;
         inCharSelectPhase = false;
-        _ = NetworkGameManager.Instance?.LeaveSessionAsync();
+        readyButton?.gameObject.SetActive(true); // restore for next time
+
+        if (isSinglePlayer)
+        {
+            isSinglePlayer = false;
+            ShowNavPanel(modePanel);
+        }
+        else
+        {
+            _ = NetworkGameManager.Instance?.LeaveSessionAsync();
+        }
     }
 }
