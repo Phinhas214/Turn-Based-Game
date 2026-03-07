@@ -54,6 +54,10 @@ public class TilemapGridVisual : MonoBehaviour
         if (currentTilemap == null) return;
 
         ResetAllTiles();
+
+        if (GridCostVisualizer.Instance != null)
+            GridCostVisualizer.Instance.ClearAll();
+
         UpdateActionVisuals();
         UpdateHoverVisual();
     }
@@ -67,7 +71,19 @@ public class TilemapGridVisual : MonoBehaviour
 
         if (selectedAction is MoveAction moveAction)
         {
-            HighlightPositions(moveAction.GetValidActionGridPositionList(), moveColor);
+            List<GridPosition> validPositions = moveAction.GetValidActionGridPositionList();
+
+            HighlightPositions(validPositions, moveColor);
+
+            // get the tile the mouse is hovering over
+            GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+
+            // only show cost if it's a valid move tile
+            if (validPositions.Contains(mouseGridPos))
+            {
+                int cost = moveAction.GetMoveCost(mouseGridPos);
+                GridCostVisualizer.Instance.ShowCost(mouseGridPos, cost);
+            }
         }
         else if (selectedAction is CombatAction combatAction)
         {
