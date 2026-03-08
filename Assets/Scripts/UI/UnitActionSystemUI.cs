@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 // Populates the action bar with one button per action on the selected unit.
 // Refreshes affordability state every frame so stamina cost badges stay accurate.
@@ -13,6 +14,13 @@ public class UnitActionSystemUI : MonoBehaviour
 
     [Tooltip("Parent transform that action buttons are spawned inside.")]
     [SerializeField] private Transform actionButtonContainerTransform;
+    public enum ActionLayoutDirection
+    {
+        Horizontal,
+        Vertical
+    }
+
+    [SerializeField] private ActionLayoutDirection layoutDirection = ActionLayoutDirection.Horizontal;
 
     private List<ActionButtonUI> actionButtonUIList = new List<ActionButtonUI>();
 
@@ -86,4 +94,6 @@ public class UnitActionSystemUI : MonoBehaviour
     {
         UpdateSelectedVisual();
     }
+
+    
 }
