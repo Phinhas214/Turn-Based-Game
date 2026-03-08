@@ -3,68 +3,71 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using TMPro;
 
+/// <summary>
+/// Shows stamina particles for the local player.
+/// Works in both single-player and multiplayer — finds the locally-owned unit.
+/// </summary>
 public class StaminaContainerUI : MonoBehaviour,
     IPointerEnterHandler,
     IPointerExitHandler
 {
-    public PlayerStats playerStats;
     public StaminaParticleUI particlePrefab;
+    public RectTransform     particleLayer;
 
-    public RectTransform particleLayer;
-
-    float mouseForceRadius = 60f;
-    float mouseForceStrength = 300f;
+    [Header("Mouse Interaction")]
+    private float mouseForceRadius   = 60f;
+    private float mouseForceStrength = 300f;
 
     [Header("UI")]
-    public GameObject hoverOverlay;          // background only
-    public TextMeshProUGUI staminaText;      // always visible
+    public GameObject        hoverOverlay;
+    public TextMeshProUGUI   staminaText;
 
-    RectTransform rect;
-    List<StaminaParticleUI> particles = new();
+    private RectTransform         rect;
+    private List<StaminaParticleUI> particles = new List<StaminaParticleUI>();
+    private PlayerStats           playerStats;
+    private int                   lastStamina = -1;
 
-    int lastStamina = -1;
-
-    void Awake()
+    private void Awake()
     {
         rect = GetComponent<RectTransform>();
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
-        LevelGenerator.OnLevelReady += OnLevelReady;
+        LevelGenerator.OnLevelReady          += OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
+        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
     }
 
-    void OnLevelReady()
+    private void OnLevelReady()
     {
-        Unit unit = FindFirstObjectByType<Unit>();
-        if (unit != null)
+        Unit unit = FindLocalUnit();
+        if (unit == null)
         {
-            playerStats = unit.GetComponent<PlayerStats>();
+            Debug.LogWarning("[StaminaContainerUI] No local unit found.");
+            return;
+        }
 
-            // Force full initial sync
-            lastStamina = playerStats.currentStamina;
-            UpdateStaminaText();
-            UpdateParticles(lastStamina);
-        }
-        else
-        {
-            Debug.LogWarning("StaminaContainerUI: No Unit found after level ready!");
-        }
+        playerStats = unit.GetComponent<PlayerStats>();
+        if (playerStats == null) return;
+
+        lastStamina = playerStats.currentStamina;
+        UpdateStaminaText();
+        UpdateParticles(lastStamina);
     }
 
-    void Update()
+    private void Update()
     {
         if (!playerStats) return;
 
         if (playerStats.currentStamina != lastStamina)
         {
             lastStamina = playerStats.currentStamina;
-
             UpdateParticles(lastStamina);
             UpdateStaminaText();
         }
@@ -73,109 +76,102 @@ public class StaminaContainerUI : MonoBehaviour,
         ApplyParticleRepulsion();
     }
 
-    public void OnPointerEnter(PointerEventData eventData)
+    public void OnPointerEnter(PointerEventData eventData) => hoverOverlay.SetActive(true);
+    public void OnPointerExit(PointerEventData eventData)  => hoverOverlay.SetActive(false);
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private Unit FindLocalUnit()
     {
-        hoverOverlay.SetActive(true);
+        foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = unit.GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null) { if (netObj.IsOwner) return unit; }
+            else return unit; // single-player
+        }
+        return null;
     }
 
-    public void OnPointerExit(PointerEventData eventData)
+    private void UpdateStaminaText()
     {
-        hoverOverlay.SetActive(false);
+        if (staminaText != null)
+            staminaText.text = playerStats.currentStamina.ToString();
     }
 
-    void UpdateStaminaText()
-    {
-        staminaText.text = playerStats.currentStamina.ToString();
-        // or $"{playerStats.currentStamina}/{playerStats.maxStamina}";
-    }
-
-    void DisturbParticlesWithMouse()
+    private void DisturbParticlesWithMouse()
     {
         Vector2 localMousePos;
-
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            rect,
-            Input.mousePosition,
-            Camera.main,
-            out localMousePos
-        );
+            rect, Input.mousePosition, Camera.main, out localMousePos);
 
-        if (!rect.rect.Contains(localMousePos))
-            return;
+        if (!rect.rect.Contains(localMousePos)) return;
 
         foreach (var p in particles)
         {
-            RectTransform pr = p.GetComponent<RectTransform>();
-            Vector2 dir = pr.anchoredPosition - localMousePos;
-            float distance = dir.magnitude;
+            RectTransform pr  = p.GetComponent<RectTransform>();
+            Vector2       dir = pr.anchoredPosition - localMousePos;
+            float         dist = dir.magnitude;
 
-            if (distance < mouseForceRadius)
+            if (dist < mouseForceRadius)
             {
-                float strength = 1f - (distance / mouseForceRadius);
-                Vector2 force = dir.normalized * strength * mouseForceStrength;
-                p.ApplyForce(force * Time.deltaTime);
+                float strength = 1f - (dist / mouseForceRadius);
+                p.ApplyForce(dir.normalized * strength * mouseForceStrength * Time.deltaTime);
             }
         }
     }
 
-    void ApplyParticleRepulsion()
+    private void ApplyParticleRepulsion()
     {
-        float repelRadius = 18f;
+        float repelRadius   = 18f;
         float repelStrength = 80f;
 
         for (int i = 0; i < particles.Count; i++)
         {
             RectTransform a = particles[i].GetComponent<RectTransform>();
-
             for (int j = i + 1; j < particles.Count; j++)
             {
-                RectTransform b = particles[j].GetComponent<RectTransform>();
+                RectTransform b   = particles[j].GetComponent<RectTransform>();
+                Vector2       dir = a.anchoredPosition - b.anchoredPosition;
+                float         dist = dir.magnitude;
 
-                Vector2 dir = a.anchoredPosition - b.anchoredPosition;
-                float distance = dir.magnitude;
-
-                if (distance < repelRadius && distance > 0.01f)
+                if (dist < repelRadius && dist > 0.01f)
                 {
-                    float strength = 1f - (distance / repelRadius);
-                    Vector2 force = dir.normalized * strength * repelStrength;
-
-                    particles[i].ApplyForce(force * Time.deltaTime);
+                    float  strength = 1f - (dist / repelRadius);
+                    Vector2 force   = dir.normalized * strength * repelStrength;
+                    particles[i].ApplyForce( force * Time.deltaTime);
                     particles[j].ApplyForce(-force * Time.deltaTime);
                 }
             }
         }
     }
 
-    void UpdateParticles(int targetCount)
+    private void UpdateParticles(int targetCount)
     {
         while (particles.Count > targetCount)
         {
-            Destroy(particles[^1].gameObject);
+            Destroy(particles[particles.Count - 1].gameObject);
             particles.RemoveAt(particles.Count - 1);
         }
 
         while (particles.Count < targetCount)
-        {
             SpawnParticle();
-        }
     }
 
-    void SpawnParticle()
+    private void SpawnParticle()
     {
-        StaminaParticleUI p = Instantiate(particlePrefab, particleLayer, false);
-        RectTransform pr = p.GetComponent<RectTransform>();
+        StaminaParticleUI p  = Instantiate(particlePrefab, particleLayer, false);
+        RectTransform     pr = p.GetComponent<RectTransform>();
 
         Rect bounds = GetInnerBounds();
         pr.anchoredPosition = new Vector2(
             Random.Range(bounds.xMin, bounds.xMax),
-            Random.Range(bounds.yMin, bounds.yMax)
-        );
+            Random.Range(bounds.yMin, bounds.yMax));
 
         p.Initialize(bounds);
         particles.Add(p);
     }
 
-    Rect GetInnerBounds()
+    private Rect GetInnerBounds()
     {
         Vector2 size = rect.rect.size * 0.5f;
         return new Rect(-size, size * 2f);

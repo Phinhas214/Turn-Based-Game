@@ -1,43 +1,65 @@
 using UnityEngine;
 
+/// <summary>
+/// Drives health-tier fire animations for the local player.
+/// Works with both HealthComponent (SP) and NetworkedHealthComponent (MP).
+/// </summary>
 public class HealthFireUI : MonoBehaviour
 {
-    [Header("References")]
-    public PlayerStats playerStats;
     public Animator animator;
 
-    int lastTier = -1;
+    private HealthComponent          spHealth;
+    private NetworkedHealthComponent mpHealth;
 
-    void OnEnable()
+    private int lastTier = -1;
+
+    private void OnEnable()
     {
-        LevelGenerator.OnLevelReady += OnLevelReady;
+        LevelGenerator.OnLevelReady          += OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
+        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
+        UnsubscribeAll();
     }
 
-    void OnLevelReady()
+    private void OnLevelReady()
     {
-        Unit unit = FindFirstObjectByType<Unit>();
-        if (unit != null)
+        UnsubscribeAll();
+
+        Unit unit = FindLocalUnit();
+        if (unit == null) { Debug.LogWarning("[HealthFireUI] No local unit."); return; }
+
+        mpHealth = unit.GetComponent<NetworkedHealthComponent>();
+        if (mpHealth != null)
         {
-            playerStats = unit.GetComponent<PlayerStats>();
+            mpHealth.OnHealthChanged += OnHealthChanged;
+            OnHealthChanged(mpHealth.CurrentHealth, mpHealth.MaxHealth);
+            return;
         }
-        else
+
+        spHealth = unit.GetComponent<HealthComponent>();
+        if (spHealth != null)
         {
-            Debug.LogWarning("HealthFireUI: No Unit found!");
+            spHealth.OnHealthChanged += OnHealthChanged;
+            OnHealthChanged(spHealth.CurrentHealth, spHealth.MaxHealth);
         }
     }
 
-    void Update()
+    private void UnsubscribeAll()
     {
-        if (!playerStats || !animator) return;
+        if (mpHealth != null) { mpHealth.OnHealthChanged -= OnHealthChanged; mpHealth = null; }
+        if (spHealth != null) { spHealth.OnHealthChanged -= OnHealthChanged; spHealth = null; }
+    }
 
-        float hpPercent =
-            (float)playerStats.currentHealth / playerStats.maxHealth;
+    private void OnHealthChanged(int current, int max)
+    {
+        if (max <= 0 || !animator) return;
 
+        float hpPercent = (float)current / max;
         int tier = CalculateTier(hpPercent);
 
         if (tier != lastTier)
@@ -47,12 +69,22 @@ public class HealthFireUI : MonoBehaviour
         }
     }
 
-    int CalculateTier(float hp)
+    private Unit FindLocalUnit()
     {
-        if (hp > 0.75f) return 3;   // Max
-        if (hp > 0.50f) return 2;   // High
-        if (hp > 0.25f) return 1;   // Medium
-        if (hp > 0f) return 0;   // Low
+        foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = unit.GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null) { if (netObj.IsOwner) return unit; }
+            else return unit;
+        }
+        return null;
+    }
+
+    private int CalculateTier(float hp)
+    {
+        if (hp > 0.75f) return 3;
+        if (hp > 0.50f) return 2;
+        if (hp > 0.25f) return 1;
         return 0;
     }
 }

@@ -1,6 +1,11 @@
 using System;
 using UnityEngine;
 
+/// <summary>
+/// Shows the selection ring under the selected unit.
+/// Works with both UnitActionSystem (single-player) and
+/// NetworkedUnitActionSystem (multiplayer).
+/// </summary>
 public class UnitSelectedVisual : MonoBehaviour
 {
     [SerializeField] private Unit unit;
@@ -14,36 +19,38 @@ public class UnitSelectedVisual : MonoBehaviour
 
     private void Start()
     {
-        if (UnitActionSystem.Instance != null)
-        {
-            UnitActionSystem.Instance.OnSelectedUnitChange += UnitActionSystem_OnSelectedUnitChange;
-        }
-        
+        if (NetworkedUnitActionSystem.Instance != null)
+            NetworkedUnitActionSystem.Instance.OnSelectedUnitChange += OnSelectedUnitChange;
+        else if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.OnSelectedUnitChange += OnSelectedUnitChange;
+
         UpdateVisual();
     }
 
     private void OnDestroy()
     {
-        if (UnitActionSystem.Instance != null)
-        {
-            UnitActionSystem.Instance.OnSelectedUnitChange -= UnitActionSystem_OnSelectedUnitChange;
-        }
+        if (NetworkedUnitActionSystem.Instance != null)
+            NetworkedUnitActionSystem.Instance.OnSelectedUnitChange -= OnSelectedUnitChange;
+        else if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.OnSelectedUnitChange -= OnSelectedUnitChange;
     }
 
-    private void UnitActionSystem_OnSelectedUnitChange(object sender, EventArgs empty)
-    {
-        UpdateVisual();
-    }
+    private void OnSelectedUnitChange(object sender, EventArgs e) => UpdateVisual();
 
     private void UpdateVisual()
     {
-        if (UnitActionSystem.Instance != null && UnitActionSystem.Instance.GetSelectedUnit() == unit)
-        {
-            meshRenderer.enabled = true;
-        }
-        else
-        {
-            meshRenderer.enabled = false;
-        }
+        Unit selected = GetSelectedUnit();
+
+        // In multiplayer: only show the ring on the locally-owned unit
+        // In single-player: show on whichever unit is selected
+        meshRenderer.enabled = (selected == unit);
+    }
+
+    private Unit GetSelectedUnit()
+    {
+        if (NetworkedUnitActionSystem.Instance != null)
+            return NetworkedUnitActionSystem.Instance.GetSelectedUnit();
+
+        return UnitActionSystem.Instance?.GetSelectedUnit();
     }
 }

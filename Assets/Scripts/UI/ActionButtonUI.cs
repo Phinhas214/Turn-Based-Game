@@ -4,44 +4,30 @@ using UnityEngine.Serialization;
 using TMPro;
 
 /// <summary>
-/// Drives one action button in the action bar UI.
-/// - Shows the action name
-/// - Shows stamina cost if the action is a CombatAction
-/// - Greys out and disables the button when the unit can't afford the action
-/// - Highlights when the action is currently selected
+/// Drives one action button in the action bar.
+/// Works with both UnitActionSystem (single-player) and
+/// NetworkedUnitActionSystem (multiplayer).
 /// </summary>
 public class ActionButtonUI : MonoBehaviour
 {
     [Header("Core References")]
-    [Tooltip("The clickable button.")]
     [SerializeField] private Button button;
 
-    [Tooltip("Label showing the action name.")]
-    [FormerlySerializedAs("textMeshPro")]          // ← keeps your existing prefab reference
+    [FormerlySerializedAs("textMeshPro")]
     [SerializeField] private TextMeshProUGUI actionNameText;
 
-    [Tooltip("Outline or background image shown when this action is selected.")]
     [SerializeField] private GameObject selectedGameObject;
 
     [Header("Stamina Cost Display")]
-    [Tooltip("Root object for the stamina cost badge. Hidden for actions with no cost.")]
-    [SerializeField] private GameObject staminaCostRoot;
-
-    [Tooltip("Text showing the stamina cost number.")]
+    [SerializeField] private GameObject      staminaCostRoot;
     [SerializeField] private TextMeshProUGUI staminaCostText;
-
-    [Tooltip("Icon next to the stamina cost number (optional).")]
-    [SerializeField] private Image staminaIcon;
+    [SerializeField] private Image           staminaIcon;
 
     [Header("Affordability Visuals")]
-    [Tooltip("Alpha applied to the button when the unit can't afford the action.")]
     [Range(0f, 1f)]
-    [SerializeField] private float unaffordableAlpha = 0.4f;
-
-    [Tooltip("CanvasGroup used to dim the button when unaffordable. Auto-added if left empty.")]
+    [SerializeField] private float       unaffordableAlpha = 0.4f;
     [SerializeField] private CanvasGroup canvasGroup;
 
-    // ── Runtime ───────────────────────────────────────────────────────────
     private BaseAction baseAction;
 
     private void Awake()
@@ -49,8 +35,6 @@ public class ActionButtonUI : MonoBehaviour
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
     }
-
-    // ── Public API ────────────────────────────────────────────────────────
 
     public void SetBaseAction(BaseAction action)
     {
@@ -60,7 +44,7 @@ public class ActionButtonUI : MonoBehaviour
             actionNameText.text = action.GetActionName().ToUpper();
 
         button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(() => UnitActionSystem.Instance.SetSelectedAction(baseAction));
+        button.onClick.AddListener(() => SetActionOnActiveSystem(baseAction));
 
         RefreshStaminaCost();
         RefreshAffordability();
@@ -68,15 +52,33 @@ public class ActionButtonUI : MonoBehaviour
 
     public void UpdateSelectedVisual()
     {
-        if (UnitActionSystem.Instance == null) return;
+        BaseAction currentAction = GetSelectedActionFromActiveSystem();
 
         if (selectedGameObject != null)
-            selectedGameObject.SetActive(UnitActionSystem.Instance.GetSelectedAction() == baseAction);
+            selectedGameObject.SetActive(currentAction == baseAction);
 
         RefreshAffordability();
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    /// <summary>Routes SetSelectedAction to whichever system is active.</summary>
+    private void SetActionOnActiveSystem(BaseAction action)
+    {
+        if (NetworkedUnitActionSystem.Instance != null)
+            NetworkedUnitActionSystem.Instance.SetSelectedAction(action);
+        else
+            UnitActionSystem.Instance?.SetSelectedAction(action);
+    }
+
+    /// <summary>Returns the currently selected action from whichever system is active.</summary>
+    private BaseAction GetSelectedActionFromActiveSystem()
+    {
+        if (NetworkedUnitActionSystem.Instance != null)
+            return NetworkedUnitActionSystem.Instance.GetSelectedAction();
+
+        return UnitActionSystem.Instance?.GetSelectedAction();
+    }
 
     private void RefreshStaminaCost()
     {
@@ -89,12 +91,6 @@ public class ActionButtonUI : MonoBehaviour
             if (staminaCostText != null)
                 staminaCostText.text = cost.ToString();
         }
-        // else if (baseAction is SpinAction)
-        // {
-        //     staminaCostRoot.SetActive(true);
-        //     if (staminaCostText != null)
-        //         staminaCostText.text = "1";
-        // }
         else
         {
             staminaCostRoot.SetActive(false);
@@ -106,7 +102,7 @@ public class ActionButtonUI : MonoBehaviour
         if (canvasGroup == null) return;
 
         bool canAfford = CanAffordAction();
-        canvasGroup.alpha = canAfford ? 1f : unaffordableAlpha;
+        canvasGroup.alpha   = canAfford ? 1f : unaffordableAlpha;
         button.interactable = canAfford;
     }
 

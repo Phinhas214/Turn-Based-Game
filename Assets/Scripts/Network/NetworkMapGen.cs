@@ -178,7 +178,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
     private void ReconstructLevelOnClient(int seed, RoomSyncData[] rooms)
     {
-        UnityEngine.Random.InitState(seed); // same seed = same random choices
+        UnityEngine.Random.InitState(seed);
 
         ClearLevel();
         placedRooms     = new List<PlacedRoom>();
@@ -194,8 +194,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             }
 
             RoomPrefabData prefabData = roomPrefabs[data.PrefabIndex];
-            Vector3 worldPos = new Vector3(data.WorldX, data.WorldY, data.WorldZ);
-            Vector2Int gridPos = new Vector2Int(data.GridX, data.GridZ);
+            Vector3    worldPos = new Vector3(data.WorldX, data.WorldY, data.WorldZ);
+            Vector2Int gridPos  = new Vector2Int(data.GridX, data.GridZ);
 
             PlacedRoom room = InstantiateRoom(prefabData, data.PrefabIndex, gridPos, worldPos);
             if (room != null)
@@ -205,10 +205,15 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             }
         }
 
+        // ── FIX 1: Rebuild roomConnections on the client ──────────────────
+        // The server builds connections via CreateHallway during generation,
+        // but the client only receives positions — so we rebuild the connection
+        // map here from the grid positions, which are identical on both sides.
+        ReconstructConnectionsFromGrid();
+
         InitializeRoomGrids();
         InitializeDoors();
 
-        // Set the start room
         PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
         if (startRoom != null)
         {
@@ -216,8 +221,75 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
         }
 
-        OnLevelReady?.Invoke();
+        // ── FIX 2: Don't fire OnLevelReady yet — wait for player objects ──
+        // The host spawns player NetworkObjects ~1 second after sending this
+        // ClientRpc. If we fire OnLevelReady now, TrySelectLocalUnit finds
+        // nothing and selectedUnit stays null forever (no movement).
+        StartCoroutine(WaitForLocalPlayerThenFireReady());
+
         Debug.Log("[NetworkedLevelGenerator] Client level reconstruction complete.");
+    }
+
+    /// <summary>
+    /// Rebuilds roomConnections on the client from grid adjacency.
+    /// Two rooms are connected if they are exactly 1 grid step apart AND
+    /// both have a RoomConnector point facing each other.
+    /// </summary>
+    private void ReconstructConnectionsFromGrid()
+    {
+        foreach (PlacedRoom a in placedRooms)
+        {
+            foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            {
+                // Already registered this direction?
+                if (roomConnections.ContainsKey((a, dir))) continue;
+
+                Vector2Int neighbourGrid = a.gridPosition + GetDirectionOffset(dir);
+                if (!roomGrid.TryGetValue(neighbourGrid, out PlacedRoom b)) continue;
+
+                // Verify both rooms actually have connector points facing each other
+                if (a.connector == null || b.connector == null) continue;
+                if (!a.connector.HasConnectionPoint(dir)) continue;
+                if (!b.connector.HasConnectionPoint(GetOppositeDirection(dir))) continue;
+
+                roomConnections[(a, dir)]                        = b;
+                roomConnections[(b, GetOppositeDirection(dir))]  = a;
+            }
+        }
+
+        Debug.Log($"[NetworkedLevelGenerator] Client rebuilt {roomConnections.Count} room connections.");
+    }
+
+    /// <summary>
+    /// Waits until the local client's player NetworkObject has been spawned
+    /// by the server, then fires OnLevelReady so UI/action systems can find it.
+    /// </summary>
+    private System.Collections.IEnumerator WaitForLocalPlayerThenFireReady()
+    {
+        float timeout = 10f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            // Look for any Unit with a NetworkObject owned by this client
+            foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+            {
+                NetworkObject netObj = unit.GetComponent<NetworkObject>();
+                if (netObj != null && netObj.IsOwner)
+                {
+                    Debug.Log("[NetworkedLevelGenerator] Local player found — firing OnLevelReady.");
+                    OnLevelReady?.Invoke();
+                    yield break;
+                }
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Timed out — fire anyway so the game isn't completely stuck
+        Debug.LogWarning("[NetworkedLevelGenerator] Timed out waiting for local player. Firing OnLevelReady anyway.");
+        OnLevelReady?.Invoke();
     }
 
     // ─────────────────────────────────────────────────────────────────────

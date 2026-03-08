@@ -7670,7 +7670,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 722665128}
 --- !u!95 &722665128
 Animator:
@@ -8180,7 +8179,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 0}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 777925739}
   hoverOverlay: {fileID: 804630875}
@@ -8274,7 +8272,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 839372149}
 --- !u!95 &839372149
 Animator:
@@ -13343,7 +13340,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1318589708}
 --- !u!95 &1318589708
 Animator:
@@ -14571,7 +14567,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 0}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 1152849149}
   hoverOverlay: {fileID: 1486846191}
@@ -15185,7 +15180,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1527060762}
 --- !u!95 &1527060762
 Animator:
@@ -15981,7 +15975,7 @@ MonoBehaviour:
     TimeResyncInterval: 30
     EnsureNetworkVariableLengthSafety: 0
     EnableSceneManagement: 1
-    ForceSamePrefabs: 1
+    ForceSamePrefabs: 0
     RecycleNetworkIds: 1
     NetworkIdRecycleDelay: 120
     RpcHashSize: 0
@@ -17116,7 +17110,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1753540685}
 --- !u!95 &1753540685
 Animator:
@@ -18416,7 +18409,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2000321974}
 --- !u!95 &2000321974
 Animator:
@@ -18920,7 +18912,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2089847937}
 --- !u!95 &2089847937
 Animator:
@@ -19539,7 +19530,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2127645719}
 --- !u!95 &2127645719
 Animator:
@@ -43057,6 +43047,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: 'playerPrefabs.Array.data[0]'
+      value: 
+      objectReference: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+    - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: 'playerPrefabs.Array.data[1]'
+      value: 
+      objectReference: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: roomPrefabs.Array.data[0].spawnWeight
       value: 1
