@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 using Unity.Netcode;
 using UnityEngine;
@@ -9,67 +8,51 @@ using UnityEngine.UI;
 /// <summary>
 /// Networked End Turn button UI.
 ///
-/// DIFFERENCES FROM ORIGINAL TurnSystemUI:
-///   - Shows how many players have confirmed end-turn (e.g. "1/3 Ready")
-///   - Only shows LOCAL player's UI — other players' UI is their own business
-///   - End Turn button submits to MultiplayerTurnSystem instead of TurnSystem
+/// TURN FLOW:
+///   - Each player clicks "End Turn" OR runs out of stamina → auto-submits after a brief flash.
+///   - Shows "X / Y ready" so players know who's still going.
+///   - Locks the button during enemy phase.
+///   - When ALL living players have submitted, the server runs enemies then starts the next player turn.
 ///
 /// SETUP:
-///   Same panel structure as your existing TurnSystemUI.
-///   Wire references in Inspector.
+///   Wire all references in Inspector. Add to your HUD canvas.
+///   Works in both SP (TurnSystem) and MP (MultiplayerTurnSystem).
 /// </summary>
 public class MultiplayerTurnSystemUI : MonoBehaviour
 {
+    // ── Singleton ─────────────────────────────────────────────────────────
+    public static MultiplayerTurnSystemUI Instance { get; private set; }
+
     // ── References ────────────────────────────────────────────────────────
     [Header("Core UI")]
     [SerializeField] private Button          endTurnButton;
     [SerializeField] private TextMeshProUGUI turnNumberText;
-    [SerializeField] private TextMeshProUGUI readyCountText;    // e.g. "2 / 4 players ready"
+    [SerializeField] private TextMeshProUGUI readyCountText;    // e.g. "2 / 4 ready"
 
     [Header("Visual States")]
     [SerializeField] private GameObject endTurnFlashOverlay;
     [SerializeField] private GameObject disabledClickFeedback;
-    [SerializeField] private GameObject enemyTurnOverlay;      // shown during enemy phase
+    [SerializeField] private GameObject enemyTurnOverlay;       // shown during enemy phase
 
     [Header("Timings")]
     [SerializeField] private float flashInterval            = 0.3f;
     [SerializeField] private float disabledFeedbackDuration = 0.15f;
 
     // ── Private ───────────────────────────────────────────────────────────
-    private PlayerStats playerStats;
+    private PlayerStats localPlayerStats;
+    private bool        hasSubmittedThisTurn = false;
     private Coroutine   flashRoutine;
 
-    // Tracks how many players have ended their turn this round
-    // (the server knows the real count; we approximate from a ClientRpc)
-    private int playersReady   = 0;
-    private int playersTotal   = 0;
+    private int playersReady = 0;
+    private int playersTotal = 1;
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
     // ─────────────────────────────────────────────────────────────────────
 
-    private void OnEnable()
+    private void Awake()
     {
-        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
-
-        if (MultiplayerTurnSystem.Instance != null)
-        {
-            MultiplayerTurnSystem.Instance.OnTurnChanged      += HandleTurnChanged;
-            MultiplayerTurnSystem.Instance.OnEnemyPhaseBegin  += HandleEnemyPhaseBegin;
-            MultiplayerTurnSystem.Instance.OnPlayerTurnBegin  += HandlePlayerTurnBegin;
-        }
-    }
-
-    private void OnDisable()
-    {
-        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
-
-        if (MultiplayerTurnSystem.Instance != null)
-        {
-            MultiplayerTurnSystem.Instance.OnTurnChanged     -= HandleTurnChanged;
-            MultiplayerTurnSystem.Instance.OnEnemyPhaseBegin -= HandleEnemyPhaseBegin;
-            MultiplayerTurnSystem.Instance.OnPlayerTurnBegin -= HandlePlayerTurnBegin;
-        }
+        Instance = this;
     }
 
     private void Start()
@@ -84,104 +67,188 @@ public class MultiplayerTurnSystemUI : MonoBehaviour
         UpdateReadyCount(0, 1);
     }
 
+    private void OnEnable()
+    {
+        LevelGenerator.OnLevelReady          += OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
+        SubscribeToTurnSystem();
+    }
+
+    private void OnDisable()
+    {
+        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
+        UnsubscribeFromTurnSystem();
+    }
+
+    private void SubscribeToTurnSystem()
+    {
+        if (MultiplayerTurnSystem.Instance != null)
+        {
+            MultiplayerTurnSystem.Instance.OnTurnChanged     += HandleTurnChanged;
+            MultiplayerTurnSystem.Instance.OnEnemyPhaseBegin += HandleEnemyPhaseBegin;
+            MultiplayerTurnSystem.Instance.OnPlayerTurnBegin += HandlePlayerTurnBegin;
+        }
+        else if (TurnSystem.Instance != null)
+        {
+            TurnSystem.Instance.OnTurnChanged += HandleTurnChanged;
+        }
+    }
+
+    private void UnsubscribeFromTurnSystem()
+    {
+        if (MultiplayerTurnSystem.Instance != null)
+        {
+            MultiplayerTurnSystem.Instance.OnTurnChanged     -= HandleTurnChanged;
+            MultiplayerTurnSystem.Instance.OnEnemyPhaseBegin -= HandleEnemyPhaseBegin;
+            MultiplayerTurnSystem.Instance.OnPlayerTurnBegin -= HandlePlayerTurnBegin;
+        }
+        if (TurnSystem.Instance != null)
+            TurnSystem.Instance.OnTurnChanged -= HandleTurnChanged;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
-    // Level ready
+    // Level ready — find LOCAL player's stats
     // ─────────────────────────────────────────────────────────────────────
 
     private void OnLevelReady()
     {
-        Unit unit = FindFirstObjectByType<Unit>();
-        if (unit != null)
-            playerStats = unit.GetComponent<PlayerStats>();
+        // Re-subscribe in case MultiplayerTurnSystem spawned after OnEnable
+        SubscribeToTurnSystem();
+        StartCoroutine(WaitForLocalPlayerStats());
+    }
 
-        playersTotal = NetworkManager.Singleton?.ConnectedClientsIds.Count ?? 1;
-        UpdateReadyCount(0, playersTotal);
+    private IEnumerator WaitForLocalPlayerStats()
+    {
+        float timeout = 10f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            Unit localUnit = FindLocalUnit();
+            if (localUnit != null)
+            {
+                localPlayerStats = localUnit.GetComponent<PlayerStats>();
+                playersTotal     = NetworkManager.Singleton?.ConnectedClientsIds.Count ?? 1;
+                UpdateReadyCount(0, playersTotal);
+                UpdateTurnText();
+                yield break;
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        Debug.LogWarning("[MultiplayerTurnSystemUI] Timed out finding local player stats.");
+    }
+
+    private Unit FindLocalUnit()
+    {
+        foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = unit.GetComponent<NetworkObject>();
+            if (netObj != null)
+            {
+                if (netObj.IsOwner) return unit;
+            }
+            else
+            {
+                return unit; // single-player: no network object
+            }
+        }
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Update
+    // Update — auto end-turn when stamina hits 0
     // ─────────────────────────────────────────────────────────────────────
 
     private void Update()
     {
-        if (playerStats == null || MultiplayerTurnSystem.Instance == null) return;
-
-        bool isPlayerTurn = MultiplayerTurnSystem.Instance.IsPlayerTurn;
-        bool outOfStamina = playerStats.currentStamina == 0;
-
-        if (!isPlayerTurn)
+        if (!IsPlayerTurnNow())
         {
             StopFlash();
-            SetOverlay(endTurnFlashOverlay, true);
             return;
         }
 
-        if (!outOfStamina)
+        if (localPlayerStats == null || hasSubmittedThisTurn) return;
+
+        bool outOfStamina = localPlayerStats.currentStamina <= 0;
+
+        if (outOfStamina)
+        {
+            if (flashRoutine == null)
+                flashRoutine = StartCoroutine(FlashThenAutoSubmit());
+        }
+        else
         {
             StopFlash();
-            SetOverlay(endTurnFlashOverlay, false);
-            return;
         }
+    }
 
-        // Player turn + no stamina → flash
-        if (flashRoutine == null)
-            flashRoutine = StartCoroutine(FlashRoutine());
+    private bool IsPlayerTurnNow()
+    {
+        if (MultiplayerTurnSystem.Instance != null)
+            return MultiplayerTurnSystem.Instance.IsPlayerTurn;
+        if (TurnSystem.Instance != null)
+            return TurnSystem.Instance.IsPlayerTurn;
+        return true;
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Button
+    // Button click
     // ─────────────────────────────────────────────────────────────────────
 
     private void OnEndTurnClicked()
     {
-        if (MultiplayerTurnSystem.Instance == null) return;
-
-        if (!MultiplayerTurnSystem.Instance.IsPlayerTurn)
+        if (!IsPlayerTurnNow())
         {
             TriggerDisabledClickFeedback();
             return;
         }
-
-        MultiplayerTurnSystem.Instance.SubmitEndTurn();
-
-        // Visual feedback: grey out button until enemy phase ends
-        endTurnButton.interactable = false;
+        SubmitEndTurn();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Event handlers
-    // ─────────────────────────────────────────────────────────────────────
-
-    private void HandleTurnChanged(object sender, EventArgs e)
+    private void SubmitEndTurn()
     {
-        UpdateTurnText();
+        if (hasSubmittedThisTurn) return;
+        hasSubmittedThisTurn = true;
+
+        endTurnButton.interactable = false;
+        StopFlash();
+
+        if (MultiplayerTurnSystem.Instance != null)
+            MultiplayerTurnSystem.Instance.SubmitEndTurn();
+        else if (TurnSystem.Instance != null)
+            TurnSystem.Instance.NextTurn();
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Turn system events
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void HandleTurnChanged(object sender, EventArgs e) => UpdateTurnText();
 
     private void HandleEnemyPhaseBegin()
     {
         StopFlash();
         SetOverlay(enemyTurnOverlay, true);
         endTurnButton.interactable = false;
-
-        playersReady = 0;
-        UpdateReadyCount(0, playersTotal);
     }
 
     private void HandlePlayerTurnBegin()
     {
+        hasSubmittedThisTurn = false;
         SetOverlay(enemyTurnOverlay, false);
         endTurnButton.interactable = true;
         playersTotal = NetworkManager.Singleton?.ConnectedClientsIds.Count ?? 1;
         UpdateReadyCount(0, playersTotal);
+        UpdateTurnText();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Public — called by a NetworkBehaviour to sync ready count to all clients
+    // Public — called from MultiplayerTurnSystem.BroadcastReadyCountClientRpc
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Call this from a ClientRpc in MultiplayerTurnSystem when a player submits end-turn.
-    /// </summary>
     public void UpdateReadyCount(int ready, int total)
     {
         playersReady = ready;
@@ -197,19 +264,31 @@ public class MultiplayerTurnSystemUI : MonoBehaviour
 
     private void UpdateTurnText()
     {
-        if (MultiplayerTurnSystem.Instance != null && turnNumberText != null)
+        if (turnNumberText == null) return;
+        if (MultiplayerTurnSystem.Instance != null)
             turnNumberText.text = "TURN " + MultiplayerTurnSystem.Instance.GetTrunNumber();
+        else if (TurnSystem.Instance != null)
+            turnNumberText.text = "TURN " + TurnSystem.Instance.GetTrunNumber();
     }
 
-    private IEnumerator FlashRoutine()
+    /// <summary>
+    /// Flashes the end-turn button a few times to warn the player,
+    /// then automatically submits end-turn.
+    /// </summary>
+    private IEnumerator FlashThenAutoSubmit()
     {
-        while (true)
+        for (int i = 0; i < 3; i++)
         {
             SetOverlay(endTurnFlashOverlay, true);
             yield return new WaitForSeconds(flashInterval);
             SetOverlay(endTurnFlashOverlay, false);
             yield return new WaitForSeconds(flashInterval);
         }
+
+        flashRoutine = null;
+
+        if (IsPlayerTurnNow() && !hasSubmittedThisTurn)
+            SubmitEndTurn();
     }
 
     private void StopFlash()
@@ -225,7 +304,6 @@ public class MultiplayerTurnSystemUI : MonoBehaviour
     private void TriggerDisabledClickFeedback()
     {
         if (!disabledClickFeedback) return;
-        StopAllCoroutines();
         StartCoroutine(DisabledClickRoutine());
     }
 

@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 5915118979099542622}
   - component: {fileID: -3620176893896004876}
   - component: {fileID: 7995856432767743823}
+  - component: {fileID: -6397307400219606129}
   m_Layer: 7
   m_Name: SirSmokeStackNet
   m_TagString: Untagged
@@ -377,6 +378,29 @@ MonoBehaviour:
   SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
   SlerpPosition: 0
+--- !u!114 &-6397307400219606129
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922802329369371357}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51404ebfef9d465419c42e19c323a90b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkedHealthComponent
+  ShowTopMostFoldoutHeaderGroup: 1
+  damageNumberPrefab: {fileID: 5974884329945659219, guid: e3ca6c27c33f03f4aa57520969b4352b, type: 3}
+  damageNumberOffset: {x: 0, y: 1.5, z: 0}
+  damageFlashObject: {fileID: 4147606436745485713}
+  flashDuration: 0.15
+  flashCount: 1
+  maxHealth: 100
+  startingHealth: 0
+  destroyOnDeath: 1
+  deathDelay: 1
+  _currentHealthDebug: 0
 --- !u!1 &3413187921309941082
 GameObject:
   m_ObjectHideFlags: 0

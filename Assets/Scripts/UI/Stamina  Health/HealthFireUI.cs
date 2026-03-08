@@ -29,24 +29,40 @@ public class HealthFireUI : MonoBehaviour
     private void OnLevelReady()
     {
         UnsubscribeAll();
+        StartCoroutine(WaitForLocalUnitThenBind());
+    }
 
-        Unit unit = FindLocalUnit();
-        if (unit == null) { Debug.LogWarning("[HealthFireUI] No local unit."); return; }
+    private System.Collections.IEnumerator WaitForLocalUnitThenBind()
+    {
+        float timeout = 10f;
+        float elapsed = 0f;
 
-        mpHealth = unit.GetComponent<NetworkedHealthComponent>();
-        if (mpHealth != null)
+        while (elapsed < timeout)
         {
-            mpHealth.OnHealthChanged += OnHealthChanged;
-            OnHealthChanged(mpHealth.CurrentHealth, mpHealth.MaxHealth);
-            return;
+            Unit unit = FindLocalUnit();
+            if (unit != null)
+            {
+                mpHealth = unit.GetComponent<NetworkedHealthComponent>();
+                if (mpHealth != null)
+                {
+                    mpHealth.OnHealthChanged += OnHealthChanged;
+                    OnHealthChanged(mpHealth.CurrentHealth, mpHealth.MaxHealth);
+                    yield break;
+                }
+
+                spHealth = unit.GetComponent<HealthComponent>();
+                if (spHealth != null)
+                {
+                    spHealth.OnHealthChanged += OnHealthChanged;
+                    OnHealthChanged(spHealth.CurrentHealth, spHealth.MaxHealth);
+                    yield break;
+                }
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
         }
 
-        spHealth = unit.GetComponent<HealthComponent>();
-        if (spHealth != null)
-        {
-            spHealth.OnHealthChanged += OnHealthChanged;
-            OnHealthChanged(spHealth.CurrentHealth, spHealth.MaxHealth);
-        }
+        Debug.LogWarning("[HealthFireUI] Timed out waiting for local unit.");
     }
 
     private void UnsubscribeAll()

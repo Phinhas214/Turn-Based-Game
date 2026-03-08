@@ -1,19 +1,18 @@
 using System.Collections.Generic;
-using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
 /// <summary>
 /// Networked grid/tilemap visual that only shows highlights for the LOCAL player.
 ///
-/// Other players do not see each other's movement ranges or attack previews.
-/// This is a drop-in replacement used INSTEAD of both GridSystemVisual
-/// and TilemapGridVisual — it does the job of both, but with the owner check.
+/// BUG FIX: Old version cached currentTilemap on room-change events. After moving rooms
+/// the highlights painted on the OLD room's tilemap at wrong positions (stale cache).
+/// Now the tilemap is resolved every frame from the current room — always correct.
 ///
 /// SETUP:
-///   - Attach to the same GameObject as your TilemapGridVisual.
-///   - Fill solidWhiteTile reference.
-///   - Remove or disable the old TilemapGridVisual component.
+///   - Attach to your GridSystemVisual / TilemapGridVisual GameObject.
+///   - Fill solidWhiteTile in the Inspector.
+///   - Disable/remove the old TilemapGridVisual component.
 /// </summary>
 public class NetworkedGridVisual : MonoBehaviour
 {
@@ -28,144 +27,149 @@ public class NetworkedGridVisual : MonoBehaviour
     [SerializeField] private Color aoeColor   = new Color(1f,   0.15f, 0.15f, 1f);
     [SerializeField] private Color hoverColor = new Color(1f,   1f,   1f,    0.5f);
 
-    private Tilemap currentTilemap;
-
-    private Dictionary<Vector3Int, TileBase> originalTileData  = new Dictionary<Vector3Int, TileBase>();
-    private HashSet<Vector3Int>              modifiedPositions  = new HashSet<Vector3Int>();
+    // Per-frame paint tracking — reset every frame before repainting
+    private Tilemap             lastTilemap      = null;
+    private HashSet<Vector3Int> modifiedPositions = new HashSet<Vector3Int>();
+    private Dictionary<Vector3Int, TileBase> originalTileData = new Dictionary<Vector3Int, TileBase>();
 
     private void Awake() => Instance = this;
 
-    private void OnEnable()
-    {
-        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
-        RoomManager.OnAnyRoomChanged         += OnRoomChanged;
-    }
-
-    private void OnDisable()
-    {
-        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
-        RoomManager.OnAnyRoomChanged         -= OnRoomChanged;
-    }
-
-    private void OnLevelReady()      => RefreshCurrentTilemap();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => RefreshCurrentTilemap();
-
-    private void RefreshCurrentTilemap()
-    {
-        ResetAllTiles();
-        var room = RoomManager.Instance?.GetCurrentRoom();
-        if (room?.roomGrid != null)
-            currentTilemap = room.roomGrid.GetTilemapRoomGrid()?.GetFloorTilemap();
-    }
-
     private void Update()
     {
+        // ALWAYS resolve the current room's tilemap this frame (never cache across frames)
+        Tilemap currentTilemap = GetCurrentRoomTilemap();
+
+        // If the player moved to a different room, clear paint from the OLD tilemap
+        if (currentTilemap != lastTilemap)
+        {
+            ResetAllTiles(lastTilemap);
+            lastTilemap = currentTilemap;
+        }
+
         if (currentTilemap == null) return;
 
-        // CRITICAL: Only render highlights if this is the local player's action system
-        if (!IsLocalPlayerActive()) return;
+        // Only the local player sees their own highlights
+        if (!IsLocalPlayerActive())
+        {
+            ResetAllTiles(currentTilemap);
+            return;
+        }
 
-        ResetAllTiles();
-        UpdateActionVisuals();
-        UpdateHoverVisual();
+        ResetAllTiles(currentTilemap);
+        UpdateActionVisuals(currentTilemap);
+        UpdateHoverVisual(currentTilemap);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tilemap resolution — fresh every frame
+    // ─────────────────────────────────────────────────────────────────────
+
+    private Tilemap GetCurrentRoomTilemap()
+    {
+        var room = RoomManager.Instance?.GetCurrentRoom();
+        if (room?.roomGrid == null) return null;
+        return room.roomGrid.GetTilemapRoomGrid()?.GetFloorTilemap();
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Ownership check
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true if there is a valid local-player unit selected.
-    /// Prevents showing highlights on other players' screens.
-    /// </summary>
     private bool IsLocalPlayerActive()
     {
-        if (NetworkedUnitActionSystem.Instance == null) return false;
-
-        Unit selected = NetworkedUnitActionSystem.Instance.GetSelectedUnit();
-        if (selected == null) return false;
-
-        // If no NetworkObject, assume local (single-player testing)
-        NetworkObject netObj = selected.GetComponent<NetworkObject>();
-        if (netObj == null) return true;
-
-        return netObj.IsOwner;
+        if (NetworkedUnitActionSystem.Instance != null)
+        {
+            Unit selected = NetworkedUnitActionSystem.Instance.GetSelectedUnit();
+            if (selected == null) return false;
+            var netObj = selected.GetComponent<Unity.Netcode.NetworkObject>();
+            return netObj == null || netObj.IsOwner;
+        }
+        if (UnitActionSystem.Instance != null)
+            return UnitActionSystem.Instance.GetSelectedUnit() != null;
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Visual updates (identical logic to TilemapGridVisual, just uses NetworkedUnitActionSystem)
+    // Visual updates
     // ─────────────────────────────────────────────────────────────────────
 
-    private void UpdateActionVisuals()
+    private void UpdateActionVisuals(Tilemap tilemap)
     {
-        if (NetworkedUnitActionSystem.Instance == null) return;
-
-        BaseAction selectedAction = NetworkedUnitActionSystem.Instance.GetSelectedAction();
+        BaseAction selectedAction = NetworkedUnitActionSystem.Instance?.GetSelectedAction()
+                                 ?? UnitActionSystem.Instance?.GetSelectedAction();
         if (selectedAction == null) return;
 
         if (selectedAction is MoveAction moveAction)
         {
-            HighlightPositions(moveAction.GetValidActionGridPositionList(), moveColor);
+            HighlightPositions(tilemap, moveAction.GetValidActionGridPositionList(), moveColor);
         }
         else if (selectedAction is CombatAction combatAction)
         {
             Color rColor = combatAction.ActionData != null ? combatAction.ActionData.rangeHighlightColor : rangeColor;
             Color aColor = combatAction.ActionData != null ? combatAction.ActionData.aoeHighlightColor   : aoeColor;
 
-            HighlightPositions(combatAction.GetValidActionGridPositionList(), rColor);
+            HighlightPositions(tilemap, combatAction.GetValidActionGridPositionList(), rColor);
 
             if (LevelGrid.Instance != null)
             {
-                GridPosition mousePos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
-                HighlightPositions(combatAction.GetPreviewPositions(mousePos), aColor);
+                Vector3    mouseWorld   = MouseWorld.GetPosition();
+                RoomGrid   mouseRoom    = LevelGrid.Instance.GetRoomAtPosition(mouseWorld);
+                if (mouseRoom != null)
+                {
+                    GridPosition mousePos = mouseRoom.GetGridPosition(mouseWorld);
+                    HighlightPositions(tilemap, combatAction.GetPreviewPositions(mousePos), aColor);
+                }
             }
         }
     }
 
-    private void UpdateHoverVisual()
+    private void UpdateHoverVisual(Tilemap tilemap)
     {
         if (LevelGrid.Instance == null || !LevelGrid.Instance.IsInitialized()) return;
 
-        GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
-        if (LevelGrid.Instance.IsValidGridPosition(mouseGridPos))
-            ApplySolidColor(new Vector3Int(mouseGridPos.x, mouseGridPos.z, 0), hoverColor);
+        Vector3  mouseWorld = MouseWorld.GetPosition();
+        RoomGrid mouseRoom  = LevelGrid.Instance.GetRoomAtPosition(mouseWorld);
+        if (mouseRoom == null) return;
+
+        GridPosition mouseGridPos = mouseRoom.GetGridPosition(mouseWorld);
+        if (mouseRoom.IsValidGridPosition(mouseGridPos))
+            ApplySolidColor(tilemap, new Vector3Int(mouseGridPos.x, mouseGridPos.z, 0), hoverColor);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tile painting (same as TilemapGridVisual)
+    // Tile painting
     // ─────────────────────────────────────────────────────────────────────
 
-    private void HighlightPositions(List<GridPosition> positions, Color color)
+    private void HighlightPositions(Tilemap tilemap, List<GridPosition> positions, Color color)
     {
         foreach (GridPosition gp in positions)
-            ApplySolidColor(new Vector3Int(gp.x, gp.z, 0), color);
+            ApplySolidColor(tilemap, new Vector3Int(gp.x, gp.z, 0), color);
     }
 
-    private void ApplySolidColor(Vector3Int pos, Color color)
+    private void ApplySolidColor(Tilemap tilemap, Vector3Int pos, Color color)
     {
-        if (currentTilemap == null || !currentTilemap.HasTile(pos)) return;
+        if (tilemap == null || !tilemap.HasTile(pos)) return;
 
         if (!originalTileData.ContainsKey(pos))
-            originalTileData[pos] = currentTilemap.GetTile(pos);
+            originalTileData[pos] = tilemap.GetTile(pos);
 
-        currentTilemap.SetTile(pos, solidWhiteTile);
-        currentTilemap.SetTileFlags(pos, TileFlags.None);
-        currentTilemap.SetColor(pos, color);
-
+        tilemap.SetTile(pos, solidWhiteTile);
+        tilemap.SetTileFlags(pos, TileFlags.None);
+        tilemap.SetColor(pos, color);
         modifiedPositions.Add(pos);
     }
 
-    private void ResetAllTiles()
+    private void ResetAllTiles(Tilemap tilemap)
     {
-        if (currentTilemap == null) return;
+        if (tilemap == null || modifiedPositions.Count == 0) return;
 
         foreach (Vector3Int pos in modifiedPositions)
         {
             if (originalTileData.TryGetValue(pos, out TileBase original))
             {
-                currentTilemap.SetTile(pos, original);
-                currentTilemap.SetTileFlags(pos, TileFlags.None);
-                currentTilemap.SetColor(pos, Color.white);
+                tilemap.SetTile(pos, original);
+                tilemap.SetTileFlags(pos, TileFlags.None);
+                tilemap.SetColor(pos, Color.white);
             }
         }
 

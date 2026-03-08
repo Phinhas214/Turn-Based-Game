@@ -77,19 +77,48 @@ public class MultiplayerTurnSystem : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Subscribe to network variable changes so all clients get events
         isPlayerTurn.OnValueChanged += OnIsPlayerTurnChanged;
 
-        if (IsServer && EnemyManager.Instance != null)
-            EnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
+        if (IsServer)
+        {
+            // Try to subscribe now — if enemy manager isn't spawned yet, wait for level ready
+            if (!TrySubscribeToEnemyManager())
+                NetworkedLevelGenerator.OnLevelReady += OnLevelReadySubscribeEnemyManager;
+        }
     }
 
     public override void OnNetworkDespawn()
     {
         isPlayerTurn.OnValueChanged -= OnIsPlayerTurnChanged;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReadySubscribeEnemyManager;
 
-        if (IsServer && EnemyManager.Instance != null)
+        if (NetworkedEnemyManager.Instance != null)
+            NetworkedEnemyManager.Instance.OnEnemyTurnsComplete -= HandleEnemyTurnsComplete;
+        else if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnsComplete -= HandleEnemyTurnsComplete;
+    }
+
+    private void OnLevelReadySubscribeEnemyManager()
+    {
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReadySubscribeEnemyManager;
+        TrySubscribeToEnemyManager();
+    }
+
+    private bool TrySubscribeToEnemyManager()
+    {
+        if (NetworkedEnemyManager.Instance != null)
+        {
+            NetworkedEnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
+            Debug.Log("[MultiplayerTurnSystem] Subscribed to NetworkedEnemyManager.");
+            return true;
+        }
+        if (EnemyManager.Instance != null)
+        {
+            EnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
+            Debug.Log("[MultiplayerTurnSystem] Subscribed to EnemyManager (fallback).");
+            return true;
+        }
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -129,6 +158,10 @@ public class MultiplayerTurnSystem : NetworkBehaviour
     private void CheckAllPlayersReady()
     {
         int expected = GetExpectedPlayerCount();
+
+        // Broadcast current ready count to all clients so their UI can show "X / Y ready"
+        BroadcastReadyCountClientRpc(endTurnConfirmations.Count, expected);
+
         if (endTurnConfirmations.Count < expected)
             return;
 
@@ -144,18 +177,32 @@ public class MultiplayerTurnSystem : NetworkBehaviour
 
     private int GetExpectedPlayerCount()
     {
-        // Count connected clients that are alive (have a Unit with living HealthComponent)
-        // For simplicity, use connected client count.
-        // Advanced: filter by living players only.
-        return NetworkManager.Singleton.ConnectedClientsIds.Count;
+        // Only count living players — dead players don't block the turn
+        int living = 0;
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject != null)
+            {
+                var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
+                if (health == null || !health.IsDead)
+                    living++;
+            }
+            else
+            {
+                living++; // player object not yet spawned, count them in
+            }
+        }
+        return Mathf.Max(1, living);
     }
 
     private void RunEnemyTurnsOnServer()
     {
-        if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
+        if (NetworkedEnemyManager.Instance != null && NetworkedEnemyManager.Instance.GetEnemyCount() > 0)
+            NetworkedEnemyManager.Instance.RunEnemyTurns();
+        else if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
             EnemyManager.Instance.RunEnemyTurns();
         else
-            HandleEnemyTurnsComplete();
+            HandleEnemyTurnsComplete(); // no enemies — skip straight back to player turn
     }
 
     private void HandleEnemyTurnsComplete()
@@ -184,6 +231,12 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         OnEnemyPhaseEnd?.Invoke();
         OnPlayerTurnBegin?.Invoke();
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    [ClientRpc]
+    private void BroadcastReadyCountClientRpc(int ready, int total)
+    {
+        MultiplayerTurnSystemUI.Instance?.UpdateReadyCount(ready, total);
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -46,19 +46,33 @@ public class StaminaContainerUI : MonoBehaviour,
 
     private void OnLevelReady()
     {
-        Unit unit = FindLocalUnit();
-        if (unit == null)
+        StartCoroutine(WaitForLocalUnitThenBind());
+    }
+
+    private System.Collections.IEnumerator WaitForLocalUnitThenBind()
+    {
+        float timeout = 10f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
         {
-            Debug.LogWarning("[StaminaContainerUI] No local unit found.");
-            return;
+            Unit unit = FindLocalUnit();
+            if (unit != null)
+            {
+                playerStats = unit.GetComponent<PlayerStats>();
+                if (playerStats != null)
+                {
+                    lastStamina = playerStats.currentStamina;
+                    UpdateStaminaText();
+                    UpdateParticles(lastStamina);
+                    yield break;
+                }
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
         }
 
-        playerStats = unit.GetComponent<PlayerStats>();
-        if (playerStats == null) return;
-
-        lastStamina = playerStats.currentStamina;
-        UpdateStaminaText();
-        UpdateParticles(lastStamina);
+        Debug.LogWarning("[StaminaContainerUI] Timed out waiting for local unit.");
     }
 
     private void Update()
