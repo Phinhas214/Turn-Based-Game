@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 2434011355170160441}
   - component: {fileID: 5879779321624786987}
   m_Layer: 0
-  m_Name: Player
+  m_Name: SmokestackAnimated
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
