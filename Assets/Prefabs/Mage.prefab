@@ -18,7 +18,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &675018496142891516
 Transform:
   m_ObjectHideFlags: 0
@@ -31,8 +31,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 0.027756618, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 2643516718533760466}
+  m_Children: []
   m_Father: {fileID: 3717558283722815987}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &1733106879400096643
@@ -149,6 +148,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 675018496142891516}
+  - {fileID: 2643516718533760466}
   - {fileID: 5345427050129351794}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -230,6 +230,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
   actionData: {fileID: 11400000, guid: 50ea6a0245b22fa488e3c45de3ea7f65, type: 2}
+  diceBox: {fileID: 0}
   facingRotationSteps: 1
   debugGizmos: 1
 --- !u!114 &6502254005860565181
@@ -256,6 +257,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c305cccafa530a41b7a897900a715c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthComponent
+  damageNumberPrefab: {fileID: 0}
+  damageNumberOffset: {x: 0, y: 1.5, z: 0}
+  damageFlashObject: {fileID: 0}
+  flashDuration: 0.15
+  flashCount: 1
   maxHealth: 100
   startingHealth: 0
   destroyOnDeath: 0
@@ -286,12 +292,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3413187921309941082}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0.6, z: 1.02}
-  m_LocalScale: {x: 6.15, y: 6.15, z: 6.15}
+  m_LocalRotation: {x: 0.7071068, y: -0, z: -0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 0.016653972, z: 1.02}
+  m_LocalScale: {x: 6.15, y: 6.1500006, z: 0.1707032}
   m_ConstrainProportionsScale: 1
   m_Children: []
-  m_Father: {fileID: 675018496142891516}
+  m_Father: {fileID: 3717558283722815987}
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!212 &5269668903978980449
 SpriteRenderer:

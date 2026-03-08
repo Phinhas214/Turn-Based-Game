@@ -14,7 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
   actionName: Attack
   icon: {fileID: 0}
-  baseDamage: 15
+  useDiceDamage: 1
+  baseDamage: 0
+  diceCount: 4
+  dieType: 6
+  flatBonus: 0
   attackPattern: {fileID: 11400000, guid: 1ead6495335b653489c28f9d3296f9e7, type: 2}
   rotatesToFacing: 1
   minRange: 0
@@ -24,13 +28,13 @@ MonoBehaviour:
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: 'Damage      : 15
+  _summary: 'Damage : 4d6 + 0
 
     Stamina cost: 2
 
-    Pattern     : Slash_AP (5
-    tiles)
+    Pattern : Slash_AP (5 tiles)
 
-    Range       : Melee (pattern at unit)
+    Range
+    : Melee
 
-    Rotates     : True'
+    Rotates : True'

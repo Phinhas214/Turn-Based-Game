@@ -129,7 +129,9 @@ public class CombatActionCSVLoader : MonoBehaviour
     {
         data.name                 = cols[0].Trim(); // ScriptableObject asset name
         data.actionName           = cols[0].Trim();
-        data.baseDamage           = ParseInt (Get(cols, 1), 10,   rowIndex, "baseDamage");
+        data.diceCount            = ParseInt(Get(cols, 1), 1, rowIndex, "diceCount");
+        data.dieType              = DieType.D6;
+        data.flatBonus            = 0;
         data.minRange             = ParseInt (Get(cols, 2),  0,   rowIndex, "minRange");
         data.maxRange             = ParseInt (Get(cols, 3),  0,   rowIndex, "maxRange");
         data.staminaCost          = ParseInt (Get(cols, 4),  2,   rowIndex, "staminaCost");
