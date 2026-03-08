@@ -8,25 +8,28 @@ using UnityEngine;
 /// KEY RULES:
 ///   - Only the OWNING client processes input and moves the unit.
 ///   - Position is synced by NetworkTransform (add that component alongside this one).
-///   - Grid state (which cell the unit occupies) is synced via ServerRpc.
-///
-/// SETUP:
-///   - Replace the Unit component on your player prefab with this script.
-///   - Add a NetworkObject component (required by NGO).
-///   - Add a NetworkTransform component (handles position sync automatically).
-///   - Keep MoveAction, CombatAction, PlayerStats, HealthComponent on the same prefab.
-///
-/// MIGRATION:
-///   - All external code that calls unit.GetGridPosition() / PlaceInRoom() still works.
-///   - UnitActionSystem checks IsOwner before processing input (see NetworkedUnitActionSystem).
+///   - Grid state (which cell the unit occupies) is synced via NetworkVariables.
+///   - World position is ALSO synced via NetworkVariables so non-owners can
+///     teleport the transform when room navigation happens.
 /// </summary>
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkedUnit : NetworkBehaviour
 {
-    // ── Grid state synced to all clients ──────────────────────────────────
+    // ── Grid state — synced to all clients ────────────────────────────────
     private NetworkVariable<int> netGridX = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<int> netGridZ = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    // ── World position — synced so room transitions teleport correctly ────
+    // NetworkTransform handles smooth movement WITHIN a room.
+    // But when PlaceInRoom is called (room navigation / initial spawn) we
+    // need a hard teleport on non-owning clients, so we sync world pos too.
+    private NetworkVariable<float> netWorldX = new NetworkVariable<float>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<float> netWorldY = new NetworkVariable<float>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<float> netWorldZ = new NetworkVariable<float>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     // ── Private runtime ───────────────────────────────────────────────────
@@ -58,26 +61,26 @@ public class NetworkedUnit : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Subscribe to grid position changes so all clients track which cell each player is in
-        netGridX.OnValueChanged += OnNetGridPositionChanged;
-        netGridZ.OnValueChanged += OnNetGridPositionChanged;
+        netGridX.OnValueChanged  += OnNetGridPositionChanged;
+        netGridZ.OnValueChanged  += OnNetGridPositionChanged;
+        netWorldX.OnValueChanged += OnNetWorldPositionChanged;
+        netWorldY.OnValueChanged += OnNetWorldPositionChanged;
+        netWorldZ.OnValueChanged += OnNetWorldPositionChanged;
 
         if (MultiplayerTurnSystem.Instance != null)
             MultiplayerTurnSystem.Instance.OnTurnChanged += TurnSystem_OnTurnChanged;
 
-        // Only the local player's unit registers with UnitActionSystem
         if (IsOwner)
-        {
-            // Let UnitActionSystem know the local player's unit exists
-            // (It auto-selects via OnLevelReady, but this is a safety fallback)
             Debug.Log($"[NetworkedUnit] Local player unit spawned (clientId={OwnerClientId}).");
-        }
     }
 
     public override void OnNetworkDespawn()
     {
-        netGridX.OnValueChanged -= OnNetGridPositionChanged;
-        netGridZ.OnValueChanged -= OnNetGridPositionChanged;
+        netGridX.OnValueChanged  -= OnNetGridPositionChanged;
+        netGridZ.OnValueChanged  -= OnNetGridPositionChanged;
+        netWorldX.OnValueChanged -= OnNetWorldPositionChanged;
+        netWorldY.OnValueChanged -= OnNetWorldPositionChanged;
+        netWorldZ.OnValueChanged -= OnNetWorldPositionChanged;
 
         if (MultiplayerTurnSystem.Instance != null)
             MultiplayerTurnSystem.Instance.OnTurnChanged -= TurnSystem_OnTurnChanged;
@@ -85,7 +88,7 @@ public class NetworkedUnit : NetworkBehaviour
 
     private void Update()
     {
-        // Only the owning client tracks its own position against the grid
+        // Only the owning client tracks its own grid position changes
         if (!IsOwner || !isInitialized || currentRoomGrid == null) return;
 
         GridPosition newGridPos = currentRoomGrid.GetGridPosition(transform.position);
@@ -95,51 +98,51 @@ public class NetworkedUnit : NetworkBehaviour
             currentRoomGrid.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
             gridPosition = newGridPos;
 
-            // Tell server about the new grid position
-            UpdateGridPositionServerRpc(newGridPos.x, newGridPos.z);
+            UpdatePositionServerRpc(newGridPos.x, newGridPos.z,
+                transform.position.x, transform.position.y, transform.position.z);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Grid placement
+    // Grid placement — called by server on spawn, and by owning client on
+    // room navigation
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Places the unit in a room at a specific grid position.
-    /// Must be called on the owning client (or server for initial spawn).
-    /// </summary>
     public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
     {
-        // Remove from old position
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
 
         currentRoomGrid = roomGrid;
         gridPosition    = newGridPosition;
 
-        Vector3 targetPos = roomGrid.GetWorldPosition(newGridPosition);
-        targetPos.y = transform.position.y;
-        transform.position = targetPos;
+        Vector3 targetPos   = roomGrid.GetWorldPosition(newGridPosition);
+        targetPos.y         = transform.position.y;
+        transform.position  = targetPos;
 
         roomGrid.AddUnitAtGridPosition(newGridPosition, GetUnitCompat());
         isInitialized = true;
 
-        // Sync grid position to server (which syncs to all other clients)
+        // Sync both grid position AND world position to all other clients
         if (IsOwner || IsServer)
-            UpdateGridPositionServerRpc(newGridPosition.x, newGridPosition.z);
+            UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
+                targetPos.x, targetPos.y, targetPos.z);
 
-        Debug.Log($"[NetworkedUnit] Placed at grid {newGridPosition}, world {targetPos}");
+        Debug.Log($"[NetworkedUnit] PlaceInRoom → grid {newGridPosition}, world {targetPos}");
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Server RPCs
+    // Server RPC — single call updates both grid vars and world pos vars
     // ─────────────────────────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
-    private void UpdateGridPositionServerRpc(int x, int z)
+    private void UpdatePositionServerRpc(int gx, int gz, float wx, float wy, float wz)
     {
-        netGridX.Value = x;
-        netGridZ.Value = z;
+        netGridX.Value  = gx;
+        netGridZ.Value  = gz;
+        netWorldX.Value = wx;
+        netWorldY.Value = wy;
+        netWorldZ.Value = wz;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -148,11 +151,44 @@ public class NetworkedUnit : NetworkBehaviour
 
     private void OnNetGridPositionChanged(int oldVal, int newVal)
     {
-        // Non-owning clients update their local grid tracking
-        if (!IsOwner)
+        if (IsOwner) return;
+
+        gridPosition = new GridPosition(netGridX.Value, netGridZ.Value);
+
+        // Also update currentRoomGrid — find the room that contains this world pos
+        // so grid queries work correctly on observer clients too
+        if (LevelGrid.Instance != null)
         {
-            gridPosition = new GridPosition(netGridX.Value, netGridZ.Value);
-            OnGridPositionChanged?.Invoke(gridPosition);
+            Vector3 worldPos = new Vector3(netWorldX.Value, netWorldY.Value, netWorldZ.Value);
+            RoomGrid foundRoom = LevelGrid.Instance.GetRoomAtPosition(worldPos);
+            if (foundRoom != null && foundRoom != currentRoomGrid)
+            {
+                if (currentRoomGrid != null && isInitialized)
+                    currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
+
+                currentRoomGrid = foundRoom;
+                currentRoomGrid.AddUnitAtGridPosition(gridPosition, GetUnitCompat());
+                isInitialized = true;
+            }
+        }
+
+        OnGridPositionChanged?.Invoke(gridPosition);
+    }
+
+    private void OnNetWorldPositionChanged(float oldVal, float newVal)
+    {
+        // Non-owning clients: teleport the transform to the synced world position.
+        // NetworkTransform handles smooth movement within a room, but hard
+        // teleports (room transitions, initial spawn) need this direct assignment.
+        if (IsOwner) return;
+
+        Vector3 syncedPos = new Vector3(netWorldX.Value, netWorldY.Value, netWorldZ.Value);
+
+        // Only snap if the distance is significant (i.e. a room transition, not noise)
+        if (Vector3.Distance(transform.position, syncedPos) > 0.1f)
+        {
+            transform.position = syncedPos;
+            Debug.Log($"[NetworkedUnit] Observer teleported to {syncedPos}");
         }
     }
 
@@ -162,7 +198,6 @@ public class NetworkedUnit : NetworkBehaviour
 
     private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
     {
-        // Only owning client refills its own stamina
         if (!IsOwner) return;
 
         if (playerStats != null)
@@ -170,7 +205,7 @@ public class NetworkedUnit : NetworkBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Getters — same interface as old Unit.cs
+    // Getters
     // ─────────────────────────────────────────────────────────────────────
 
     public MoveAction   GetMoveAction()      => moveAction;
@@ -205,18 +240,5 @@ public class NetworkedUnit : NetworkBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Compatibility shim
-    // Allows existing code that takes a Unit (not NetworkedUnit) to still work
-    // by forwarding to the Unit component if present, or via casting.
-    // ─────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Returns the Unit component on this GameObject for APIs that still expect Unit.
-    /// If you've replaced Unit with NetworkedUnit entirely, remove this and update callers.
-    /// </summary>
-    private Unit GetUnitCompat()
-    {
-        return GetComponent<Unit>();
-    }
+    private Unit GetUnitCompat() => GetComponent<Unit>();
 }

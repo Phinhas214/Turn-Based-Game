@@ -43050,11 +43050,11 @@ PrefabInstance:
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: 'playerPrefabs.Array.data[0]'
       value: 
-      objectReference: {fileID: 922802329369371357, guid: 3ff0c6e12c64443918aca68f2a43d94e, type: 3}
+      objectReference: {fileID: 922802329369371357, guid: fe4fdfa0890138349ab2191b4532d3b0, type: 3}
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: 'playerPrefabs.Array.data[1]'
       value: 
-      objectReference: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
+      objectReference: {fileID: 922802329369371357, guid: cd667e78efe57b64db6574df95a0bb7a, type: 3}
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: roomPrefabs.Array.data[0].spawnWeight
       value: 1
