@@ -1,65 +1,63 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Networked replacement for TurnSystem.
+/// Networked turn system with ROOM-AWARE end-turn logic.
 ///
 /// TURN FLOW:
-///   1. All living players click End Turn  (each calls SubmitEndTurnServerRpc)
-///   2. Server collects confirmations      (one per connected client)
-///   3. Once ALL living players confirmed  → server runs enemy phase
-///   4. EnemyManager.RunEnemyTurns()       → enemies move/attack (server only)
-///   5. EnemyManager fires OnEnemyTurnsComplete → server calls BeginPlayerTurnClientRpc
-///   6. All clients enter player turn      → UI unlocks, stamina refills
+///   1. Player clicks End Turn (or runs out of stamina → auto-submitted by UI).
 ///
-/// IMPORTANT:
-///   - Attach to the same GameObject as NetworkManager (or a persistent manager object)
-///   - The old TurnSystem.cs can be REMOVED — this replaces it entirely
-///   - UI buttons subscribe to OnPlayerTurnBegin / OnEnemyPhaseBegin just as before
+///   2. SERVER checks: are there other living players in the same room?
+///      A) SOLO room  → that player's turn ends immediately; stamina restores for them alone.
+///      B) SHARED room → wait for ALL players in that room to submit. Once all ready:
+///                       → stamina restores for everyone in that room.
+///
+///   3. Once EVERY living player across ALL rooms has submitted:
+///      → Server runs enemy phase (enemies chase/attack).
+///      → After enemies are done, server starts the next player turn for everyone.
+///
+/// STAMINA:
+///   - Stamina is restored via RestoreStaminaClientRpc targeted at the player's client.
+///   - This fires as soon as the player's room-group has all submitted (not waiting for
+///     the full enemy phase), so players in a solo room get stamina back right away
+///     while players in a shared room wait for their roommates.
+///
+/// SETUP:
+///   - Attach to MultiplayerManagers GameObject (with NetworkObject).
+///   - Old TurnSystem.cs can remain for single-player mode — this only runs in MP.
 /// </summary>
 public class MultiplayerTurnSystem : NetworkBehaviour
 {
     // ── Singleton ─────────────────────────────────────────────────────────
     public static MultiplayerTurnSystem Instance { get; private set; }
 
-    // ── Network state — readable by all clients ───────────────────────────
+    // ── Network state ─────────────────────────────────────────────────────
     private NetworkVariable<bool> isPlayerTurn = new NetworkVariable<bool>(
         true,
         NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+        NetworkVariableWritePermission.Server);
 
     private NetworkVariable<int> turnNumber = new NetworkVariable<int>(
         1,
         NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+        NetworkVariableWritePermission.Server);
 
     // ── Server-only state ─────────────────────────────────────────────────
-    // Tracks which client IDs have submitted end-turn this round
+    // Which clients have submitted end-turn this round
     private HashSet<ulong> endTurnConfirmations = new HashSet<ulong>();
 
-    // ── Events — subscribe from UI / gameplay systems ─────────────────────
-    // These fire on ALL clients (not just server)
-    public event Action           OnPlayerTurnBegin;
-    public event Action           OnEnemyPhaseBegin;
-    public event Action           OnEnemyPhaseEnd;
+    // ── Events — fire on ALL clients ──────────────────────────────────────
+    public event Action        OnPlayerTurnBegin;
+    public event Action        OnEnemyPhaseBegin;
+    public event Action        OnEnemyPhaseEnd;
+    public event EventHandler  OnTurnChanged;   // backward-compat
 
-    // Compatibility shim — old code uses EventHandler
-    public event EventHandler     OnTurnChanged;
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Properties
-    // ─────────────────────────────────────────────────────────────────────
-
+    // ── Properties ────────────────────────────────────────────────────────
     public bool IsPlayerTurn => isPlayerTurn.Value;
     public int  TurnNumber   => turnNumber.Value;
-
-    // ── Compatibility with old code that calls TurnSystem.Instance ────────
-    // If you have old scripts referencing TurnSystem.Instance, add a shim there
-    // or do a find-replace. This class uses MultiplayerTurnSystem.Instance.
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -67,11 +65,7 @@ public class MultiplayerTurnSystem : NetworkBehaviour
 
     private void Awake()
     {
-        if (Instance != null)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
     }
 
@@ -81,7 +75,6 @@ public class MultiplayerTurnSystem : NetworkBehaviour
 
         if (IsServer)
         {
-            // Try to subscribe now — if enemy manager isn't spawned yet, wait for level ready
             if (!TrySubscribeToEnemyManager())
                 NetworkedLevelGenerator.OnLevelReady += OnLevelReadySubscribeEnemyManager;
         }
@@ -109,13 +102,11 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         if (NetworkedEnemyManager.Instance != null)
         {
             NetworkedEnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
-            Debug.Log("[MultiplayerTurnSystem] Subscribed to NetworkedEnemyManager.");
             return true;
         }
         if (EnemyManager.Instance != null)
         {
             EnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
-            Debug.Log("[MultiplayerTurnSystem] Subscribed to EnemyManager (fallback).");
             return true;
         }
         return false;
@@ -125,10 +116,7 @@ public class MultiplayerTurnSystem : NetworkBehaviour
     // Client → Server: Submit end turn
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Called by the local player's UI when they click End Turn.
-    /// Safe to call even if it's not the player's turn — server ignores it.
-    /// </summary>
+    /// <summary>Called by MultiplayerTurnSystemUI when the player clicks End Turn (or auto-submits).</summary>
     public void SubmitEndTurn()
     {
         if (!IsPlayerTurn) return;
@@ -144,25 +132,111 @@ public class MultiplayerTurnSystem : NetworkBehaviour
             return;
         }
 
+        if (endTurnConfirmations.Contains(clientId))
+        {
+            Debug.LogWarning($"[TurnSystem] Client {clientId} already submitted end-turn this round.");
+            return;
+        }
+
         endTurnConfirmations.Add(clientId);
         Debug.Log($"[TurnSystem] Client {clientId} confirmed end turn. " +
-                  $"{endTurnConfirmations.Count}/{GetExpectedPlayerCount()} ready.");
+                  $"{endTurnConfirmations.Count}/{GetLivingPlayerCount()} total ready.");
 
+        // Restore stamina for the room-group this player belongs to,
+        // IF all players in that room have now submitted.
+        TryRestoreStaminaForRoom(clientId);
+
+        // Check if ALL players across all rooms are done.
         CheckAllPlayersReady();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Server: Check if all players are ready
+    // Room-aware stamina restore
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Finds all living players in the same room as clientId.
+    /// If they have ALL submitted end-turn, restore stamina for each of them.
+    /// </summary>
+    private void TryRestoreStaminaForRoom(ulong submittingClientId)
+    {
+        RoomGrid submitterRoom = GetPlayerRoom(submittingClientId);
+
+        // Gather everyone in the same room
+        List<ulong> roommates = GetLivingPlayersInRoom(submitterRoom);
+
+        // Check if all roommates have submitted
+        foreach (ulong id in roommates)
+        {
+            if (!endTurnConfirmations.Contains(id))
+                return; // someone in this room hasn't submitted yet
+        }
+
+        // All roommates are done — restore stamina for each of them now
+        Debug.Log($"[TurnSystem] All players in room resolved — restoring stamina for {roommates.Count} player(s).");
+        foreach (ulong id in roommates)
+        {
+            RestoreStaminaClientRpc(id);
+        }
+    }
+
+    /// <summary>Returns the RoomGrid the given client's player unit is currently in. Null if unknown.</summary>
+    private RoomGrid GetPlayerRoom(ulong clientId)
+    {
+        if (!NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client))
+            return null;
+
+        if (client.PlayerObject == null) return null;
+
+        var unit = client.PlayerObject.GetComponent<NetworkedUnit>();
+        return unit?.GetCurrentRoomGrid();
+    }
+
+    /// <summary>
+    /// Returns all living clients whose player unit is in the given room.
+    /// If room is null (unit not yet placed), treats that player as in their own solo room.
+    /// </summary>
+    private List<ulong> GetLivingPlayersInRoom(RoomGrid room)
+    {
+        var result = new List<ulong>();
+
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (!IsClientAlive(client.ClientId)) continue;
+
+            RoomGrid theirRoom = GetPlayerRoom(client.ClientId);
+
+            // Same room reference, or both null (unplaced players grouped together)
+            if (theirRoom == room)
+                result.Add(client.ClientId);
+        }
+
+        return result;
+    }
+
+    private bool IsClientAlive(ulong clientId)
+    {
+        if (!NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client))
+            return false;
+
+        if (client.PlayerObject == null) return true; // not spawned yet — count as alive
+
+        var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
+        return health == null || !health.IsDead;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Global phase transition
     // ─────────────────────────────────────────────────────────────────────
 
     private void CheckAllPlayersReady()
     {
-        int expected = GetExpectedPlayerCount();
+        int living = GetLivingPlayerCount();
 
-        // Broadcast current ready count to all clients so their UI can show "X / Y ready"
-        BroadcastReadyCountClientRpc(endTurnConfirmations.Count, expected);
+        // Broadcast ready count for UI
+        BroadcastReadyCountClientRpc(endTurnConfirmations.Count, living);
 
-        if (endTurnConfirmations.Count < expected)
+        if (endTurnConfirmations.Count < living)
             return;
 
         Debug.Log("[TurnSystem] All players confirmed — beginning enemy phase.");
@@ -175,24 +249,15 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         RunEnemyTurnsOnServer();
     }
 
-    private int GetExpectedPlayerCount()
+    private int GetLivingPlayerCount()
     {
-        // Only count living players — dead players don't block the turn
-        int living = 0;
+        int count = 0;
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
-            if (client.PlayerObject != null)
-            {
-                var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
-                if (health == null || !health.IsDead)
-                    living++;
-            }
-            else
-            {
-                living++; // player object not yet spawned, count them in
-            }
+            if (IsClientAlive(client.ClientId))
+                count++;
         }
-        return Mathf.Max(1, living);
+        return Mathf.Max(1, count);
     }
 
     private void RunEnemyTurnsOnServer()
@@ -207,13 +272,12 @@ public class MultiplayerTurnSystem : NetworkBehaviour
 
     private void HandleEnemyTurnsComplete()
     {
-        // Called on server only
         isPlayerTurn.Value = true;
         BeginPlayerTurnClientRpc();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // ClientRpcs — server → all clients
+    // ClientRpcs
     // ─────────────────────────────────────────────────────────────────────
 
     [ClientRpc]
@@ -239,53 +303,62 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         MultiplayerTurnSystemUI.Instance?.UpdateReadyCount(ready, total);
     }
 
+    /// <summary>
+    /// Restores stamina for ONE specific client. Only that client executes the restore.
+    /// Sent immediately when that player's room-group all finish, before enemy phase.
+    /// </summary>
+    [ClientRpc]
+    private void RestoreStaminaClientRpc(ulong targetClientId)
+    {
+        // Only the targeted client should restore their own stamina
+        if (NetworkManager.Singleton.LocalClientId != targetClientId) return;
+
+        // Find this client's local unit
+        foreach (var unit in FindObjectsByType<NetworkedUnit>(FindObjectsSortMode.None))
+        {
+            if (!unit.IsOwner) continue;
+
+            var stats = unit.GetComponent<PlayerStats>();
+            if (stats != null)
+            {
+                stats.SetCurrentStaminaPoints(stats.GetMaxStaminaPoints());
+                Debug.Log($"[TurnSystem] Stamina restored for client {targetClientId}.");
+            }
+            return;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // NetworkVariable callback
     // ─────────────────────────────────────────────────────────────────────
 
     private void OnIsPlayerTurnChanged(bool oldVal, bool newVal)
     {
-        // NetworkVariable fires on all clients when server changes the value.
-        // The ClientRpcs above handle the event firing for turn transitions —
-        // this callback is a safety net for late-joining clients.
-        if (newVal)
-            OnPlayerTurnBegin?.Invoke();
-        else
-            OnEnemyPhaseBegin?.Invoke();
+        // Safety net for late-joining clients
+        if (newVal) OnPlayerTurnBegin?.Invoke();
+        else        OnEnemyPhaseBegin?.Invoke();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // ForcePlayerTurn — called on room transition (server only sets the var)
+    // Force player turn (room transition)
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Forces the turn back to player turn. Server only.</summary>
     public void ForcePlayerTurn()
     {
         if (!IsServer) return;
-
         endTurnConfirmations.Clear();
         isPlayerTurn.Value = true;
         BeginPlayerTurnClientRpc();
     }
 
-    /// <summary>
-    /// Called from PlayerStats when entering a new room.
-    /// Sends a ServerRpc so the server can call ForcePlayerTurn.
-    /// </summary>
-    public void RequestForcePlayerTurn()
-    {
-        ForcePlayerTurnServerRpc();
-    }
+    public void RequestForcePlayerTurn() => ForcePlayerTurnServerRpc();
 
     [ServerRpc(RequireOwnership = false)]
-    private void ForcePlayerTurnServerRpc()
-    {
-        ForcePlayerTurn();
-    }
+    private void ForcePlayerTurnServerRpc() => ForcePlayerTurn();
 
     // ─────────────────────────────────────────────────────────────────────
-    // Backward-compat getter
+    // Backward-compat
     // ─────────────────────────────────────────────────────────────────────
 
-    public int GetTrunNumber() => turnNumber.Value; // keep original typo for compatibility
+    public int GetTrunNumber() => turnNumber.Value;
 }

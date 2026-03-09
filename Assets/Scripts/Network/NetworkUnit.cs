@@ -198,7 +198,12 @@ public class NetworkedUnit : NetworkBehaviour
 
     private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
     {
+        // In multiplayer, stamina is restored by MultiplayerTurnSystem.RestoreStaminaClientRpc
+        // which fires per-room the moment all players in that room submit end-turn.
         if (!IsOwner) return;
+
+        // Only restore stamina here in single-player (not connected to NGO)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) return;
 
         if (playerStats != null)
             playerStats.SetCurrentStaminaPoints(playerStats.GetMaxStaminaPoints());

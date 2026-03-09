@@ -972,7 +972,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedUnitActionSystem
   unitLayerMask:
     serializedVersion: 2
-    m_Bits: 129
+    m_Bits: 128
 --- !u!114 &91627782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -987,7 +987,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedEnemySpawner
   ShowTopMostFoldoutHeaderGroup: 1
   spawnEntries:
-  - prefab: {fileID: 8025110106504339535, guid: 59f93f03f17988548bbd8327cf699f82, type: 3}
+  - prefab: {fileID: 8025110106504339535, guid: f80a67474f6c8084bae19fb6e02e5b3c, type: 3}
     count: 10
     roomType: 2
     preferEdgeTiles: 0
@@ -13508,7 +13508,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eaaf312f0ff330f499d8ca35c395fe3d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthContainerUI
-  playerStats: {fileID: 0}
   fireMax: {fileID: 2127645716}
   fireHigh: {fileID: 1527060759}
   fireMedium: {fileID: 839372146}
