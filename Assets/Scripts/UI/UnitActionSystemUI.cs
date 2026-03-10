@@ -14,6 +14,9 @@ public class UnitActionSystemUI : MonoBehaviour
 
     [Tooltip("Parent transform that action buttons are spawned inside.")]
     [SerializeField] private Transform actionButtonContainerTransform;
+
+    [SerializeField] private float buttonSpacing = 8f;
+    [SerializeField] private float buttonPadding = 4f;
     public enum ActionLayoutDirection
     {
         Horizontal,
@@ -29,7 +32,7 @@ public class UnitActionSystemUI : MonoBehaviour
     {
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChange += OnSelectedUnitChanged;
             UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
         }
 
@@ -95,5 +98,4 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    
 }

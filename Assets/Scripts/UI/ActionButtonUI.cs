@@ -82,23 +82,32 @@ public class ActionButtonUI : MonoBehaviour
     {
         if (staminaCostRoot == null) return;
 
+        // Combat abilities
         if (baseAction is CombatAction combatAction && combatAction.ActionData != null)
         {
             int cost = combatAction.ActionData.staminaCost;
+
             staminaCostRoot.SetActive(cost > 0);
+
             if (staminaCostText != null)
                 staminaCostText.text = cost.ToString();
+
+            return;
         }
-        // else if (baseAction is SpinAction)
-        // {
-        //     staminaCostRoot.SetActive(true);
-        //     if (staminaCostText != null)
-        //         staminaCostText.text = "1";
-        // }
-        else
+
+        // Movement action: 1 stamina per tile
+        if (baseAction is MoveAction)
         {
-            staminaCostRoot.SetActive(false);
+            staminaCostRoot.SetActive(true);
+
+            if (staminaCostText != null)
+                staminaCostText.text = "1";
+
+            return;
         }
+
+        // No cost
+        staminaCostRoot.SetActive(false);
     }
 
     private void RefreshAffordability()
