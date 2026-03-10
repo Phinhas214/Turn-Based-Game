@@ -3,6 +3,17 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
+/// <summary>
+/// Room navigation UI — per-player in multiplayer.
+///
+/// KEY FIXES:
+///   - UpdateButtons and TravelToRoom now use the LOCAL player's current room
+///     (from NetworkedUnit.GetCurrentRoomGrid) instead of the shared RoomManager.
+///     This means each player sees buttons for THEIR room, not whoever last
+///     updated the global RoomManager.
+///   - Enemy blocking checks the LOCAL player's room for enemies.
+///   - Players can only leave if there are no enemies in THEIR room.
+/// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
     [Header("UI Buttons")]
@@ -19,14 +30,13 @@ public class RoomNavigationUI : MonoBehaviour
 
     [Header("Enemy Lock")]
     [SerializeField] private string enemyBlockMessage = "Enemies present!";
-    [SerializeField] private GameObject enemyWarningPanel;
+    [SerializeField] private GameObject enemyWarningPanel; // optional — leave unassigned if not used
 
-    // Cached reference to whichever level generator is active
-    private LevelGenerator           spLevelGenerator;  // single-player
-    private NetworkedLevelGenerator   mpLevelGenerator;  // multiplayer
+    private LevelGenerator          spLevelGenerator;
+    private NetworkedLevelGenerator  mpLevelGenerator;
 
-    private Dictionary<LevelGenerator.Direction, Button>             buttonMap;
-    private Dictionary<LevelGenerator.Direction, TextMeshProUGUI>    textMap;
+    private Dictionary<LevelGenerator.Direction, Button>          buttonMap;
+    private Dictionary<LevelGenerator.Direction, TextMeshProUGUI> textMap;
 
     private void Awake()
     {
@@ -37,7 +47,6 @@ public class RoomNavigationUI : MonoBehaviour
             { LevelGenerator.Direction.East,  eastButton  },
             { LevelGenerator.Direction.West,  westButton  }
         };
-
         textMap = new Dictionary<LevelGenerator.Direction, TextMeshProUGUI>
         {
             { LevelGenerator.Direction.North, northText },
@@ -54,9 +63,8 @@ public class RoomNavigationUI : MonoBehaviour
 
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady           += OnLevelReady;
-        NetworkedLevelGenerator.OnLevelReady  += OnLevelReady;
-        RoomManager.OnAnyRoomChanged          += OnRoomChanged;
+        LevelGenerator.OnLevelReady          += OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
 
         if (MultiplayerTurnSystem.Instance != null)
             MultiplayerTurnSystem.Instance.OnTurnChanged += OnTurnChanged;
@@ -71,9 +79,8 @@ public class RoomNavigationUI : MonoBehaviour
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady           -= OnLevelReady;
-        NetworkedLevelGenerator.OnLevelReady  -= OnLevelReady;
-        RoomManager.OnAnyRoomChanged          -= OnRoomChanged;
+        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
 
         if (MultiplayerTurnSystem.Instance != null)
             MultiplayerTurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
@@ -86,58 +93,53 @@ public class RoomNavigationUI : MonoBehaviour
             EnemyManager.Instance.OnEnemyListChanged -= UpdateButtons;
     }
 
-    private void OnDestroy()
-    {
-        if (MultiplayerTurnSystem.Instance != null)
-            MultiplayerTurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
-        else if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
-    }
-
     private void OnLevelReady()
     {
-        // Always prefer the networked generator if it has rooms.
-        // Only fall back to the SP generator if no networked one exists.
         mpLevelGenerator = FindFirstObjectByType<NetworkedLevelGenerator>();
-
         if (mpLevelGenerator == null)
         {
-            // Single-player: use LevelGenerator only if it has rooms built
             LevelGenerator found = FindFirstObjectByType<LevelGenerator>();
-            spLevelGenerator = (found != null && found.GetAllRooms() != null && found.GetAllRooms().Count > 0)
-                ? found
-                : null;
+            spLevelGenerator = (found != null && found.GetAllRooms()?.Count > 0) ? found : null;
         }
         else
         {
-            // Multiplayer: don't use the SP generator at all even if it exists in the scene
             spLevelGenerator = null;
         }
-
         UpdateButtons();
     }
 
-    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => UpdateButtons();
     private void OnTurnChanged(object sender, System.EventArgs e) => UpdateButtons();
+
+    // ─────────────────────────────────────────────────────────────────────
+    // UpdateButtons — uses LOCAL player's room
+    // ─────────────────────────────────────────────────────────────────────
 
     private void UpdateButtons()
     {
-        if (RoomManager.Instance == null) return;
+        // Lazy-init generators in case events fire before OnLevelReady
+        if (mpLevelGenerator == null && spLevelGenerator == null)
+        {
+            mpLevelGenerator = FindFirstObjectByType<NetworkedLevelGenerator>();
+            if (mpLevelGenerator == null)
+            {
+                LevelGenerator found = FindFirstObjectByType<LevelGenerator>();
+                spLevelGenerator = (found != null && found.GetAllRooms()?.Count > 0) ? found : null;
+            }
+        }
 
-        LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
-        if (currentRoom == null) return;
+        LevelGenerator.PlacedRoom localRoom = GetLocalPlayerRoom();
+        if (localRoom == null) return;
 
-        bool enemiesPresent = AreEnemiesInCurrentRoom(currentRoom.roomGrid);
-        if (enemyWarningPanel != null)
-            enemyWarningPanel.SetActive(enemiesPresent);
+        bool enemiesPresent = AreEnemiesInRoom(localRoom.roomGrid);
+        // enemyWarningPanel?.SetActive(enemiesPresent); // disabled until minimap is built
 
         foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
         {
-            Button btn = buttonMap[dir];
-            TextMeshProUGUI txt = textMap[dir];
+            Button btn           = buttonMap[dir];
+            TextMeshProUGUI txt  = textMap[dir];
             if (btn == null) continue;
 
-            LevelGenerator.PlacedRoom connected = GetConnectedRoom(currentRoom, dir);
+            LevelGenerator.PlacedRoom connected = GetConnectedRoom(localRoom, dir);
 
             if (enemiesPresent)
             {
@@ -157,103 +159,130 @@ public class RoomNavigationUI : MonoBehaviour
         }
     }
 
-    /// <summary>Checks either the networked or single-player enemy manager.</summary>
-    private bool AreEnemiesInCurrentRoom(RoomGrid room)
-    {
-        if (room == null) return false;
-
-        if (NetworkedEnemyManager.Instance != null)
-            return NetworkedEnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
-
-        if (EnemyManager.Instance != null)
-            return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
-
-        return false;
-    }
-
-    /// <summary>Asks whichever generator is active for the connected room.</summary>
-    private LevelGenerator.PlacedRoom GetConnectedRoom(LevelGenerator.PlacedRoom room,
-                                                        LevelGenerator.Direction dir)
-    {
-        // Multiplayer path
-        if (mpLevelGenerator != null)
-        {
-            var allRooms = mpLevelGenerator.GetAllRooms();
-            if (allRooms == null) return null;
-
-            foreach (var mpRoom in allRooms)
-            {
-                if (mpRoom.roomInstance == room.roomInstance)
-                {
-                    var mpConnected = mpLevelGenerator.GetConnectedRoom(mpRoom, dir);
-                    return mpConnected != null
-                        ? mpLevelGenerator.ConvertToOldPlacedRoom(mpConnected)
-                        : null;
-                }
-            }
-            return null;
-        }
-
-        // Single-player path — only call if the generator is valid
-        if (spLevelGenerator != null)
-        {
-            var allRooms = spLevelGenerator.GetAllRooms();
-            if (allRooms == null || allRooms.Count == 0) return null;
-            return spLevelGenerator.GetConnectedRoom(room, dir);
-        }
-
-        return null;
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // Travel — uses LOCAL player's room
+    // ─────────────────────────────────────────────────────────────────────
 
     private void TravelToRoom(LevelGenerator.Direction travelDirection)
     {
-        if (RoomManager.Instance == null) return;
+        LevelGenerator.PlacedRoom localRoom = GetLocalPlayerRoom();
+        if (localRoom == null) return;
 
-        LevelGenerator.PlacedRoom currentRoom = RoomManager.Instance.GetCurrentRoom();
-        if (currentRoom == null) return;
-
-        if (AreEnemiesInCurrentRoom(currentRoom.roomGrid))
+        if (AreEnemiesInRoom(localRoom.roomGrid))
         {
             Debug.Log("[RoomNavigationUI] Cannot leave — enemies present!");
             return;
         }
 
-        LevelGenerator.PlacedRoom targetRoom = GetConnectedRoom(currentRoom, travelDirection);
+        LevelGenerator.PlacedRoom targetRoom = GetConnectedRoom(localRoom, travelDirection);
         if (targetRoom == null) return;
 
-        // In multiplayer, only move the LOCAL player
-        Unit player = FindLocalPlayer();
+        Unit player = FindLocalPlayerUnit();
         if (player == null) return;
 
-        LevelGenerator.Direction entryDirection = GetOppositeDirection(travelDirection);
-        GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDirection);
+        LevelGenerator.Direction entryDir = GetOppositeDirection(travelDirection);
+        GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDir);
 
-        RoomManager.Instance.SetCurrentRoom(targetRoom);
+        // Update global room state for single-player compatibility
+        RoomManager.Instance?.SetCurrentRoom(targetRoom);
         LevelGrid.Instance?.SetCurrentRoomGrid(targetRoom.roomGrid);
-        player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
 
+        player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
         FreeTacticsCameraController.Instance?.FocusOnPlayer();
 
         UpdateButtons();
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Local player room — reads from the owned NetworkedUnit
+    // ─────────────────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Finds the Unit owned by the local client.
-    /// Falls back to FindFirstObjectByType for single-player.
+    /// Returns the PlacedRoom the local player's unit is currently in.
+    /// In MP, reads from the owned NetworkedUnit's RoomGrid.
+    /// In SP, falls back to RoomManager.
     /// </summary>
-    private Unit FindLocalPlayer()
+    private LevelGenerator.PlacedRoom GetLocalPlayerRoom()
+    {
+        // Multiplayer: find the RoomGrid the local NetworkedUnit is in,
+        // then find which PlacedRoom that RoomGrid belongs to.
+        if (mpLevelGenerator != null)
+        {
+            NetworkedUnit localUnit = FindLocalNetworkedUnit();
+            if (localUnit != null)
+            {
+                RoomGrid unitRoom = localUnit.GetCurrentRoomGrid();
+                if (unitRoom != null)
+                {
+                    foreach (var mpRoom in mpLevelGenerator.GetAllRooms())
+                    {
+                        if (mpRoom.roomGrid == unitRoom)
+                            return mpLevelGenerator.ConvertToOldPlacedRoom(mpRoom);
+                    }
+                }
+            }
+        }
+
+        // Single-player: use RoomManager
+        return RoomManager.Instance?.GetCurrentRoom();
+    }
+
+    private NetworkedUnit FindLocalNetworkedUnit()
+    {
+        foreach (var unit in FindObjectsByType<NetworkedUnit>(FindObjectsSortMode.None))
+        {
+            if (unit.IsOwner) return unit;
+        }
+        return null;
+    }
+
+    private Unit FindLocalPlayerUnit()
     {
         foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
         {
             var netObj = unit.GetComponent<Unity.Netcode.NetworkObject>();
-            if (netObj != null)
+            if (netObj != null) { if (netObj.IsOwner) return unit; }
+            else return unit; // single-player
+        }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────
+
+    private bool AreEnemiesInRoom(RoomGrid room)
+    {
+        if (room == null) return false;
+        if (NetworkedEnemyManager.Instance != null)
+            return NetworkedEnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+        if (EnemyManager.Instance != null)
+            return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+        return false;
+    }
+
+    private LevelGenerator.PlacedRoom GetConnectedRoom(LevelGenerator.PlacedRoom room,
+                                                        LevelGenerator.Direction dir)
+    {
+        if (mpLevelGenerator != null)
+        {
+            var allRooms = mpLevelGenerator.GetAllRooms();
+            if (allRooms == null) return null;
+            foreach (var mpRoom in allRooms)
             {
-                if (netObj.IsOwner) return unit;
+                if (mpRoom.roomInstance == room.roomInstance)
+                {
+                    var mpConnected = mpLevelGenerator.GetConnectedRoom(mpRoom, dir);
+                    return mpConnected != null ? mpLevelGenerator.ConvertToOldPlacedRoom(mpConnected) : null;
+                }
             }
-            else
-            {
-                return unit; // single-player: no NetworkObject, just use it
-            }
+            return null;
+        }
+        if (spLevelGenerator != null)
+        {
+            var allRooms = spLevelGenerator.GetAllRooms();
+            if (allRooms == null || allRooms.Count == 0) return null;
+            return spLevelGenerator.GetConnectedRoom(room, dir);
         }
         return null;
     }
@@ -262,18 +291,12 @@ public class RoomNavigationUI : MonoBehaviour
                                           LevelGenerator.Direction entryDirection)
     {
         RoomSpawnPointReader reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
-
         if (reader != null && reader.HasSpawnPoint(entryDirection))
-        {
-            GridPosition sp = reader.GetSpawnPosition(entryDirection, room.roomGrid);
-            Debug.Log($"[RoomNavigationUI] Using spawn point: {sp}");
-            return sp;
-        }
+            return reader.GetSpawnPosition(entryDirection, room.roomGrid);
 
-        Debug.LogWarning($"[RoomNavigationUI] No spawn point for {entryDirection} — using center.");
-        int centerX = room.roomGrid.GetWidth()  / 2;
-        int centerZ = room.roomGrid.GetHeight() / 2;
-        return new GridPosition(centerX, centerZ);
+        int cx = room.roomGrid.GetWidth()  / 2;
+        int cz = room.roomGrid.GetHeight() / 2;
+        return new GridPosition(cx, cz);
     }
 
     private LevelGenerator.Direction GetOppositeDirection(LevelGenerator.Direction dir)

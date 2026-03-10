@@ -131,6 +131,23 @@ public class NetworkedUnit : NetworkBehaviour
         Debug.Log($"[NetworkedUnit] PlaceInRoom → grid {newGridPosition}, world {targetPos}");
     }
 
+    /// <summary>
+    /// Called by MoveAction after completing a move to sync the final grid position
+    /// without teleporting the transform (transform is already at the correct position).
+    /// </summary>
+    public void SyncGridPositionAfterMove(GridPosition newGridPosition)
+    {
+        if (currentRoomGrid == null) return;
+
+        currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
+        gridPosition = newGridPosition;
+        currentRoomGrid.AddUnitAtGridPosition(gridPosition, GetUnitCompat());
+
+        if (IsOwner || IsServer)
+            UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
+                transform.position.x, transform.position.y, transform.position.z);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Server RPC — single call updates both grid vars and world pos vars
     // ─────────────────────────────────────────────────────────────────────

@@ -8,29 +8,51 @@ public class MoveAction : BaseAction
     [SerializeField] private int maxMoveDistance = 4;
     [SerializeField] private float moveSpeed = 8f;
 
+    // Cached once in Awake — same GameObject, never changes
+    private NetworkedUnit cachedNetUnit;
+
     protected override void Awake()
     {
         base.Awake();
+        cachedNetUnit = GetComponent<NetworkedUnit>();
     }
 
     private int GetMoveDistance()
     {
-        // If stamina system exists, stamina IS the move distance
-        // If stamina is 0 or less, cannot move at all
         if (playerStats != null)
             return Mathf.Max(0, playerStats.currentStamina);
-
         return maxMoveDistance;
     }
 
-    public bool CanMove()
+    public bool CanMove() => GetMoveDistance() > 0;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Room grid helper — prefers NetworkedUnit so both components stay in sync
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── True if we are in an active network session (MP), false in SP ──────
+    private static bool IsNetworked =>
+        Unity.Netcode.NetworkManager.Singleton != null &&
+        Unity.Netcode.NetworkManager.Singleton.IsListening;
+
+    private RoomGrid GetUnitRoomGrid()
     {
-        return GetMoveDistance() > 0;
+        if (IsNetworked && cachedNetUnit != null && cachedNetUnit.GetCurrentRoomGrid() != null)
+            return cachedNetUnit.GetCurrentRoomGrid();
+        return unit.GetCurrentRoomGrid();
     }
+
+    private GridPosition GetUnitGridPosition()
+    {
+        if (IsNetworked && cachedNetUnit != null && cachedNetUnit.IsInitialized())
+            return cachedNetUnit.GetGridPosition();
+        return unit.GetGridPosition();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
 
     public void Move(GridPosition targetGridPosition, Action onActionComplete)
     {
-        // Block move if no stamina
         if (!CanMove())
         {
             Debug.Log("[MoveAction] No stamina to move.");
@@ -38,7 +60,7 @@ public class MoveAction : BaseAction
             return;
         }
 
-        RoomGrid currentRoom = unit.GetCurrentRoomGrid();
+        RoomGrid currentRoom = GetUnitRoomGrid();
         if (currentRoom == null)
         {
             Debug.LogError("[MoveAction] No current room grid!");
@@ -46,7 +68,7 @@ public class MoveAction : BaseAction
             return;
         }
 
-        GridPosition startPos = unit.GetGridPosition();
+        GridPosition startPos = GetUnitGridPosition();
 
         Pathfinder pathfinder = new Pathfinder(currentRoom);
         List<GridPosition> path = pathfinder.FindPath(startPos, targetGridPosition);
@@ -62,39 +84,42 @@ public class MoveAction : BaseAction
         List<GridPosition> usedPath = path.GetRange(0, steps);
         GridPosition finalPos = usedPath[usedPath.Count - 1];
 
-        // Update grid
+        // Update grid occupancy
         currentRoom.RemoveUnitAtGridPosition(startPos, unit);
         currentRoom.AddUnitAtGridPosition(finalPos, unit);
 
-        // Deduct stamina by actual steps taken
+        // Deduct stamina
         if (playerStats != null)
             playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - steps);
 
-        // Build world waypoints
+        // Build waypoints
         List<Vector3> waypoints = new List<Vector3>();
         foreach (GridPosition gp in usedPath)
             waypoints.Add(currentRoom.GetWorldPosition(gp));
 
         isActive = true;
-        StartCoroutine(MoveAlongPath(waypoints, onActionComplete));
+        StartCoroutine(MoveAlongPath(waypoints, finalPos, onActionComplete));
     }
 
-    private IEnumerator MoveAlongPath(List<Vector3> waypoints, Action onComplete)
+    private IEnumerator MoveAlongPath(List<Vector3> waypoints, GridPosition finalGridPos,
+                                      Action onComplete)
     {
         foreach (Vector3 waypoint in waypoints)
         {
-            // In 3D X/Z game — match the waypoint X and Z, keep current Y
             Vector3 target = new Vector3(waypoint.x, transform.position.y, waypoint.z);
-
             while (Vector3.Distance(transform.position, target) > 0.05f)
             {
                 transform.position = Vector3.MoveTowards(
                     transform.position, target, moveSpeed * Time.deltaTime);
                 yield return null;
             }
-
             transform.position = target;
         }
+
+        // Sync final grid position back to NetworkedUnit in MP so highlights
+        // update correctly. Skipped entirely in SP (IsNetworked = false).
+        if (IsNetworked)
+            cachedNetUnit?.SyncGridPositionAfterMove(finalGridPos);
 
         isActive = false;
         onComplete?.Invoke();
@@ -108,17 +133,15 @@ public class MoveAction : BaseAction
     public List<GridPosition> GetValidActionGridPositionList()
     {
         List<GridPosition> validList = new List<GridPosition>();
-
-        // No stamina = no valid positions = no highlights
         if (!CanMove()) return validList;
 
-        RoomGrid currentRoom = unit.GetCurrentRoomGrid();
+        RoomGrid currentRoom = GetUnitRoomGrid();
         if (currentRoom == null) return validList;
 
         TilemapRoomGrid tilemapGrid = currentRoom.GetTilemapRoomGrid();
         if (tilemapGrid == null) return validList;
 
-        GridPosition unitPos = unit.GetGridPosition();
+        GridPosition unitPos = GetUnitGridPosition();
         int moveDistance = GetMoveDistance();
 
         Pathfinder pathfinder = new Pathfinder(currentRoom);

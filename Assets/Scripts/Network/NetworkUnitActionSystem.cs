@@ -104,7 +104,15 @@ public class NetworkedUnitActionSystem : MonoBehaviour
     {
         if (!Input.GetMouseButtonDown(0)) return;
 
-        GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+        // FIX: Use the room the mouse is actually over, not the global current room.
+        // LevelGrid.Instance.GetGridPosition() uses whatever room was last set globally,
+        // which is wrong after moving rooms. Instead find the room under the mouse and
+        // use that room's own GetGridPosition().
+        Vector3  mouseWorld  = MouseWorld.GetPosition();
+        RoomGrid mouseRoom   = LevelGrid.Instance.GetRoomAtPosition(mouseWorld);
+        if (mouseRoom == null) return;
+
+        GridPosition mouseGridPos = mouseRoom.GetGridPosition(mouseWorld);
 
         switch (selectedAction)
         {
