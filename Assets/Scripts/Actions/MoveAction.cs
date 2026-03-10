@@ -69,6 +69,7 @@ public class MoveAction : BaseAction
         }
 
         GridPosition startPos = GetUnitGridPosition();
+        Debug.Log($"[MoveAction] Move called. startPos={startPos} targetPos={targetGridPosition} room={currentRoom}");
 
         Pathfinder pathfinder = new Pathfinder(currentRoom);
         List<GridPosition> path = pathfinder.FindPath(startPos, targetGridPosition);
@@ -97,6 +98,13 @@ public class MoveAction : BaseAction
         foreach (GridPosition gp in usedPath)
             waypoints.Add(currentRoom.GetWorldPosition(gp));
 
+        // Update NetworkedUnit's grid position immediately so GetValidActionGridPositionList
+        // radiates from the correct position as soon as this move is committed.
+        if (IsNetworked && cachedNetUnit != null)
+        {
+            cachedNetUnit.IsMoving = true;
+            cachedNetUnit.SyncGridPositionAfterMove(finalPos);
+        }
         isActive = true;
         StartCoroutine(MoveAlongPath(waypoints, finalPos, onActionComplete));
     }
@@ -116,10 +124,11 @@ public class MoveAction : BaseAction
             transform.position = target;
         }
 
-        // Sync final grid position back to NetworkedUnit in MP so highlights
-        // update correctly. Skipped entirely in SP (IsNetworked = false).
-        if (IsNetworked)
-            cachedNetUnit?.SyncGridPositionAfterMove(finalGridPos);
+        // Clear IsMoving now that the visual coroutine is done.
+        if (IsNetworked && cachedNetUnit != null)
+            cachedNetUnit.IsMoving = false;
+
+        Debug.Log($"[MoveAction] Move complete. Final grid pos: {finalGridPos}");
 
         isActive = false;
         onComplete?.Invoke();

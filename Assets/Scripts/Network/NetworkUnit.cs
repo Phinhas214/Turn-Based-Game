@@ -86,10 +86,15 @@ public class NetworkedUnit : NetworkBehaviour
             MultiplayerTurnSystem.Instance.OnTurnChanged -= TurnSystem_OnTurnChanged;
     }
 
+    // Set to true by MoveAction while a coroutine move is in progress.
+    // Prevents the Update loop from fighting with MoveAction's occupancy management.
+    public bool IsMoving { get; set; } = false;
+
     private void Update()
     {
-        // Only the owning client tracks its own grid position changes
-        if (!IsOwner || !isInitialized || currentRoomGrid == null) return;
+        // Only the owning client tracks its own grid position changes.
+        // Skip while MoveAction is running — it manages occupancy directly.
+        if (!IsOwner || !isInitialized || currentRoomGrid == null || IsMoving) return;
 
         GridPosition newGridPos = currentRoomGrid.GetGridPosition(transform.position);
         if (newGridPos != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPos))
