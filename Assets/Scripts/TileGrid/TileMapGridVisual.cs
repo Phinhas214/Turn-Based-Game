@@ -48,23 +48,52 @@ public class TilemapGridVisual : MonoBehaviour
 
     private void Update()
     {
-        // Re-resolve every frame so the tilemap always follows the local player
-        // even when they move within a room (Unit.gridPosition updates every frame)
         RoomGrid roomGrid = GetLocalPlayerRoomGrid();
         Tilemap  tilemap  = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
 
-        // Player moved to a different room — clear old paint, switch tilemap
         if (tilemap != currentTilemap)
         {
+            Debug.Log($"[TilemapGridVisual] Tilemap changed: {(currentTilemap?.gameObject.name ?? "NULL")} → {(tilemap?.gameObject.name ?? "NULL")} | room={roomGrid?.gameObject.name ?? "NULL"}");
             ResetAllTiles();
             currentTilemap = tilemap;
         }
 
-        if (currentTilemap == null) return;
+        if (currentTilemap == null)
+        {
+            if (Time.frameCount % 120 == 0)
+                Debug.LogWarning($"[TilemapGridVisual] currentTilemap is NULL — roomGrid={roomGrid?.gameObject.name ?? "NULL"}");
+            return;
+        }
 
         ResetAllTiles();
         UpdateActionVisuals();
         UpdateHoverVisual();
+    }
+
+    // Called externally or via button to dump current visual state
+    [ContextMenu("Debug Grid Visual State")]
+    public void DebugGridVisualState()
+    {
+        RoomGrid roomGrid = GetLocalPlayerRoomGrid();
+        Tilemap  tilemap  = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
+
+        BaseAction action = GetSelectedAction();
+        Unit unit = GetSelectedAction() != null ? (NetworkedUnitActionSystem.Instance?.GetSelectedUnit() ?? UnitActionSystem.Instance?.GetSelectedUnit()) : null;
+
+        Debug.Log($"[TilemapGridVisual] --- GRID VISUAL STATE ---");
+        Debug.Log($"[TilemapGridVisual] currentTilemap = {(currentTilemap?.gameObject.name ?? "NULL")}");
+        Debug.Log($"[TilemapGridVisual] resolvedTilemap = {(tilemap?.gameObject.name ?? "NULL")}");
+        Debug.Log($"[TilemapGridVisual] localPlayerRoom = {(roomGrid?.gameObject.name ?? "NULL")}");
+        Debug.Log($"[TilemapGridVisual] selectedUnit = {(unit?.gameObject.name ?? "NULL")}");
+        Debug.Log($"[TilemapGridVisual] selectedAction = {(action?.GetActionName() ?? "NULL")}");
+
+        if (action is MoveAction moveAction)
+        {
+            var positions = moveAction.GetValidActionGridPositionList();
+            Debug.Log($"[TilemapGridVisual] MoveAction valid positions count = {positions.Count}");
+            if (positions.Count > 0)
+                Debug.Log($"[TilemapGridVisual] First 3 positions: {string.Join(", ", positions.GetRange(0, Mathf.Min(3, positions.Count)))}");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -113,11 +142,18 @@ public class TilemapGridVisual : MonoBehaviour
     private void UpdateActionVisuals()
     {
         BaseAction selectedAction = GetSelectedAction();
+
+        if (Time.frameCount % 120 == 0)
+            Debug.Log($"[TilemapGridVisual] selectedAction={selectedAction?.GetActionName() ?? "NULL"} | tilemap={currentTilemap?.gameObject.name ?? "NULL"}");
+
         if (selectedAction == null) return;
 
         if (selectedAction is MoveAction moveAction)
         {
-            HighlightPositions(moveAction.GetValidActionGridPositionList(), moveColor);
+            var positions = moveAction.GetValidActionGridPositionList();
+            if (Time.frameCount % 120 == 0)
+                Debug.Log($"[TilemapGridVisual] MoveAction positions={positions.Count} | first={(positions.Count > 0 ? positions[0].ToString() : "none")}");
+            HighlightPositions(positions, moveColor);
         }
         else if (selectedAction is CombatAction combatAction)
         {

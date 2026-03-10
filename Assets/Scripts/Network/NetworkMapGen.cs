@@ -361,6 +361,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             if (netUnit != null)
                 netUnit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
+            // Register this client's starting room in RoomManager so
+            // TilemapGridVisual resolves the correct tilemap per client
+            RoomManager.Instance?.SetCurrentRoom(
+                ConvertToOldPlacedRoom(startRoom), clientId);
+
             Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
             
             // Capture loop variables for the coroutine closure

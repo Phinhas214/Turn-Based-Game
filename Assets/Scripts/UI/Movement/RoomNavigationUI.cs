@@ -183,11 +183,34 @@ public class RoomNavigationUI : MonoBehaviour
         LevelGenerator.Direction entryDir = GetOppositeDirection(travelDirection);
         GridPosition spawnPos = GetSpawnPosition(targetRoom, entryDir);
 
-        // Update global room state for single-player compatibility
-        RoomManager.Instance?.SetCurrentRoom(targetRoom);
+        // Update room state — pass local client ID in MP so each player
+        // tracks their own room independently
+        if (Unity.Netcode.NetworkManager.Singleton != null &&
+            Unity.Netcode.NetworkManager.Singleton.IsListening)
+        {
+            ulong localId = Unity.Netcode.NetworkManager.Singleton.LocalClientId;
+            RoomManager.Instance?.SetCurrentRoom(targetRoom, localId);
+        }
+        else
+        {
+            RoomManager.Instance?.SetCurrentRoom(targetRoom);
+        }
         LevelGrid.Instance?.SetCurrentRoomGrid(targetRoom.roomGrid);
 
+        // Place on Unit (SP path)
         player.PlaceInRoom(targetRoom.roomGrid, spawnPos);
+
+        // In MP, also update NetworkedUnit so its currentRoomGrid stays in sync.
+        // Unit and NetworkedUnit are separate components with separate room fields.
+        // Only done when a network session is active — safe to skip in SP.
+        bool isNetworked = Unity.Netcode.NetworkManager.Singleton != null &&
+                           Unity.Netcode.NetworkManager.Singleton.IsListening;
+        if (isNetworked)
+        {
+            var netUnit = player.GetComponent<NetworkedUnit>();
+            netUnit?.PlaceInRoom(targetRoom.roomGrid, spawnPos);
+        }
+
         FreeTacticsCameraController.Instance?.FocusOnPlayer();
 
         UpdateButtons();

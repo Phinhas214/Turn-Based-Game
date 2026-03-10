@@ -143,13 +143,23 @@ public class MoveAction : BaseAction
         if (!CanMove()) return validList;
 
         RoomGrid currentRoom = GetUnitRoomGrid();
-        if (currentRoom == null) return validList;
+        if (currentRoom == null)
+        {
+            Debug.LogWarning("[MoveAction] GetValidActionGridPositionList: currentRoom is NULL");
+            return validList;
+        }
 
         TilemapRoomGrid tilemapGrid = currentRoom.GetTilemapRoomGrid();
-        if (tilemapGrid == null) return validList;
+        if (tilemapGrid == null)
+        {
+            Debug.LogWarning("[MoveAction] GetValidActionGridPositionList: tilemapGrid is NULL");
+            return validList;
+        }
 
         GridPosition unitPos = GetUnitGridPosition();
         int moveDistance = GetMoveDistance();
+
+        Debug.Log($"[MoveAction] GetValidActionGridPositionList: unitPos={unitPos} moveDistance={moveDistance} room={currentRoom.gameObject.name} unit.isInitialized={unit.IsInitialized()} unit.roomGrid={(unit.GetCurrentRoomGrid()?.gameObject.name ?? "NULL")}");
 
         Pathfinder pathfinder = new Pathfinder(currentRoom);
 

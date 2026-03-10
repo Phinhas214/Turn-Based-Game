@@ -92,11 +92,14 @@ public class NetworkedUnit : NetworkBehaviour
 
     private void Update()
     {
-        // Only the owning client tracks its own grid position changes.
-        // Skip while MoveAction is running — it manages occupancy directly.
         if (!IsOwner || !isInitialized || currentRoomGrid == null || IsMoving) return;
 
         GridPosition newGridPos = currentRoomGrid.GetGridPosition(transform.position);
+
+        // Log every 120 frames so we can see if Unit is tracking position
+        if (Time.frameCount % 120 == 0)
+            Debug.Log($"[NetworkedUnit] Update: transform={transform.position} gridPos={gridPosition} newGridPos={newGridPos} unit.gridPos={GetComponent<Unit>()?.GetGridPosition()} unit.room={(GetComponent<Unit>()?.GetCurrentRoomGrid()?.gameObject.name ?? "NULL")}");
+
         if (newGridPos != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPos))
         {
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
@@ -128,12 +131,20 @@ public class NetworkedUnit : NetworkBehaviour
         roomGrid.AddUnitAtGridPosition(newGridPosition, GetUnitCompat());
         isInitialized = true;
 
+        // CRITICAL: Keep Unit component in sync — Unit.gridPosition and
+        // Unit.currentRoomGrid are what MoveAction and TilemapGridVisual read.
+        // Without this Unit.Update() tracks from the wrong room and gridPosition
+        // never updates after the initial spawn.
+        Unit unitComp = GetComponent<Unit>();
+        if (unitComp != null)
+            unitComp.PlaceInRoom(roomGrid, newGridPosition);
+
         // Sync both grid position AND world position to all other clients
         if (IsOwner || IsServer)
             UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
                 targetPos.x, targetPos.y, targetPos.z);
 
-        Debug.Log($"[NetworkedUnit] PlaceInRoom → grid {newGridPosition}, world {targetPos}");
+        Debug.Log($"[NetworkedUnit] PlaceInRoom → grid {newGridPosition}, world {targetPos} | Unit.roomGrid after={(unitComp?.GetCurrentRoomGrid()?.gameObject.name ?? "NULL")} Unit.gridPos after={(unitComp?.GetGridPosition().ToString() ?? "NULL")}");
     }
 
     /// <summary>
@@ -147,6 +158,16 @@ public class NetworkedUnit : NetworkBehaviour
         currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
         gridPosition = newGridPosition;
         currentRoomGrid.AddUnitAtGridPosition(gridPosition, GetUnitCompat());
+
+        // Directly call Unit.PlaceInRoom with the final position.
+        // This is the only safe way — SetCurrentRoomGrid snapshots transform.position
+        // which may not be at the destination yet when called mid-coroutine.
+        Unit unitComp = GetComponent<Unit>();
+        if (unitComp != null)
+        {
+            unitComp.PlaceInRoom(currentRoomGrid, newGridPosition);
+            Debug.Log($"[NetworkedUnit] SyncGridPositionAfterMove: synced Unit to grid {newGridPosition} unit.gridPos now={unitComp.GetGridPosition()}");
+        }
 
         if (IsOwner || IsServer)
             UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
