@@ -338,9 +338,9 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             if (!startRoom.roomGrid.IsValidGridPosition(spawnPos))
                 spawnPos = new GridPosition(centerX, centerZ);
 
-            Vector3 worldPos = startRoom.roomGrid.GetWorldPosition(spawnPos);
+            Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnPos);
 
-            GameObject playerGO = Instantiate(prefabToSpawn, worldPos, Quaternion.identity);
+            GameObject playerGO = Instantiate(prefabToSpawn, spawnWorldPos, Quaternion.identity);
             NetworkObject netObj = playerGO.GetComponent<NetworkObject>();
 
             if (netObj == null)
@@ -352,13 +352,53 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
-            // Place on grid
+            // Place on grid (server side)
             Unit unit = playerGO.GetComponent<Unit>();
             if (unit != null)
                 unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
+            NetworkedUnit netUnit = playerGO.GetComponent<NetworkedUnit>();
+            if (netUnit != null)
+                netUnit.PlaceInRoom(startRoom.roomGrid, spawnPos);
+
             Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
+            
+            // Capture loop variables for the coroutine closure
+            ulong capturedClientId  = clientId;
+            GridPosition capturedSpawnPos = spawnPos;
+            RoomGrid capturedRoomGrid = startRoom.roomGrid;
+            NetworkedUnit capturedNetUnit = netUnit;
+            StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
         }
+    }
+
+    /// <summary>
+    /// Waits a short delay then tells the owning client to initialise their
+    /// local Unit component. The delay ensures the NetworkObject has fully
+    /// arrived on the client before we send the RPC.
+    /// </summary>
+    private IEnumerator SendInitRpcAfterDelay(NetworkedUnit netUnit, RoomGrid roomGrid,
+                                               GridPosition spawnPos, ulong clientId)
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        if (netUnit == null || roomGrid == null) yield break;
+
+        Vector3 spawnWorldPos = roomGrid.GetWorldPosition(spawnPos);
+        ClientRpcParams ownerOnly = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new ulong[] { clientId }
+            }
+        };
+
+        netUnit.InitialiseUnitOnClientClientRpc(
+            spawnPos.x, spawnPos.z,
+            spawnWorldPos.x, spawnWorldPos.y, spawnWorldPos.z,
+            ownerOnly);
+
+        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId}");
     }
 
     private GameObject GetPlayerPrefab(int charIndex)

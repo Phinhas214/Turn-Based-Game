@@ -7,33 +7,33 @@ public class TilemapGridVisual : MonoBehaviour
     public static TilemapGridVisual Instance { get; private set; }
 
     [Header("Visual Assets")]
-    [SerializeField] private TileBase solidWhiteTile; // Drag a plain white square tile here
+    [SerializeField] private TileBase solidWhiteTile;
 
     [Header("Visual Colors")]
-    // Ensure Alpha (A) is high (0.8 - 1.0) for that solid look
-    [SerializeField] private Color moveColor  = new Color(0.2f, 0.6f, 1f, 1f); 
-    [SerializeField] private Color rangeColor = new Color(1f, 0.85f, 0f, 1f); 
-    [SerializeField] private Color aoeColor   = new Color(1f, 0.15f, 0.15f, 1f); 
-    [SerializeField] private Color hoverColor = new Color(1f, 1f, 1f, 0.5f); 
+    [SerializeField] private Color moveColor  = new Color(0.2f, 0.6f, 1f,    1f);
+    [SerializeField] private Color rangeColor = new Color(1f,   0.85f, 0f,   1f);
+    [SerializeField] private Color aoeColor   = new Color(1f,   0.15f, 0.15f, 1f);
+    [SerializeField] private Color hoverColor = new Color(1f,   1f,   1f,    0.5f);
 
     private Tilemap currentTilemap;
-    
-    // Tracks original tiles so we can restore the floor art perfectly
-    private Dictionary<Vector3Int, TileBase> originalTileData = new Dictionary<Vector3Int, TileBase>();
-    private HashSet<Vector3Int> modifiedPositions = new HashSet<Vector3Int>();
+
+    private Dictionary<Vector3Int, TileBase> originalTileData  = new Dictionary<Vector3Int, TileBase>();
+    private HashSet<Vector3Int>              modifiedPositions = new HashSet<Vector3Int>();
 
     private void Awake() => Instance = this;
 
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady += OnLevelReady;
-        RoomManager.OnAnyRoomChanged += OnRoomChanged;
+        LevelGenerator.OnLevelReady          += OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
+        RoomManager.OnAnyRoomChanged         += OnRoomChanged;
     }
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
-        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
+        RoomManager.OnAnyRoomChanged         -= OnRoomChanged;
     }
 
     private void OnLevelReady() => RefreshCurrentTilemap();
@@ -42,15 +42,24 @@ public class TilemapGridVisual : MonoBehaviour
     private void RefreshCurrentTilemap()
     {
         ResetAllTiles();
-        var room = RoomManager.Instance?.GetCurrentRoom();
-        if (room?.roomGrid != null)
-        {
-            currentTilemap = room.roomGrid.GetTilemapRoomGrid()?.GetFloorTilemap();
-        }
+        RoomGrid roomGrid = GetLocalPlayerRoomGrid();
+        currentTilemap = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
     }
 
     private void Update()
     {
+        // Re-resolve every frame so the tilemap always follows the local player
+        // even when they move within a room (Unit.gridPosition updates every frame)
+        RoomGrid roomGrid = GetLocalPlayerRoomGrid();
+        Tilemap  tilemap  = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
+
+        // Player moved to a different room — clear old paint, switch tilemap
+        if (tilemap != currentTilemap)
+        {
+            ResetAllTiles();
+            currentTilemap = tilemap;
+        }
+
         if (currentTilemap == null) return;
 
         ResetAllTiles();
@@ -58,11 +67,52 @@ public class TilemapGridVisual : MonoBehaviour
         UpdateHoverVisual();
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Room resolution
+    // SP:  reads from local Unit component directly (frame-accurate)
+    // MP:  reads from owned NetworkedUnit (also frame-accurate via Unit.Update)
+    // Either way it is per-client — no shared global state
+    // ─────────────────────────────────────────────────────────────────────
+
+    private RoomGrid GetLocalPlayerRoomGrid()
+    {
+        bool isMP = Unity.Netcode.NetworkManager.Singleton != null
+                 && Unity.Netcode.NetworkManager.Singleton.IsListening;
+
+        if (isMP)
+        {
+            // Find the Unit the local client owns
+            foreach (var netObj in FindObjectsByType<Unity.Netcode.NetworkObject>(FindObjectsSortMode.None))
+            {
+                if (!netObj.IsOwner) continue;
+                Unit u = netObj.GetComponent<Unit>();
+                if (u != null) return u.GetCurrentRoomGrid();
+            }
+        }
+
+        // SP: just get the single Unit in the scene
+        Unit spUnit = FindFirstObjectByType<Unit>();
+        return spUnit?.GetCurrentRoomGrid();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Action system — checks MP system first, falls back to SP
+    // ─────────────────────────────────────────────────────────────────────
+
+    private BaseAction GetSelectedAction()
+    {
+        if (NetworkedUnitActionSystem.Instance != null)
+            return NetworkedUnitActionSystem.Instance.GetSelectedAction();
+        return UnitActionSystem.Instance?.GetSelectedAction();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Everything below is identical to the working SP version
+    // ─────────────────────────────────────────────────────────────────────
+
     private void UpdateActionVisuals()
     {
-        if (UnitActionSystem.Instance == null) return;
-
-        BaseAction selectedAction = UnitActionSystem.Instance.GetSelectedAction();
+        BaseAction selectedAction = GetSelectedAction();
         if (selectedAction == null) return;
 
         if (selectedAction is MoveAction moveAction)
@@ -72,7 +122,7 @@ public class TilemapGridVisual : MonoBehaviour
         else if (selectedAction is CombatAction combatAction)
         {
             Color rColor = combatAction.ActionData != null ? combatAction.ActionData.rangeHighlightColor : rangeColor;
-            Color aColor = combatAction.ActionData != null ? combatAction.ActionData.aoeHighlightColor : aoeColor;
+            Color aColor = combatAction.ActionData != null ? combatAction.ActionData.aoeHighlightColor   : aoeColor;
 
             HighlightPositions(combatAction.GetValidActionGridPositionList(), rColor);
 
@@ -87,38 +137,25 @@ public class TilemapGridVisual : MonoBehaviour
 
         GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
         if (LevelGrid.Instance.IsValidGridPosition(mouseGridPos))
-        {
             ApplySolidColor(new Vector3Int(mouseGridPos.x, mouseGridPos.z, 0), hoverColor);
-        }
     }
 
     private void HighlightPositions(List<GridPosition> positions, Color color)
     {
         foreach (GridPosition gp in positions)
-        {
             ApplySolidColor(new Vector3Int(gp.x, gp.z, 0), color);
-        }
     }
 
     private void ApplySolidColor(Vector3Int pos, Color color)
     {
         if (currentTilemap == null || !currentTilemap.HasTile(pos)) return;
 
-        // 1. Capture the original floor tile before we swap it
         if (!originalTileData.ContainsKey(pos))
-        {
             originalTileData[pos] = currentTilemap.GetTile(pos);
-        }
 
-        // 2. Swap to the solid white tile asset
         currentTilemap.SetTile(pos, solidWhiteTile);
-
-        // 3. IMPORTANT: Unlock flags AFTER setting the tile, or Unity resets it to 'Locked'
         currentTilemap.SetTileFlags(pos, TileFlags.None);
-
-        // 4. Apply the color
         currentTilemap.SetColor(pos, color);
-        
         modifiedPositions.Add(pos);
     }
 
@@ -130,10 +167,7 @@ public class TilemapGridVisual : MonoBehaviour
         {
             if (originalTileData.TryGetValue(pos, out TileBase originalTile))
             {
-                // Restore the original floor texture
                 currentTilemap.SetTile(pos, originalTile);
-                
-                // Reset color to full white (no tint)
                 currentTilemap.SetTileFlags(pos, TileFlags.None);
                 currentTilemap.SetColor(pos, Color.white);
             }

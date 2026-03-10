@@ -37,15 +37,13 @@ public class MoveAction : BaseAction
 
     private RoomGrid GetUnitRoomGrid()
     {
-        if (IsNetworked && cachedNetUnit != null && cachedNetUnit.GetCurrentRoomGrid() != null)
-            return cachedNetUnit.GetCurrentRoomGrid();
+        // Unit.currentRoomGrid is always accurate — updated by PlaceInRoom and Unit.Update
         return unit.GetCurrentRoomGrid();
     }
 
     private GridPosition GetUnitGridPosition()
     {
-        if (IsNetworked && cachedNetUnit != null && cachedNetUnit.IsInitialized())
-            return cachedNetUnit.GetGridPosition();
+        // Unit.gridPosition is always accurate — updated every frame from transform.position
         return unit.GetGridPosition();
     }
 

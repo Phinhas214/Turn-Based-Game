@@ -154,6 +154,47 @@ public class NetworkedUnit : NetworkBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Called by server after spawning — tells the OWNING client to initialise
+    // their local Unit component with the correct room and grid position.
+    // Without this Unit.currentRoomGrid is null on the client so Unit.Update()
+    // never tracks position and gridPosition stays at (0,0) forever.
+    // ─────────────────────────────────────────────────────────────────────
+
+    [ClientRpc]
+    public void InitialiseUnitOnClientClientRpc(int gridX, int gridZ,
+        float worldX, float worldY, float worldZ,
+        ClientRpcParams rpcParams = default)
+    {
+        if (!IsOwner) return;
+
+        GridPosition gridPos  = new GridPosition(gridX, gridZ);
+        Vector3      worldPos = new Vector3(worldX, worldY, worldZ);
+
+        // Unit.PlaceInRoom was already called by the server — Unit.currentRoomGrid
+        // is already set correctly. We just need to make sure NetworkedUnit also
+        // has the same roomGrid so both components stay in sync.
+        Unit unit = GetComponent<Unit>();
+        if (unit == null) return;
+
+        RoomGrid roomGrid = unit.GetCurrentRoomGrid();
+
+        // Fallback: if Unit somehow doesn't have a room yet, find it by world pos
+        if (roomGrid == null && LevelGrid.Instance != null)
+            roomGrid = LevelGrid.Instance.GetRoomAtPosition(worldPos);
+
+        if (roomGrid == null)
+        {
+            Debug.LogWarning("[NetworkedUnit] InitialiseUnitOnClient: Unit has no room grid yet at " + worldPos);
+            return;
+        }
+
+        // Sync NetworkedUnit to match Unit
+        PlaceInRoom(roomGrid, gridPos);
+
+        Debug.Log($"[NetworkedUnit] Client initialised at grid {gridPos}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Server RPC — single call updates both grid vars and world pos vars
     // ─────────────────────────────────────────────────────────────────────
 
