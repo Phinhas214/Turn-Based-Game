@@ -25,13 +25,14 @@ public class ActionButtonUI : MonoBehaviour
 
     [Header("Affordability Visuals")]
     [Range(0f, 1f)]
-    [SerializeField] private float       unaffordableAlpha = 0.4f;
+    [SerializeField] private float   unaffordableAlpha = 0.4f;
     [SerializeField] private CanvasGroup canvasGroup;
 
     private BaseAction baseAction;
 
     private void Awake()
     {
+        // Ensure we have a CanvasGroup for the alpha dimming effect
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
     }
@@ -43,6 +44,7 @@ public class ActionButtonUI : MonoBehaviour
         if (actionNameText != null)
             actionNameText.text = action.GetActionName().ToUpper();
 
+        // Setup button listener to route to the correct system (SP or MP)
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(() => SetActionOnActiveSystem(baseAction));
 
@@ -57,12 +59,12 @@ public class ActionButtonUI : MonoBehaviour
         if (selectedGameObject != null)
             selectedGameObject.SetActive(currentAction == baseAction);
 
+        // Re-check if we can still afford this whenever the selection changes
         RefreshAffordability();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ── Routing Helpers ───────────────────────────────────────────────────
 
-    /// <summary>Routes SetSelectedAction to whichever system is active.</summary>
     private void SetActionOnActiveSystem(BaseAction action)
     {
         if (NetworkedUnitActionSystem.Instance != null)
@@ -71,7 +73,6 @@ public class ActionButtonUI : MonoBehaviour
             UnitActionSystem.Instance?.SetSelectedAction(action);
     }
 
-    /// <summary>Returns the currently selected action from whichever system is active.</summary>
     private BaseAction GetSelectedActionFromActiveSystem()
     {
         if (NetworkedUnitActionSystem.Instance != null)
@@ -80,40 +81,61 @@ public class ActionButtonUI : MonoBehaviour
         return UnitActionSystem.Instance?.GetSelectedAction();
     }
 
+    // ── UI Refresh Logic ──────────────────────────────────────────────────
+
     private void RefreshStaminaCost()
     {
         if (staminaCostRoot == null) return;
 
+        // 1. Check Combat Actions (uses ActionData values)
         if (baseAction is CombatAction combatAction && combatAction.ActionData != null)
         {
             int cost = combatAction.ActionData.staminaCost;
             staminaCostRoot.SetActive(cost > 0);
+
             if (staminaCostText != null)
                 staminaCostText.text = cost.ToString();
+            
+            return;
         }
-        else
+
+        // 2. Check Move Action (Sam's 1-stamina rule)
+        if (baseAction is MoveAction)
         {
-            staminaCostRoot.SetActive(false);
+            staminaCostRoot.SetActive(true);
+
+            if (staminaCostText != null)
+                staminaCostText.text = "1";
+
+            return;
         }
+
+        // 3. Default: Hide cost if neither of the above
+        staminaCostRoot.SetActive(false);
     }
 
     private void RefreshAffordability()
     {
-        if (canvasGroup == null) return;
+        if (canvasGroup == null || button == null) return;
 
         bool canAfford = CanAffordAction();
-        canvasGroup.alpha   = canAfford ? 1f : unaffordableAlpha;
+        
+        // Dim the button and disable interaction if unaffordable
+        canvasGroup.alpha = canAfford ? 1f : unaffordableAlpha;
         button.interactable = canAfford;
     }
 
     private bool CanAffordAction()
     {
+        // For MoveAction, we check the unit's PlayerStats directly
         if (baseAction is MoveAction)
         {
             PlayerStats stats = baseAction.GetComponent<PlayerStats>();
+            // If no stats found, assume it's free/allowed for safety
             return stats == null || stats.currentStamina > 0;
         }
 
+        // For CombatAction, we use the built-in affordability check
         if (baseAction is CombatAction combatAction)
             return combatAction.CanAfford();
 

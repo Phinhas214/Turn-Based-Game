@@ -13,16 +13,15 @@ public class RoomGrid : MonoBehaviour
 
     //  Initialization (kept for compatibility, but delegated to TilemapRoomGrid)
 
-    public void Initialize(int width, int height, float cellSize, 
-                          Vector3 worldPosition, Vector3 gridOffset, 
+    public void Initialize(int width, int height, float cellSize,
+                          Vector3 worldPosition, Vector3 gridOffset,
                           Transform debugPrefab = null)
     {
-        
         tilemapGrid = GetComponent<TilemapRoomGrid>();
+
         if (tilemapGrid == null)
         {
-            Debug.LogWarning($"[RoomGrid] No TilemapRoomGrid on {gameObject.name} — " +
-                           "make sure RoomTilemapSetup.Initialize() was called");
+            Debug.LogWarning($"[RoomGrid] No TilemapRoomGrid on {gameObject.name} — make sure RoomTilemapSetup.Initialize() was called");
             return;
         }
 
@@ -50,7 +49,7 @@ public class RoomGrid : MonoBehaviour
         return tilemapGrid.IsPositionInRoom(worldPosition);
     }
 
-    //  Unit Management (delegated to TilemapRoomGrid)
+    //  Unit Management
 
     public void AddUnitAtGridPosition(GridPosition gridPosition, Unit unit)
     {
@@ -84,6 +83,17 @@ public class RoomGrid : MonoBehaviour
     {
         if (tilemapGrid == null) return false;
         return tilemapGrid.HasAnyEnemyOnGridPosition(gridPosition);
+    }
+
+    /// <summary>
+    /// NEW — returns the enemy occupying this tile if present.
+    /// Used for click selection and UI.
+    /// </summary>
+    public EnemyUnit GetEnemyAtGridPosition(GridPosition gridPosition)
+    {
+        if (tilemapGrid == null) return null;
+
+        return tilemapGrid.GetEnemyAtGridPosition(gridPosition);
     }
 
     //  Validation
@@ -129,7 +139,6 @@ public class RoomGrid : MonoBehaviour
     {
         return tilemapGrid?.GetFloorTilemap();
     }
-
 
     public bool IsInitialized()
     {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Populates the action bar with one button per action on the selected unit.
@@ -13,6 +14,16 @@ public class UnitActionSystemUI : MonoBehaviour
     [SerializeField] private Transform actionButtonPrefab;
     [SerializeField] private Transform actionButtonContainerTransform;
 
+    [SerializeField] private float buttonSpacing = 8f;
+    [SerializeField] private float buttonPadding = 4f;
+    public enum ActionLayoutDirection
+    {
+        Horizontal,
+        Vertical
+    }
+
+    [SerializeField] private ActionLayoutDirection layoutDirection = ActionLayoutDirection.Horizontal;
+
     private List<ActionButtonUI> actionButtonUIList = new List<ActionButtonUI>();
 
     private void Start()
@@ -24,7 +35,7 @@ public class UnitActionSystemUI : MonoBehaviour
         }
         else if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChange += OnSelectedUnitChanged;
             UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
         }
 
@@ -94,4 +105,5 @@ public class UnitActionSystemUI : MonoBehaviour
     {
         UpdateSelectedVisual();
     }
+
 }

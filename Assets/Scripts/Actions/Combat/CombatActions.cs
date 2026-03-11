@@ -7,6 +7,8 @@ public class CombatAction : BaseAction
     [Header("Action Configuration")]
     [SerializeField] private CombatActionData actionData;
 
+    [SerializeField] private DiceBoxUI diceBox;
+
     [Header("Facing Correction")]
     [Range(0, 3)]
     [Tooltip("Number of 90-degree CCW rotations to correct facing.\n" +
@@ -26,6 +28,12 @@ public class CombatAction : BaseAction
         actionData != null ? actionData.actionName : "Attack";
 
     // ── Preview — called every frame by TilemapGridVisual ─────────────────
+
+    private void Start()
+    {
+        if (diceBox == null)
+            diceBox = FindFirstObjectByType<DiceBoxUI>();
+    }
 
     public List<GridPosition> GetPreviewPositions(GridPosition mouseGridPos)
     {
@@ -59,6 +67,7 @@ public class CombatAction : BaseAction
 
     public void PerformAttack(GridPosition targetGridPos, Action onComplete)
     {
+        Debug.Log("[CombatAction] PerformAttack called");
         if (actionData == null)
         {
             Debug.LogError($"[CombatAction] {gameObject.name} has no CombatActionData!");
@@ -144,6 +153,8 @@ public class CombatAction : BaseAction
         RoomGrid room = unit.GetCurrentRoomGrid();
         if (room == null) return;
 
+        int damage = RollDamage();
+
         foreach (GridPosition pos in positions)
         {
             if (!room.IsValidGridPosition(pos)) continue;
@@ -154,16 +165,15 @@ public class CombatAction : BaseAction
             foreach (EnemyUnit enemy in tilemapGrid.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
-                Debug.Log($"[CombatAction] {GetActionName()} hit " +
-                          $"{enemy.Stats?.enemyName} for {actionData.baseDamage} dmg.");
-                enemy.Health.TakeDamage(actionData.baseDamage);
+                Debug.Log($"[CombatAction] {GetActionName()} hit {enemy.Stats?.enemyName} for {damage} dmg.");
+                enemy.Health.TakeDamage(damage);
             }
 
             foreach (Unit target in tilemapGrid.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
                 HealthComponent health = target.GetComponent<HealthComponent>();
-                health?.TakeDamage(actionData.baseDamage);
+                health?.TakeDamage(damage);
             }
         }
     }
@@ -219,6 +229,30 @@ public class CombatAction : BaseAction
     };
 
     private IEnumerable<Vector2Int> CardinalDirections() => _cardinals;
+
+    private int RollDamage()
+    {
+        if (actionData.diceCount <= 0)
+            return actionData.flatBonus;
+
+        List<int> rolls = DiceRoller.RollMultiple(
+            actionData.dieType,
+            actionData.diceCount
+        );
+
+        int total = actionData.flatBonus;
+
+        foreach (int r in rolls)
+            total += r;
+
+        if (diceBox != null)
+        {
+            diceBox.Clear();
+            diceBox.ShowRoll(rolls); 
+        }
+
+        return total;
+    }
 
 #if UNITY_EDITOR
     private void OnDrawGizmos()

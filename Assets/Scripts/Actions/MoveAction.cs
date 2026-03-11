@@ -185,4 +185,20 @@ public class MoveAction : BaseAction
     }
 
     public override string GetActionName() => "Move";
+
+    public int GetMoveCost(GridPosition targetGridPosition)
+    {
+        RoomGrid currentRoom = unit.GetCurrentRoomGrid();
+        if (currentRoom == null) return -1;
+
+        GridPosition startPos = unit.GetGridPosition();
+
+        Pathfinder pathfinder = new Pathfinder(currentRoom);
+        List<GridPosition> path = pathfinder.FindPath(startPos, targetGridPosition);
+
+        if (path.Count == 0)
+            return -1;
+
+        return path.Count;
+    }
 }

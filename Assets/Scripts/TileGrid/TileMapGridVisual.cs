@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -13,25 +14,24 @@ public class TilemapGridVisual : MonoBehaviour
     [SerializeField] private Color moveColor  = new Color(0.2f, 0.6f, 1f,    1f);
     [SerializeField] private Color rangeColor = new Color(1f,   0.85f, 0f,   1f);
     [SerializeField] private Color aoeColor   = new Color(1f,   0.15f, 0.15f, 1f);
-    [SerializeField] private Color hoverColor = new Color(1f,   1f,   1f,    0.5f);
+    [SerializeField] private Color hoverColor = new Color(1f,   1f,    1f,    0.5f);
 
     private Tilemap currentTilemap;
-
     private Dictionary<Vector3Int, TileBase> originalTileData  = new Dictionary<Vector3Int, TileBase>();
-    private HashSet<Vector3Int>              modifiedPositions = new HashSet<Vector3Int>();
+    private HashSet<Vector3Int> modifiedPositions = new HashSet<Vector3Int>();
 
     private void Awake() => Instance = this;
 
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady          += OnLevelReady;
+        LevelGenerator.OnLevelReady            += OnLevelReady;
         NetworkedLevelGenerator.OnLevelReady += OnLevelReady;
         RoomManager.OnAnyRoomChanged         += OnRoomChanged;
     }
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady          -= OnLevelReady;
+        LevelGenerator.OnLevelReady            -= OnLevelReady;
         NetworkedLevelGenerator.OnLevelReady -= OnLevelReady;
         RoomManager.OnAnyRoomChanged         -= OnRoomChanged;
     }
@@ -49,119 +49,56 @@ public class TilemapGridVisual : MonoBehaviour
     private void Update()
     {
         RoomGrid roomGrid = GetLocalPlayerRoomGrid();
-        Tilemap  tilemap  = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
+        Tilemap tilemap = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
 
         if (tilemap != currentTilemap)
         {
-            Debug.Log($"[TilemapGridVisual] Tilemap changed: {(currentTilemap?.gameObject.name ?? "NULL")} → {(tilemap?.gameObject.name ?? "NULL")} | room={roomGrid?.gameObject.name ?? "NULL"}");
+            Debug.Log($"[TilemapGridVisual] Context switch: {(currentTilemap?.gameObject.name ?? "NULL")} → {(tilemap?.gameObject.name ?? "NULL")}");
             ResetAllTiles();
             currentTilemap = tilemap;
         }
 
-        if (currentTilemap == null)
-        {
-            if (Time.frameCount % 120 == 0)
-                Debug.LogWarning($"[TilemapGridVisual] currentTilemap is NULL — roomGrid={roomGrid?.gameObject.name ?? "NULL"}");
-            return;
-        }
+        if (currentTilemap == null) return;
 
         ResetAllTiles();
+
+        // Clear the cost UI before recalculating this frame
+        if (GridCostVisualizer.Instance != null)
+            GridCostVisualizer.Instance.ClearAll();
+
         UpdateActionVisuals();
         UpdateHoverVisual();
     }
 
-    // Called externally or via button to dump current visual state
-    [ContextMenu("Debug Grid Visual State")]
-    public void DebugGridVisualState()
-    {
-        RoomGrid roomGrid = GetLocalPlayerRoomGrid();
-        Tilemap  tilemap  = roomGrid?.GetTilemapRoomGrid()?.GetFloorTilemap();
-
-        BaseAction action = GetSelectedAction();
-        Unit unit = GetSelectedAction() != null ? (NetworkedUnitActionSystem.Instance?.GetSelectedUnit() ?? UnitActionSystem.Instance?.GetSelectedUnit()) : null;
-
-        Debug.Log($"[TilemapGridVisual] --- GRID VISUAL STATE ---");
-        Debug.Log($"[TilemapGridVisual] currentTilemap = {(currentTilemap?.gameObject.name ?? "NULL")}");
-        Debug.Log($"[TilemapGridVisual] resolvedTilemap = {(tilemap?.gameObject.name ?? "NULL")}");
-        Debug.Log($"[TilemapGridVisual] localPlayerRoom = {(roomGrid?.gameObject.name ?? "NULL")}");
-        Debug.Log($"[TilemapGridVisual] selectedUnit = {(unit?.gameObject.name ?? "NULL")}");
-        Debug.Log($"[TilemapGridVisual] selectedAction = {(action?.GetActionName() ?? "NULL")}");
-
-        if (action is MoveAction moveAction)
-        {
-            var positions = moveAction.GetValidActionGridPositionList();
-            Debug.Log($"[TilemapGridVisual] MoveAction valid positions count = {positions.Count}");
-            if (positions.Count > 0)
-                Debug.Log($"[TilemapGridVisual] First 3 positions: {string.Join(", ", positions.GetRange(0, Mathf.Min(3, positions.Count)))}");
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Room resolution
-    // SP:  reads from local Unit component directly (frame-accurate)
-    // MP:  reads from owned NetworkedUnit (also frame-accurate via Unit.Update)
-    // Either way it is per-client — no shared global state
-    // ─────────────────────────────────────────────────────────────────────
-
-    private RoomGrid GetLocalPlayerRoomGrid()
-    {
-        bool isMP = Unity.Netcode.NetworkManager.Singleton != null
-                 && Unity.Netcode.NetworkManager.Singleton.IsListening;
-
-        if (isMP)
-        {
-            // Find the Unit the local client owns
-            foreach (var netObj in FindObjectsByType<Unity.Netcode.NetworkObject>(FindObjectsSortMode.None))
-            {
-                if (!netObj.IsOwner) continue;
-                Unit u = netObj.GetComponent<Unit>();
-                if (u != null) return u.GetCurrentRoomGrid();
-            }
-        }
-
-        // SP: just get the single Unit in the scene
-        Unit spUnit = FindFirstObjectByType<Unit>();
-        return spUnit?.GetCurrentRoomGrid();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Action system — checks MP system first, falls back to SP
-    // ─────────────────────────────────────────────────────────────────────
-
-    private BaseAction GetSelectedAction()
-    {
-        if (NetworkedUnitActionSystem.Instance != null)
-            return NetworkedUnitActionSystem.Instance.GetSelectedAction();
-        return UnitActionSystem.Instance?.GetSelectedAction();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Everything below is identical to the working SP version
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Logic ─────────────────────────────────────────────────────────────
 
     private void UpdateActionVisuals()
     {
         BaseAction selectedAction = GetSelectedAction();
-
-        if (Time.frameCount % 120 == 0)
-            Debug.Log($"[TilemapGridVisual] selectedAction={selectedAction?.GetActionName() ?? "NULL"} | tilemap={currentTilemap?.gameObject.name ?? "NULL"}");
-
         if (selectedAction == null) return;
 
         if (selectedAction is MoveAction moveAction)
         {
-            var positions = moveAction.GetValidActionGridPositionList();
-            if (Time.frameCount % 120 == 0)
-                Debug.Log($"[TilemapGridVisual] MoveAction positions={positions.Count} | first={(positions.Count > 0 ? positions[0].ToString() : "none")}");
-            HighlightPositions(positions, moveColor);
+            List<GridPosition> validPositions = moveAction.GetValidActionGridPositionList();
+            HighlightPositions(validPositions, moveColor);
+
+            // Handle Move Cost UI (Sam's addition)
+            GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+            if (validPositions.Contains(mouseGridPos) && GridCostVisualizer.Instance != null)
+            {
+                int cost = moveAction.GetMoveCost(mouseGridPos);
+                GridCostVisualizer.Instance.ShowCost(mouseGridPos, cost);
+            }
         }
         else if (selectedAction is CombatAction combatAction)
         {
+            // Use specific ActionData colors if available, otherwise fallback to defaults
             Color rColor = combatAction.ActionData != null ? combatAction.ActionData.rangeHighlightColor : rangeColor;
-            Color aColor = combatAction.ActionData != null ? combatAction.ActionData.aoeHighlightColor   : aoeColor;
+            Color aColor = combatAction.ActionData != null ? combatAction.ActionData.aoeHighlightColor : aoeColor;
 
             HighlightPositions(combatAction.GetValidActionGridPositionList(), rColor);
 
+            // Show AOE preview based on mouse position
             GridPosition mousePos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
             HighlightPositions(combatAction.GetPreviewPositions(mousePos), aColor);
         }
@@ -173,8 +110,35 @@ public class TilemapGridVisual : MonoBehaviour
 
         GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
         if (LevelGrid.Instance.IsValidGridPosition(mouseGridPos))
+        {
             ApplySolidColor(new Vector3Int(mouseGridPos.x, mouseGridPos.z, 0), hoverColor);
+        }
     }
+
+    // ── Systems Resolution ───────────────────────────────────────────────
+
+    private RoomGrid GetLocalPlayerRoomGrid()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+        {
+            foreach (var netObj in FindObjectsByType<NetworkObject>(FindObjectsSortMode.None))
+            {
+                if (!netObj.IsOwner) continue;
+                Unit u = netObj.GetComponent<Unit>();
+                if (u != null) return u.GetCurrentRoomGrid();
+            }
+        }
+        return FindFirstObjectByType<Unit>()?.GetCurrentRoomGrid();
+    }
+
+    private BaseAction GetSelectedAction()
+    {
+        if (NetworkedUnitActionSystem.Instance != null)
+            return NetworkedUnitActionSystem.Instance.GetSelectedAction();
+        return UnitActionSystem.Instance?.GetSelectedAction();
+    }
+
+    // ── Rendering ────────────────────────────────────────────────────────
 
     private void HighlightPositions(List<GridPosition> positions, Color color)
     {
@@ -189,6 +153,7 @@ public class TilemapGridVisual : MonoBehaviour
         if (!originalTileData.ContainsKey(pos))
             originalTileData[pos] = currentTilemap.GetTile(pos);
 
+        // Apply solid color visual
         currentTilemap.SetTile(pos, solidWhiteTile);
         currentTilemap.SetTileFlags(pos, TileFlags.None);
         currentTilemap.SetColor(pos, color);
@@ -208,7 +173,6 @@ public class TilemapGridVisual : MonoBehaviour
                 currentTilemap.SetColor(pos, Color.white);
             }
         }
-
         modifiedPositions.Clear();
         originalTileData.Clear();
     }

@@ -17,9 +17,10 @@ public class UnitActionSystem : MonoBehaviour
     public event EventHandler         OnSelectedActionChange;
     public event EventHandler<bool>   OnBusyChanged;
 
-    private Unit       selectedUnit;
+    private Unit selectedUnit;
     private BaseAction selectedAction;
-    private bool       isBusy;
+    private bool isBusy;
+    private EnemyUnit selectedEnemy;
 
     private void Awake()
     {
@@ -59,13 +60,46 @@ public class UnitActionSystem : MonoBehaviour
         HandleSelectedAction();
     }
 
+    private void SetSelectedEnemy(EnemyUnit enemy)
+    {
+        if (selectedEnemy != null)
+            selectedEnemy.SetSelected(false);
+
+        selectedEnemy = enemy;
+
+        if (selectedEnemy != null)
+            selectedEnemy.SetSelected(true);
+    }
+
     private void HandleSelectedAction()
     {
         if (!Input.GetMouseButtonDown(0)) return;
 
-        // UnitActionSystem already gets grid position from MouseWorld
-        GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(MouseWorld.GetPosition());
+        Vector3 mouseWorld = MouseWorld.GetPosition();
 
+        GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(mouseWorld);
+
+        // --- NEW: check if an enemy exists on this tile ---
+        RoomGrid roomGrid = RoomManager.Instance.GetCurrentRoomGrid();
+
+        if (roomGrid != null)
+        {
+            EnemyUnit enemy = roomGrid.GetEnemyAtGridPosition(mouseGridPos);
+
+            if (enemy != null)
+            {
+                Debug.Log($"[EnemySelect] Enemy clicked at {mouseGridPos}: {enemy.name}");
+
+                SetSelectedEnemy(enemy);
+
+                HealthComponent hc = enemy.GetComponent<HealthComponent>();
+                EnemyHealthUI.Instance.SetTarget(hc);
+
+                return;
+            }
+        }
+
+        // --- existing action logic continues ---
         switch (selectedAction)
         {
             case MoveAction moveAction:
@@ -139,4 +173,6 @@ public class UnitActionSystem : MonoBehaviour
 
     public Unit       GetSelectedUnit()   => selectedUnit;
     public BaseAction GetSelectedAction() => selectedAction;
+
+    
 }

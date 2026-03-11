@@ -17,26 +17,32 @@ public class FreeTacticsCameraController : MonoBehaviour
     public float orthoMin = 4f;
     public float orthoMax = 18f;
 
-    [Header("Shake")]
-    [SerializeField] private float shakeAmplitude = 0.25f;
-    [SerializeField] private float shakeFrequency = 20f;
-    [SerializeField] private float shakeDuration = 0.15f;
-
     [Header("Auto-Focus (Room Transitions)")]
     [SerializeField] private Vector3 followOffset = new Vector3(0f, 20f, -2f);
     [SerializeField] private float snapSmoothness = 5f;
 
-    private Vector3 basePosition;
-    private Vector3 shakeOffset;
+    [Header("Screen Shake")]
+    [SerializeField] private float shakeFrequency = 25f;
     private float shakeTimeRemaining;
+    private float shakeDuration;
+    private float shakeAmplitude;
+    private Vector3 shakeOffset;
+
+    private Vector3 basePosition;
     private Vector3 lastMousePosition;
     private float targetOrthoSize;
-
     private bool isSnappingToPlayer = false;
+
+    private Bounds roomBounds;
+    private bool hasBounds = false;
 
     void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        if (Instance != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
 
         if (!cam) cam = Camera.main;
@@ -64,12 +70,46 @@ public class FreeTacticsCameraController : MonoBehaviour
         }
 
         HandleZoom();
+        ClampToRoom();
+
+        // We apply the logic position to the transform
+        transform.position = basePosition; 
     }
+
+    void LateUpdate()
+    {
+        ApplyShake();
+        // Add shake offset on top of the base position during LateUpdate
+        transform.position = basePosition + shakeOffset;
+    }
+
+    // ── Public API ────────────────────────────────────────────────────────
+
+    public void FocusOnPlayer()
+    {
+        isSnappingToPlayer = true;
+    }
+
+    public void SetRoomBounds(Bounds bounds)
+    {
+        roomBounds = bounds;
+        hasBounds = true;
+        Debug.Log($"🎥 Camera bounds set → Center: {bounds.center} Size: {bounds.size}");
+    }
+
+    public void TriggerShake(float intensity, float duration)
+    {
+        shakeAmplitude = intensity;
+        shakeDuration = duration;
+        shakeTimeRemaining = duration;
+    }
+
+    // ── Logic ─────────────────────────────────────────────────────────────
 
     private bool HasManualInput()
     {
         return Input.GetAxisRaw("Horizontal") != 0 ||
-               Input.GetAxisRaw("Vertical")   != 0 ||
+               Input.GetAxisRaw("Vertical") != 0 ||
                Input.GetMouseButton(1);
     }
 
@@ -90,73 +130,40 @@ public class FreeTacticsCameraController : MonoBehaviour
         }
         else
         {
-            // No local player found yet — stop snapping so we don't freeze
             isSnappingToPlayer = false;
         }
     }
 
-    /// <summary>
-    /// Finds the Transform of the player owned by this client.
-    /// Works in both single-player (no NetworkObject) and multiplayer (IsOwner check).
-    /// </summary>
     private Transform FindLocalPlayerTransform()
     {
-        // Look through all PlayerTarget components in the scene
-        foreach (PlayerTarget pt in FindObjectsByType<PlayerTarget>(FindObjectsSortMode.None))
+        // Multiplayer-aware search from HEAD
+        foreach (PlayerTarget pt in Object.FindObjectsByType<PlayerTarget>(FindObjectsSortMode.None))
         {
             NetworkObject netObj = pt.GetComponent<NetworkObject>();
-
             if (netObj != null)
             {
-                // Multiplayer: only follow the unit this client owns
-                if (netObj.IsOwner)
-                    return pt.transform;
+                if (netObj.IsOwner) return pt.transform;
             }
             else
             {
-                // Single-player / editor testing: no NetworkObject, just use it
-                return pt.transform;
+                return pt.transform; // Single-player fallback
             }
         }
-
-        // Fallback: try the old singleton in case PlayerTarget.Instance is still used
-        if (PlayerTarget.Instance != null)
-            return PlayerTarget.Instance.transform;
-
-        return null;
+        return PlayerTarget.Instance?.transform;
     }
-
-    void LateUpdate()
-    {
-        ApplyShake();
-    }
-
-    // ── Public API ────────────────────────────────────────────────────────
-
-    public void FocusOnPlayer()
-    {
-        isSnappingToPlayer = true;
-    }
-
-    public void Shake(float intensityMultiplier = 1f)
-    {
-        shakeTimeRemaining = shakeDuration;
-    }
-
-    // ── Movement ──────────────────────────────────────────────────────────
 
     void HandleKeyboardPan()
     {
         float x = Input.GetAxisRaw("Horizontal");
         float z = Input.GetAxisRaw("Vertical");
-
         Vector3 move = new Vector3(x, 0f, z).normalized;
         basePosition += move * panSpeed * Time.deltaTime;
     }
 
     void HandleMouseDragPan()
     {
-        if (Input.GetMouseButtonDown(1)) lastMousePosition = Input.mousePosition;
+        if (Input.GetMouseButtonDown(1))
+            lastMousePosition = Input.mousePosition;
 
         if (Input.GetMouseButton(1))
         {
@@ -172,28 +179,65 @@ public class FreeTacticsCameraController : MonoBehaviour
         if (!cam) return;
 
         float scroll = Input.mouseScrollDelta.y;
-        if (Mathf.Abs(scroll) > 0.01f)
-            targetOrthoSize = Mathf.Clamp(targetOrthoSize - scroll * zoomSpeed, orthoMin, orthoMax);
+        if (Mathf.Abs(scroll) < 0.01f) return;
 
-        cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, targetOrthoSize, Time.deltaTime * 8f);
+        // Zoom-to-mouse logic from Sam's branch
+        Vector3 mouseWorldBefore = GetMouseWorldPosition();
+
+        targetOrthoSize = Mathf.Clamp(targetOrthoSize - scroll * zoomSpeed, orthoMin, orthoMax);
+        
+        // Smoothly interpolate the orthographic size
+        cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, targetOrthoSize, Time.deltaTime * 10f);
+
+        Vector3 mouseWorldAfter = GetMouseWorldPosition();
+        Vector3 difference = mouseWorldBefore - mouseWorldAfter;
+
+        basePosition += difference;
     }
 
-    void ApplyShake()
+    private void ApplyShake()
     {
         if (shakeTimeRemaining > 0f)
         {
             shakeTimeRemaining -= Time.deltaTime;
-            float t        = shakeTimeRemaining / shakeDuration;
+            float t = shakeTimeRemaining / shakeDuration;
             float strength = shakeAmplitude * t;
-            float noiseX   = (Mathf.PerlinNoise(Time.time * shakeFrequency, 0f) - 0.5f) * 2f;
-            float noiseZ   = (Mathf.PerlinNoise(0f, Time.time * shakeFrequency) - 0.5f) * 2f;
-            shakeOffset    = new Vector3(noiseX, 0f, noiseZ) * strength;
+            
+            float noiseX = (Mathf.PerlinNoise(Time.time * shakeFrequency, 0f) - 0.5f) * 2f;
+            float noiseZ = (Mathf.PerlinNoise(0f, Time.time * shakeFrequency) - 0.5f) * 2f;
+            
+            shakeOffset = new Vector3(noiseX, 0f, noiseZ) * strength;
         }
         else
         {
             shakeOffset = Vector3.zero;
         }
+    }
 
-        transform.position = basePosition + shakeOffset;
+    Vector3 GetMouseWorldPosition()
+    {
+        Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+        Plane plane = new Plane(Vector3.up, Vector3.zero);
+        if (plane.Raycast(ray, out float distance))
+        {
+            return ray.GetPoint(distance);
+        }
+        return Vector3.zero;
+    }
+
+    void ClampToRoom()
+    {
+        if (!hasBounds || cam == null) return;
+
+        float camHeight = cam.orthographicSize;
+        float camWidth = camHeight * cam.aspect;
+
+        float minX = roomBounds.min.x + camWidth;
+        float maxX = roomBounds.max.x - camWidth;
+        float minZ = roomBounds.min.z + camHeight;
+        float maxZ = roomBounds.max.z - camHeight;
+
+        basePosition.x = Mathf.Clamp(basePosition.x, minX, maxX);
+        basePosition.z = Mathf.Clamp(basePosition.z, minZ, maxZ);
     }
 }

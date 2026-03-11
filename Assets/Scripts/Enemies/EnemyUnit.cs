@@ -14,6 +14,7 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
 
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs = false;
+    [SerializeField] private GameObject selectedVisual;
 
     // ── Runtime state ──────────────────────────────────────────────────────
     private GridPosition    gridPosition;
@@ -54,6 +55,9 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
     private void Start()
     {
         health.OnDeath += HandleDeath;
+
+        if (selectedVisual != null)
+            selectedVisual.SetActive(false); // start hidden
     }
 
     private void OnDestroy()
@@ -128,5 +132,11 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
         EnemyManager.Instance?.UnregisterEnemy(this);
 
         Destroy(gameObject, 0.5f);
+    }
+
+    public void SetSelected(bool selected)
+    {
+        if (selectedVisual != null)
+            selectedVisual.SetActive(selected);
     }
 }

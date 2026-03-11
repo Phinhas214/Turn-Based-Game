@@ -23,26 +23,24 @@ public class DiceBoxUI : MonoBehaviour
     // Just the most recent roll
     List<int> currentRoll = new();
 
-    public void RollDice(DieType die, int count)
+    public void ShowRoll(List<int> results)
     {
-        // Roll new dice
-        currentRoll = DiceRoller.RollMultiple(die, count);
+        currentRoll = results;
 
-        // Add them to the box
-        allResults.AddRange(currentRoll);
+        allResults.AddRange(results);
 
-        SpawnD6Visual();
+        foreach (int value in results)
+            SpawnD6Visual(value);
+
         UpdateUI();
     }
 
-    void SpawnD6Visual()
+    void SpawnD6Visual(int rolledValue)
     {
         DiceVisual die = Instantiate(d6Prefab, diceVisualContainer);
 
         Vector3 spawnLocalPos = diceSpawnPoint.localPosition;
         Vector3 settleLocalPos = diceCenter.localPosition;
-
-        int rolledValue = currentRoll[0];
 
         die.Initialize(spawnLocalPos, settleLocalPos, rolledValue);
 

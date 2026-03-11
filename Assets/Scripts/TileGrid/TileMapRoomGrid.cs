@@ -155,6 +155,39 @@ public bool IsPositionInRoom(Vector3 worldPos)
         return cells.TryGetValue(pos, out var cell) && cell.HasAnyEnemy();
     }
 
+    public EnemyUnit GetEnemyAtGridPosition(GridPosition gridPos)
+    {
+        Debug.Log($"[GridQuery] Checking for enemy at grid position: ({gridPos.x}, {gridPos.z})");
+
+        Vector3Int pos = new Vector3Int(gridPos.x, gridPos.z, 0);
+
+        if (!cells.TryGetValue(pos, out var cell))
+        {
+            Debug.Log($"[GridQuery] ❌ No cell found at {pos}");
+            return null;
+        }
+
+        Debug.Log($"[GridQuery] ✅ Cell found at {pos}");
+
+        List<EnemyUnit> enemies = cell.GetEnemyList();
+
+        if (enemies == null)
+        {
+            Debug.Log($"[GridQuery] ❌ Enemy list is NULL at {pos}");
+            return null;
+        }
+
+        if (enemies.Count == 0)
+        {
+            Debug.Log($"[GridQuery] ❌ Enemy list empty at {pos}");
+            return null;
+        }
+
+        Debug.Log($"[GridQuery] 🎯 Enemy FOUND at {pos}: {enemies[0].name}");
+
+        return enemies[0];
+    }
+
     // ── Tilemap access ─────────────────────────────────────────────────────
 
     public Tilemap GetWallsTilemap()   => wallsTilemap;
