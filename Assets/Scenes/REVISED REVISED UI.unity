@@ -4824,6 +4824,7 @@ MonoBehaviour:
   orthoMax: 18
   followOffset: {x: 0, y: 10, z: -2}
   snapSmoothness: 5
+  shakeFrequency: 25
 --- !u!114 &485253840
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6648,7 +6649,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 722665128}
 --- !u!95 &722665128
 Animator:
@@ -7087,7 +7087,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 839372149}
 --- !u!95 &839372149
 Animator:
@@ -11566,7 +11565,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1318589708}
 --- !u!95 &1318589708
 Animator:
@@ -11762,7 +11760,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eaaf312f0ff330f499d8ca35c395fe3d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthContainerUI
-  playerStats: {fileID: 0}
   fireMax: {fileID: 2127645716}
   fireHigh: {fileID: 1527060759}
   fireMedium: {fileID: 839372146}
@@ -12746,7 +12743,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3c8f230fe6c587c4abe4842657f7b2ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaminaContainerUI
-  playerStats: {fileID: 0}
   particlePrefab: {fileID: 6880356195201421480, guid: 187118df3adcfe045b153ce0adcc4ecc, type: 3}
   particleLayer: {fileID: 1152849149}
   hoverOverlay: {fileID: 1486846191}
@@ -13285,7 +13281,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1527060762}
 --- !u!95 &1527060762
 Animator:
@@ -14771,7 +14766,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 1753540685}
 --- !u!95 &1753540685
 Animator:
@@ -15680,7 +15674,8 @@ MonoBehaviour:
   specialRoomChance: 0.01
   cellSize: 2
   gridDebugObjectPrefab: {fileID: 2862612489312294404, guid: 02d12927b03d7466788316a1c9fa99d5, type: 3}
-  playerPrefab: {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
+  playerPrefabs:
+  - {fileID: 922802329369371357, guid: 6134d72b4410dcb4f890d30de56934e3, type: 3}
   spawnPlayerOnGenerate: 1
 --- !u!1 &2000321972
 GameObject:
@@ -15715,7 +15710,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2000321974}
 --- !u!95 &2000321974
 Animator:
@@ -16104,7 +16098,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2089847937}
 --- !u!95 &2089847937
 Animator:
@@ -16648,7 +16641,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f933900eb5ee354f893cbe71a78eec6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthFireUI
-  playerStats: {fileID: 0}
   animator: {fileID: 2127645719}
 --- !u!95 &2127645719
 Animator:
