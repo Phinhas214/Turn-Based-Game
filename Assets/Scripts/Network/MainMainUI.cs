@@ -211,7 +211,7 @@ public class MainMenuController : MonoBehaviour
     {
         CharacterSelection.Index = selectedCharIndex;
         loadingPanel?.SetActive(true);
-        SceneManager.LoadScene(2);
+        SceneManager.LoadScene(1);
     }
 
 
@@ -422,7 +422,7 @@ public class MainMenuController : MonoBehaviour
         // Store local selection so NetworkedLevelGenerator can read it
         CharacterSelection.Index = selectedCharIndex;
         Unity.Netcode.NetworkManager.Singleton.SceneManager.LoadScene(
-            "Multiplayer",
+            "Multiplayer_1",
             UnityEngine.SceneManagement.LoadSceneMode.Single);
     }
 

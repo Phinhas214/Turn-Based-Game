@@ -71,6 +71,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     [SerializeField] private float specialRoomChance = 0.3f;
     [SerializeField] private float cellSize        = 2f;
 
+    [SerializeField] private float roomSpacing = 0f;
+
     [Header("Fallback (if no character selection data)")]
     [SerializeField] private GameObject fallbackPlayerPrefab;
 
@@ -760,9 +762,15 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         var oppDir = GetOppositeDirection(dir);
         if (!tempConn.HasConnectionPoint(oppDir)) return null;
 
-        var entry    = tempConn.GetConnectionPoint(oppDir);
-        Vector3 newPos = exit.transform.position - entry.transform.localPosition;
-        Vector2Int newGrid = existing.gridPosition + GetDirectionOffset(dir);
+        var entry = tempConn.GetConnectionPoint(oppDir);
+
+        // Get the grid offset and convert it to a world direction vector
+        Vector2Int gridOffset = GetDirectionOffset(dir);
+        Vector3 worldDir = new Vector3(gridOffset.x, 0, gridOffset.y);
+
+        // Apply the inspector spacing to the new position
+        Vector3 newPos = exit.transform.position - entry.transform.localPosition + (worldDir * roomSpacing);
+        Vector2Int newGrid = existing.gridPosition + gridOffset;
 
         return PlaceRoom(type, newGrid, newPos);
     }

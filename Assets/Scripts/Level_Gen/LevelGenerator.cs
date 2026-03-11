@@ -28,6 +28,8 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private int maxRooms = 10;
     [SerializeField] private float specialRoomChance = 0.3f;
 
+    [SerializeField] private float roomSpacing = 0f;
+
     [Header("Grid Settings")]
     [SerializeField] private float cellSize = 2f;
     [SerializeField] private Transform gridDebugObjectPrefab;
@@ -323,25 +325,31 @@ public class LevelGenerator : MonoBehaviour
         return placedRoom;
     }
 
-    private PlacedRoom PlaceRoomInDirection(PlacedRoom existingRoom, Direction direction, RoomType roomType)
+    private PlacedRoom PlaceRoomInDirection(PlacedRoom existing, Direction dir, RoomType type)
     {
-        RoomConnector.ConnectionPoint exitPoint = existingRoom.connector.GetConnectionPoint(direction);
-        if (exitPoint == null || exitPoint.transform == null) return null;
+        var exit = existing.connector.GetConnectionPoint(dir);
+        if (exit?.transform == null) return null;
 
-        RoomPrefabData newRoomPrefab = GetRandomRoomPrefab(roomType);
-        if (newRoomPrefab == null) return null;
+        RoomPrefabData newPrefab = GetRandomRoomPrefab(type);
+        if (newPrefab == null) return null;
 
-        RoomConnector tempConnector = newRoomPrefab.prefab.GetComponent<RoomConnector>();
-        if (tempConnector == null) return null;
+        RoomConnector tempConn = newPrefab.prefab.GetComponent<RoomConnector>();
+        if (tempConn == null) return null;
 
-        Direction oppositeDir = GetOppositeDirection(direction);
-        if (!tempConnector.HasConnectionPoint(oppositeDir)) return null;
+        var oppDir = GetOppositeDirection(dir);
+        if (!tempConn.HasConnectionPoint(oppDir)) return null;
 
-        RoomConnector.ConnectionPoint entryPoint = tempConnector.GetConnectionPoint(oppositeDir);
-        Vector3 newRoomWorldPos = exitPoint.transform.position - entryPoint.transform.localPosition;
+        var entry = tempConn.GetConnectionPoint(oppDir);
 
-        Vector2Int newGridPos = existingRoom.gridPosition + GetDirectionOffset(direction);
-        return PlaceRoom(roomType, newGridPos, newRoomWorldPos);
+        // Convert Direction to Vector3
+        Vector2Int gridOffset = GetDirectionOffset(dir);
+        Vector3 worldDir = new Vector3(gridOffset.x, 0, gridOffset.y);
+
+        // Calculate new position with added spacing
+        Vector3 newPos = exit.transform.position - entry.transform.localPosition + (worldDir * roomSpacing);
+        Vector2Int newGrid = existing.gridPosition + gridOffset;
+
+        return PlaceRoom(type, newGrid, newPos);
     }
 
     private void CreateHallway(PlacedRoom roomA, PlacedRoom roomB, Direction direction)
