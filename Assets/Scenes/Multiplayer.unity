@@ -43204,6 +43204,14 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: maxRooms
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: minRooms
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: 'playerPrefabs.Array.data[0]'
       value: 
       objectReference: {fileID: 922802329369371357, guid: fe4fdfa0890138349ab2191b4532d3b0, type: 3}
@@ -43234,6 +43242,14 @@ PrefabInstance:
     - target: {fileID: 7439658159945278114, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: m_Name
       value: NetworkLevelGen
+      objectReference: {fileID: 0}
+    - target: {fileID: 7600787424855154331, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: maxRooms
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 7600787424855154331, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: minRooms
+      value: 10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

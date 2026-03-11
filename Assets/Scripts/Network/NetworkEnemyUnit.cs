@@ -11,9 +11,28 @@ using UnityEngine;
 ///
 /// SETUP:
 ///   - Replace EnemyUnit component on enemy prefabs with this script.
-///   - Add NetworkObject and NetworkTransform components to the prefab.
+///   - Add NetworkObject and NetworkTransform (Server authority) to the prefab.
 ///   - Keep EnemyStats serialized field.
 ///   - EnemySpawner must call netObj.Spawn() after instantiation.
+///
+/// FIXES in this version:
+///   FIX 1 — GetEnemyUnitCompat() was returning null on clients because enemies
+///            only have NetworkedEnemyUnit not EnemyUnit. Every RoomGrid Add/Remove
+///            call was silently passing null and doing nothing. Enemies were invisible
+///            to pathfinding and combat targeting on all non-host clients.
+///            → See GetCompatUnit() at the bottom — two options explained.
+///
+///   FIX 2 — health.OnDeath fires on ALL clients via TriggerDeathClientRpc.
+///            Without a guard, the server ran HandleDeath twice: once from the
+///            direct event subscription, once from the ClientRpc reaching the host.
+///            netIsDead was set twice and UnregisterEnemy called twice.
+///            → Added hasDied guard flag.
+///
+///   FIX 3 — SyncMoveToClientsClientRpc updated grid occupancy but never updated
+///            transform.position on clients. The visual enemy stayed at spawn.
+///            NetworkTransform interpolates but only after receiving the new
+///            position — snapping explicitly here ensures immediate visual update.
+///            → Added transform.position = worldPos in SyncMoveToClientsClientRpc.
 /// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(NetworkedHealthComponent))]
@@ -35,11 +54,12 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     // ── Private runtime ───────────────────────────────────────────────────
-    private GridPosition            gridPosition;
-    private RoomGrid                currentRoomGrid;
+    private GridPosition             gridPosition;
+    private RoomGrid                 currentRoomGrid;
     private NetworkedHealthComponent health;
-    private bool                    isInitialized = false;
-    private int                     turnsWaited   = 0;
+    private bool                     isInitialized = false;
+    private bool                     hasDied       = false;
+    private int                      turnsWaited   = 0;
 
     // ── Events ────────────────────────────────────────────────────────────
     public event Action<NetworkedEnemyUnit> OnEnemyDied;
@@ -66,20 +86,18 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     public override void OnNetworkSpawn()
     {
-        // Subscribe on all clients so the enemy visually disappears when dead
-        health.OnDeath += HandleDeath;
+        health.OnDeath           += HandleDeath;
         netIsDead.OnValueChanged += OnIsDeadChanged;
     }
 
     public override void OnNetworkDespawn()
     {
-        health.OnDeath -= HandleDeath;
+        health.OnDeath           -= HandleDeath;
         netIsDead.OnValueChanged -= OnIsDeadChanged;
 
-        // Server cleans up grid
         if (IsServer && currentRoomGrid != null && isInitialized)
         {
-            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetEnemyUnitCompat());
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
             NetworkedEnemyManager.Instance?.UnregisterEnemy(this);
         }
     }
@@ -87,7 +105,7 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     private void OnDestroy()
     {
         if (currentRoomGrid != null && isInitialized)
-            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetEnemyUnitCompat());
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -99,18 +117,16 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         if (!IsServer) return;
 
         if (currentRoomGrid != null && isInitialized)
-            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetEnemyUnitCompat());
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
-        currentRoomGrid = roomGrid;
-        gridPosition    = position;
-
+        currentRoomGrid    = roomGrid;
+        gridPosition       = position;
         transform.position = roomGrid.GetWorldPosition(position);
-        roomGrid.AddEnemyAtGridPosition(position, GetEnemyUnitCompat());
+        roomGrid.AddEnemyAtGridPosition(position, GetCompatUnit());
 
         netGridX.Value = position.x;
         netGridZ.Value = position.z;
-
-        isInitialized = true;
+        isInitialized  = true;
 
         if (showDebugLogs)
             Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} placed at {position}");
@@ -124,14 +140,18 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     {
         if (!IsServer || !isInitialized) return;
 
-        currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetEnemyUnitCompat());
+        currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
         gridPosition = newPosition;
-        currentRoomGrid.AddEnemyAtGridPosition(newPosition, GetEnemyUnitCompat());
+        currentRoomGrid.AddEnemyAtGridPosition(newPosition, GetCompatUnit());
 
-        transform.position = currentRoomGrid.GetWorldPosition(newPosition);
+        Vector3 newWorldPos    = currentRoomGrid.GetWorldPosition(newPosition);
+        transform.position     = newWorldPos;
+        netGridX.Value         = newPosition.x;
+        netGridZ.Value         = newPosition.z;
 
-        netGridX.Value = newPosition.x;
-        netGridZ.Value = newPosition.z;
+        // Send world pos + grid pos to clients so they update both visuals and occupancy
+        SyncMoveToClientsClientRpc(newWorldPos.x, newWorldPos.y, newWorldPos.z,
+                                   newPosition.x, newPosition.z);
 
         if (showDebugLogs)
             Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} moved to {newPosition}");
@@ -158,7 +178,10 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     private void HandleDeath()
     {
-        if (!IsServer) return;
+        // FIX 2: TriggerDeathClientRpc fires OnDeath on ALL clients including
+        // the host, so this callback runs twice on the server without the guard.
+        if (!IsServer || hasDied) return;
+        hasDied = true;
 
         if (showDebugLogs)
             Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} died.");
@@ -166,12 +189,11 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         netIsDead.Value = true;
 
         if (currentRoomGrid != null && isInitialized)
-            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetEnemyUnitCompat());
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
         OnEnemyDied?.Invoke(this);
         NetworkedEnemyManager.Instance?.UnregisterEnemy(this);
 
-        // Despawn via NetworkObject after a short delay for death animation
         StartCoroutine(DespawnAfterDelay(0.5f));
     }
 
@@ -179,18 +201,112 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     {
         yield return new WaitForSeconds(delay);
         if (IsServer && TryGetComponent<NetworkObject>(out var netObj))
-            netObj.Despawn();
+            netObj.Despawn(true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Client sync RPCs
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called once after spawn to tell clients which room this enemy is in.
+    /// </summary>
+    [ClientRpc]
+    public void SyncRoomToClientsClientRpc(float wx, float wy, float wz, int gx, int gz)
+    {
+        if (IsServer) return;
+
+        Vector3      worldPos = new Vector3(wx, wy, wz);
+        GridPosition pos      = new GridPosition(gx, gz);
+
+        RoomGrid room = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedEnemyUnit] SyncRoomToClients: no room found at {worldPos}");
+            return;
+        }
+
+        if (currentRoomGrid != null && isInitialized)
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
+
+        currentRoomGrid    = room;
+        gridPosition       = pos;
+        transform.position = worldPos; // snap visual in case NT hasn't arrived yet
+        room.AddEnemyAtGridPosition(pos, GetCompatUnit());
+        isInitialized = true;
+
+        if (showDebugLogs)
+            Debug.Log($"[NetworkedEnemyUnit] Client synced to room {room.gameObject.name} at {pos}");
+    }
+
+    /// <summary>
+    /// Called every move — syncs grid occupancy AND snaps visual position on clients.
+    /// </summary>
+    [ClientRpc]
+    public void SyncMoveToClientsClientRpc(float wx, float wy, float wz, int gx, int gz)
+    {
+        if (IsServer) return;
+
+        // If SyncRoomToClients hasn't arrived yet, try to resolve room now
+        if (currentRoomGrid == null && LevelGrid.Instance != null)
+            currentRoomGrid = LevelGrid.Instance.GetRoomAtPosition(new Vector3(wx, wy, wz));
+
+        if (currentRoomGrid != null && isInitialized)
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
+
+        GridPosition newPos = new GridPosition(gx, gz);
+        gridPosition        = newPos;
+
+        // FIX 3: update the transform so the enemy visually moves on clients.
+        // NetworkTransform will then interpolate from here on subsequent frames.
+        transform.position = new Vector3(wx, wy, wz);
+
+        if (currentRoomGrid != null)
+        {
+            currentRoomGrid.AddEnemyAtGridPosition(newPos, GetCompatUnit());
+            isInitialized = true;
+        }
     }
 
     private void OnIsDeadChanged(bool oldVal, bool newVal)
     {
-        // All clients: visually hide the enemy when dead
+        // Non-host clients: hide visually — server handles the despawn
         if (newVal && !IsServer)
             gameObject.SetActive(false);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Compat shim — existing EnemyManager expects EnemyUnit not NetworkedEnemyUnit
+    // FIX 1 — RoomGrid compat helper
     // ─────────────────────────────────────────────────────────────────────
-    private EnemyUnit GetEnemyUnitCompat() => GetComponent<EnemyUnit>();
+    // The old GetEnemyUnitCompat() called GetComponent<EnemyUnit>() which returns
+    // null on clients — the prefab only has NetworkedEnemyUnit. Every grid
+    // Add/Remove call silently did nothing, leaving enemies invisible to pathfinding
+    // and combat on all non-host clients.
+    //
+    // You have TWO options — pick whichever requires less change for you:
+    //
+    // OPTION A — Add EnemyUnit as a tag component on the enemy prefab.
+    //   Keep EnemyUnit on the prefab alongside NetworkedEnemyUnit. EnemyUnit
+    //   doesn't need any logic for this to work — RoomGrid just uses it as a key.
+    //   No code changes needed anywhere else. This is the quickest fix.
+    //
+    // OPTION B — Update RoomGrid to accept NetworkedEnemyUnit.
+    //   Change AddEnemyAtGridPosition / RemoveEnemyAtGridPosition to take
+    //   NetworkedEnemyUnit (or an IEnemyUnit interface). Then change this helper
+    //   to return 'this' instead. Cleaner architecture but requires editing RoomGrid.
+    //
+    // Default below uses OPTION A. To switch to OPTION B, replace the body with:
+    //   return this;   (and change the method return type to NetworkedEnemyUnit)
+    private EnemyUnit GetCompatUnit()
+    {
+        EnemyUnit eu = GetComponent<EnemyUnit>();
+#if UNITY_EDITOR
+        if (eu == null)
+            Debug.LogError($"[NetworkedEnemyUnit] '{gameObject.name}' is missing an EnemyUnit component. " +
+                           "Enemies will not register in RoomGrid on clients — add EnemyUnit to the " +
+                           "prefab (Option A) or update RoomGrid to use NetworkedEnemyUnit (Option B). " +
+                           "See GetCompatUnit() comments.");
+#endif
+        return eu;
+    }
 }

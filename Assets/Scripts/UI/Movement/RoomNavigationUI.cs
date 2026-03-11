@@ -209,6 +209,13 @@ public class RoomNavigationUI : MonoBehaviour
         {
             var netUnit = player.GetComponent<NetworkedUnit>();
             netUnit?.PlaceInRoom(targetRoom.roomGrid, spawnPos);
+
+            // Tell the per-room turn system the player moved so it can clean up
+            // the old room's submitted set and unblock that room's enemy phase
+            // if all remaining players in the old room have already submitted.
+            ulong localId = Unity.Netcode.NetworkManager.Singleton.LocalClientId;
+            MultiplayerTurnSystem.Instance?.RequestNotifyRoomChange(
+                localId, localRoom.roomGrid, targetRoom.roomGrid);
         }
 
         FreeTacticsCameraController.Instance?.FocusOnPlayer();
@@ -277,10 +284,18 @@ public class RoomNavigationUI : MonoBehaviour
     private bool AreEnemiesInRoom(RoomGrid room)
     {
         if (room == null) return false;
+
+        // MUST use HasEnemiesInRoom (not GetEnemiesInRoom) on clients.
+        // GetEnemiesInRoom searches activeEnemies which is only populated on
+        // the server — it is always empty on clients, so the combat lock
+        // (preventing room navigation while enemies are present) never fired.
+        // HasEnemiesInRoom uses a synced count cache that works on all clients.
         if (NetworkedEnemyManager.Instance != null)
-            return NetworkedEnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+            return NetworkedEnemyManager.Instance.HasEnemiesInRoom(room);
+
         if (EnemyManager.Instance != null)
             return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+
         return false;
     }
 
