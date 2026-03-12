@@ -2,6 +2,9 @@ using System;
 using Unity.Netcode;
 using UnityEngine;
 
+/// <summary>
+/// Networked replacement for Unit.cs.
+/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkedUnit : NetworkBehaviour
 {
@@ -24,35 +27,11 @@ public class NetworkedUnit : NetworkBehaviour
     private RoomGrid       currentRoomGrid;
     private bool           isInitialized = false;
     private PlayerStats    playerStats;
-    private Unit           cachedUnit;
 
     public event Action<GridPosition> OnGridPositionChanged;
+
     public bool IsLocalPlayer => IsOwner;
     public bool IsMoving { get; set; } = false;
-
-    // ── FIX A: Static room cache — keeps UpdatePositionServerRpc off FindObjectsByType ──
-    internal static System.Collections.Generic.Dictionary<string, RoomGrid> roomGridByName
-        = new System.Collections.Generic.Dictionary<string, RoomGrid>();
-
-    public static void RebuildRoomGridCache()
-    {
-        roomGridByName.Clear();
-        foreach (RoomGrid rg in UnityEngine.Object.FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
-        {
-            if (rg != null && !string.IsNullOrEmpty(rg.gameObject.name))
-                roomGridByName[rg.gameObject.name] = rg;
-        }
-        Debug.Log($"[NetworkedUnit] Room cache built: {roomGridByName.Count} rooms.");
-    }
-
-    private static RoomGrid FindRoomByName(string name)
-    {
-        if (string.IsNullOrEmpty(name)) return null;
-        if (roomGridByName.TryGetValue(name, out RoomGrid rg) && rg != null) return rg;
-        RebuildRoomGridCache();
-        roomGridByName.TryGetValue(name, out rg);
-        return rg;
-    }
 
     private void Awake()
     {
@@ -60,7 +39,6 @@ public class NetworkedUnit : NetworkBehaviour
         spinAction      = GetComponent<SpinAction>();
         baseActionArray = GetComponents<BaseAction>();
         playerStats     = GetComponent<PlayerStats>();
-        cachedUnit      = GetComponent<Unit>();
     }
 
     public override void OnNetworkSpawn()
@@ -82,9 +60,6 @@ public class NetworkedUnit : NetworkBehaviour
             Unit unit = GetComponent<Unit>();
             if (unit != null)
                 NetworkedEnemyManager.Instance?.RegisterPlayer(unit);
-
-            if (roomGridByName.Count == 0)
-                RebuildRoomGridCache();
         }
     }
 
@@ -106,6 +81,30 @@ public class NetworkedUnit : NetworkBehaviour
                 NetworkedEnemyManager.Instance?.UnregisterPlayer(unit);
         }
     }
+
+    private void Update()
+    {
+        if (!IsOwner || !isInitialized || currentRoomGrid == null || IsMoving) return;
+
+        GridPosition newGridPos = currentRoomGrid.GetGridPosition(transform.position);
+
+        if (Time.frameCount % 120 == 0)
+            Debug.Log($"[NetworkedUnit] Update: transform={transform.position} gridPos={gridPosition} newGridPos={newGridPos}");
+
+        if (newGridPos != gridPosition && currentRoomGrid.IsValidGridPosition(newGridPos))
+        {
+            currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
+            currentRoomGrid.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
+            gridPosition = newGridPos;
+
+            UpdatePositionServerRpc(newGridPos.x, newGridPos.z,
+                transform.position.x, transform.position.y, transform.position.z);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Grid placement
+    // ─────────────────────────────────────────────────────────────────────
 
     public void PlaceInRoom(RoomGrid roomGrid, GridPosition newGridPosition)
     {
@@ -129,7 +128,7 @@ public class NetworkedUnit : NetworkBehaviour
         Vector3 roomOrigin = roomGrid.GetWorldPosition(new GridPosition(0, 0));
         if (IsOwner || IsServer)
             UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
-                targetPos.x, roomOrigin.y, targetPos.z, roomGrid.gameObject.name);
+                targetPos.x, roomOrigin.y, targetPos.z);
 
         Debug.Log($"[NetworkedUnit] PlaceInRoom → grid {newGridPosition}, world {targetPos}");
     }
@@ -148,111 +147,57 @@ public class NetworkedUnit : NetworkBehaviour
 
         if (IsOwner || IsServer)
             UpdatePositionServerRpc(newGridPosition.x, newGridPosition.z,
-                transform.position.x, transform.position.y, transform.position.z,
-                currentRoomGrid?.gameObject.name ?? "");
+                transform.position.x, transform.position.y, transform.position.z);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // InitialiseUnitOnClientClientRpc
+    // Restored to the version that was working with Owner authority:
+    // reads room from Unit.GetCurrentRoomGrid() which the server already
+    // set via unit.PlaceInRoom() before spawning — no fragile world-pos lookup.
+    // ─────────────────────────────────────────────────────────────────────
 
     [ClientRpc]
     public void InitialiseUnitOnClientClientRpc(int gridX, int gridZ,
         float worldX, float worldY, float worldZ,
         ClientRpcParams rpcParams = default)
     {
-        // FIX HOST SPAWN: The host is simultaneously server AND client.
-        // The server already placed the host's unit correctly in SpawnAllPlayers
-        // via PlaceInRoom. If we let this RPC run on the host-as-client, it
-        // re-resolves the room from world position (which can return a different
-        // room if camera/scene state differs) and overwrites the correct placement.
-        // Remote clients need this RPC to set their initial room; the host does not.
-        if (IsServer) return;
-
         if (!IsOwner) return;
 
         GridPosition gridPos  = new GridPosition(gridX, gridZ);
         Vector3      worldPos = new Vector3(worldX, worldY, worldZ);
 
-        RoomGrid roomGrid = null;
+        // The server called unit.PlaceInRoom() before spawning the player object,
+        // so Unit.currentRoomGrid is already set correctly when this RPC arrives.
+        // Read it directly rather than doing a world-position lookup which can
+        // return the wrong room if the camera/LevelGrid state differs.
+        Unit unit = GetComponent<Unit>();
+        if (unit == null) return;
 
-        if (LevelGrid.Instance != null)
+        RoomGrid roomGrid = unit.GetCurrentRoomGrid();
+
+        // Fallback: if Unit somehow doesn't have a room yet, find it by world pos
+        if (roomGrid == null && LevelGrid.Instance != null)
             roomGrid = LevelGrid.Instance.GetRoomAtPosition(worldPos);
 
         if (roomGrid == null)
         {
-            Unit unit = GetComponent<Unit>();
-            roomGrid = unit?.GetCurrentRoomGrid();
-        }
-
-        if (roomGrid == null)
-        {
-            foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
-            {
-                if (rg.IsValidGridPosition(gridPos))
-                {
-                    Vector3 rgOrigin = rg.GetWorldPosition(new GridPosition(0, 0));
-                    if (Mathf.Abs(rgOrigin.x - worldPos.x) < rg.GetWidth()  * 2f &&
-                        Mathf.Abs(rgOrigin.z - worldPos.z) < rg.GetHeight() * 2f)
-                    {
-                        roomGrid = rg;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (roomGrid == null)
-        {
-            Debug.LogWarning($"[NetworkedUnit] InitialiseUnitOnClient: could not resolve room at world {worldPos}. Retrying...");
-            StartCoroutine(RetryInitialiseUnitOnClient(gridX, gridZ, worldX, worldY, worldZ));
+            Debug.LogWarning("[NetworkedUnit] InitialiseUnitOnClient: Unit has no room grid yet at " + worldPos);
             return;
         }
 
-        ApplyClientInitialisation(roomGrid, gridPos);
-    }
-
-    private void ApplyClientInitialisation(RoomGrid roomGrid, GridPosition gridPos)
-    {
-        Unit unit = GetComponent<Unit>();
-        unit?.PlaceInRoom(roomGrid, gridPos);
+        // Sync NetworkedUnit to match Unit
         PlaceInRoom(roomGrid, gridPos);
-        Debug.Log($"[NetworkedUnit] Client initialised: room={roomGrid.gameObject.name} grid={gridPos}");
+
+        Debug.Log($"[NetworkedUnit] Client initialised at grid {gridPos} room={roomGrid.gameObject.name}");
     }
 
-    private System.Collections.IEnumerator RetryInitialiseUnitOnClient(
-        int gridX, int gridZ, float worldX, float worldY, float worldZ)
-    {
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            yield return new WaitForSeconds(0.3f);
-
-            Vector3      worldPos = new Vector3(worldX, worldY, worldZ);
-            GridPosition gridPos  = new GridPosition(gridX, gridZ);
-            RoomGrid     roomGrid = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
-
-            if (roomGrid == null)
-            {
-                foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
-                {
-                    Vector3 rgOrigin = rg.GetWorldPosition(new GridPosition(0, 0));
-                    if (Mathf.Abs(rgOrigin.x - worldPos.x) < rg.GetWidth()  * 2f &&
-                        Mathf.Abs(rgOrigin.z - worldPos.z) < rg.GetHeight() * 2f)
-                    {
-                        roomGrid = rg; break;
-                    }
-                }
-            }
-
-            if (roomGrid != null)
-            {
-                ApplyClientInitialisation(roomGrid, gridPos);
-                Debug.Log($"[NetworkedUnit] Retry {attempt+1} succeeded: room={roomGrid.gameObject.name} grid={gridPos}");
-                yield break;
-            }
-        }
-
-        Debug.LogError("[NetworkedUnit] InitialiseUnitOnClient: failed to resolve room after 10 retries.");
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // UpdatePositionServerRpc
+    // ─────────────────────────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
-    private void UpdatePositionServerRpc(int gx, int gz, float wx, float wy, float wz, string roomName = "")
+    private void UpdatePositionServerRpc(int gx, int gz, float wx, float wy, float wz)
     {
         netGridX.Value  = gx;
         netGridZ.Value  = gz;
@@ -262,14 +207,12 @@ public class NetworkedUnit : NetworkBehaviour
 
         if (!IsServer) return;
 
-        // FIX A: use cache instead of FindObjectsByType
-        RoomGrid serverRoom = FindRoomByName(roomName);
-        if (serverRoom == null)
-            serverRoom = LevelGrid.Instance?.GetRoomAtPosition(new Vector3(wx, wy, wz));
+        Vector3  worldPos   = new Vector3(wx, wy, wz);
+        RoomGrid serverRoom = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
 
         if (serverRoom == null)
         {
-            Debug.LogWarning($"[NetworkedUnit] Server: could not resolve room '{roomName}' for client {OwnerClientId}");
+            Debug.LogWarning($"[NetworkedUnit] UpdatePositionServerRpc: no room found at {worldPos}");
             return;
         }
 
@@ -277,6 +220,7 @@ public class NetworkedUnit : NetworkBehaviour
 
         if (serverRoom != currentRoomGrid)
         {
+            // Room changed — update grid occupancy
             if (currentRoomGrid != null && isInitialized)
                 currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
 
@@ -284,29 +228,38 @@ public class NetworkedUnit : NetworkBehaviour
             serverRoom.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
             isInitialized   = true;
 
-            Debug.Log($"[NetworkedUnit] Server: client {OwnerClientId} in room '{serverRoom.gameObject.name}'");
+            Debug.Log($"[NetworkedUnit] Server: client {OwnerClientId} moved to room '{serverRoom.gameObject.name}' grid {newGridPos}");
         }
         else if (isInitialized && newGridPos != gridPosition)
         {
+            // Same room, different cell
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, GetUnitCompat());
             currentRoomGrid.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
         }
         else if (!isInitialized)
         {
-            // FIX C: first-call init when both sides were null
+            // FIX: First-call init — server never had currentRoomGrid set yet.
+            // Without this branch, enemies calling GetCurrentRoomGrid() on the
+            // server get null and never see this player in their room.
             currentRoomGrid = serverRoom;
             serverRoom.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
             isInitialized   = true;
+            Debug.Log($"[NetworkedUnit] Server: client {OwnerClientId} initialised in '{serverRoom.gameObject.name}' at {newGridPos}");
         }
 
         gridPosition = newGridPos;
 
+        // Keep Unit component in sync on the server for AI targeting
         Unit unitComp = GetComponent<Unit>();
         if (unitComp != null && unitComp.GetCurrentRoomGrid() != serverRoom)
             unitComp.PlaceInRoom(serverRoom, newGridPos);
         else if (unitComp != null && unitComp.GetGridPosition() != newGridPos)
             unitComp.PlaceInRoom(serverRoom, newGridPos);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Network variable callbacks
+    // ─────────────────────────────────────────────────────────────────────
 
     private void OnNetGridPositionChanged(int oldVal, int newVal)
     {
@@ -323,6 +276,7 @@ public class NetworkedUnit : NetworkBehaviour
             {
                 if (currentRoomGrid != null && isInitialized)
                     currentRoomGrid.RemoveUnitAtGridPosition(oldGridPos, GetUnitCompat());
+
                 currentRoomGrid = foundRoom;
                 currentRoomGrid.AddUnitAtGridPosition(newGridPos, GetUnitCompat());
                 isInitialized = true;
@@ -343,12 +297,17 @@ public class NetworkedUnit : NetworkBehaviour
         if (IsOwner) return;
 
         Vector3 syncedPos = new Vector3(netWorldX.Value, netWorldY.Value, netWorldZ.Value);
+
         if (Vector3.Distance(transform.position, syncedPos) > 0.1f)
         {
             transform.position = syncedPos;
             Debug.Log($"[NetworkedUnit] Observer teleported to {syncedPos}");
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Turn handling
+    // ─────────────────────────────────────────────────────────────────────
 
     private void TurnSystem_OnTurnChanged(object sender, EventArgs e)
     {
@@ -357,6 +316,10 @@ public class NetworkedUnit : NetworkBehaviour
         if (playerStats != null)
             playerStats.SetCurrentStaminaPoints(playerStats.GetMaxStaminaPoints());
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Getters
+    // ─────────────────────────────────────────────────────────────────────
 
     public MoveAction   GetMoveAction()      => moveAction;
     public SpinAction   GetSpinAction()      => spinAction;
@@ -390,5 +353,5 @@ public class NetworkedUnit : NetworkBehaviour
         }
     }
 
-    private Unit GetUnitCompat() => cachedUnit;
+    private Unit GetUnitCompat() => GetComponent<Unit>();
 }

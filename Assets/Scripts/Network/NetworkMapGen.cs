@@ -343,6 +343,19 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         if (netUnit == null || roomGrid == null) yield break;
 
         Vector3 spawnWorldPos = roomGrid.GetWorldPosition(spawnPos);
+
+        // KEY FIX: Re-snap the server-side transform.position right before sending the RPC.
+        // NetworkTransform is server-authoritative — the client's visual position is entirely
+        // driven by what the server broadcasts via NT. Even if the client-side RPC runs
+        // ApplyClientInitialisation correctly, NT will override transform.position with whatever
+        // the server last broadcast. By forcing the server transform here (right before the RPC),
+        // the next NT tick carries the correct spawn position to the client.
+        netUnit.transform.position = spawnWorldPos;
+        netUnit.PlaceInRoom(roomGrid, spawnPos);
+
+        // Small yield to let NT broadcast the corrected position before the client RPC runs
+        yield return null;
+
         ClientRpcParams ownerOnly = new ClientRpcParams
         {
             Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { clientId } }
@@ -353,7 +366,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             spawnWorldPos.x, spawnWorldPos.y, spawnWorldPos.z,
             ownerOnly);
 
-        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId}");
+        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId} at {spawnWorldPos}");
     }
 
     private GameObject GetPlayerPrefab(int charIndex)
