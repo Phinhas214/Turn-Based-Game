@@ -7,11 +7,19 @@ using UnityEngine;
 /// <summary>
 /// Networked EnemyAI — runs on SERVER ONLY.
 ///
-/// Differences from original EnemyAI:
-///   - Uses NetworkedEnemyManager.FindNearestPlayerInRoom() instead of PlayerTarget.Instance.
-///   - Reads/writes NetworkedEnemyUnit instead of EnemyUnit.
-///   - All movement and damage goes through NetworkedHealthComponent.TakeDamage()
-///     which is already server-authoritative.
+/// FIXES IN THIS VERSION:
+///   1. Player position read from NetworkedUnit.GetGridPosition() (server-authoritative
+///      NetworkVariables) instead of Unit.GetGridPosition() which is only reliable for
+///      the host. Non-host client Unit.gridPosition was always (0,0) on the server,
+///      causing enemies to walk to spawn tile and attack there regardless of player pos.
+///
+///   2. Target re-evaluated every move step — enemy switches to the nearest living
+///      player dynamically rather than locking on one target for the whole turn.
+///
+///   3. Attack pattern miss fallback REMOVED — if the pattern does not cover the
+///      player tile, the attack misses. Old code always dealt damage even on miss.
+///
+///   4. Dead player filtering — skips players whose NetworkedHealthComponent.IsDead.
 /// </summary>
 [RequireComponent(typeof(NetworkedEnemyUnit))]
 public class NetworkedEnemyAI : NetworkBehaviour
@@ -21,10 +29,7 @@ public class NetworkedEnemyAI : NetworkBehaviour
 
     private NetworkedEnemyUnit enemyUnit;
 
-    private void Awake()
-    {
-        enemyUnit = GetComponent<NetworkedEnemyUnit>();
-    }
+    private void Awake() => enemyUnit = GetComponent<NetworkedEnemyUnit>();
 
     // ─────────────────────────────────────────────────────────────────────
     // Public API — called by NetworkedEnemyManager on Server
@@ -32,147 +37,193 @@ public class NetworkedEnemyAI : NetworkBehaviour
 
     public void TakeTurn(Action onComplete)
     {
-        // AI only runs on server
-        if (!IsServer)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        if (!enemyUnit.CanActThisTurn() || enemyUnit.IsDead)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        Unit target = NetworkedEnemyManager.Instance?.FindNearestPlayerInRoom(enemyUnit);
-
-        if (target == null)
-        {
-            if (enemyUnit.Stats?.alwaysChases == true)
-            {
-                // Optional: move toward the nearest room with players
-                // For now, idle
-            }
-            onComplete?.Invoke();
-            return;
-        }
-
-        StartCoroutine(TurnRoutine(target, onComplete));
+        if (!IsServer)                                       { onComplete?.Invoke(); return; }
+        if (!enemyUnit.CanActThisTurn() || enemyUnit.IsDead){ onComplete?.Invoke(); return; }
+        StartCoroutine(TurnRoutine(onComplete));
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Turn logic
+    // Turn coroutine
     // ─────────────────────────────────────────────────────────────────────
 
-    private IEnumerator TurnRoutine(Unit targetUnit, Action onComplete)
+    private IEnumerator TurnRoutine(Action onComplete)
     {
         EnemyStats stats = enemyUnit.Stats;
         RoomGrid   room  = enemyUnit.CurrentRoomGrid;
+        if (stats == null || room == null) { onComplete?.Invoke(); yield break; }
 
-        if (stats == null || room == null)
+        // ── Move phase ────────────────────────────────────────────────────
+        // Re-evaluate nearest living player at the start of each step so the
+        // enemy dynamically switches targets if someone else gets closer mid-move.
+        int stepsLeft = stats.moveRange;
+        while (stepsLeft > 0)
         {
-            onComplete?.Invoke();
-            yield break;
-        }
+            if (enemyUnit.IsDead) { onComplete?.Invoke(); yield break; }
 
-        GridPosition myPos     = enemyUnit.GridPosition;
-        GridPosition playerPos = targetUnit.GetGridPosition();
-        int dist = ManhattanDist(myPos, playerPos);
+            var (bestUnit, bestPos) = FindNearestLivingPlayer(room);
+            if (bestUnit == null) break;
 
-        // ── Move phase ─────────────────────────────────────────────────────
-        if (dist > stats.attackRange)
-        {
-            Pathfinder pathfinder = new Pathfinder(room);
-            List<GridPosition> path = pathfinder.FindPathToRange(myPos, playerPos, stats.attackRange);
+            GridPosition myPos = enemyUnit.GridPosition;
+            if (ManhattanDist(myPos, bestPos) <= stats.attackRange) break;
 
-            if (path.Count > 0)
-            {
-                int steps = Mathf.Min(path.Count, stats.moveRange);
+            List<GridPosition> path = new Pathfinder(room).FindPathToRange(myPos, bestPos, stats.attackRange);
+            if (path.Count == 0) break;
 
-                for (int i = 0; i < steps; i++)
-                {
-                    if (enemyUnit.IsDead) { onComplete?.Invoke(); yield break; }
-                    enemyUnit.MoveToPosition(path[i]);
-                    yield return new WaitForSeconds(stepDelay);
-                }
+            // Skip tiles occupied by another enemy or a living player.
+            // We own this data — no need for RoomGrid to expose a query method.
+            GridPosition nextStep = path[0];
+            if (IsTileOccupied(nextStep, room)) break; // blocked — stop moving this turn
 
-                // Recalculate distance after moving
-                myPos = enemyUnit.GridPosition;
-                dist  = ManhattanDist(myPos, playerPos);
-            }
+            enemyUnit.MoveToPosition(nextStep);
+            stepsLeft--;
+            yield return new WaitForSeconds(stepDelay);
         }
 
         yield return new WaitForSeconds(stepDelay);
+        if (enemyUnit.IsDead) { onComplete?.Invoke(); yield break; }
 
-        // ── Attack phase ───────────────────────────────────────────────────
-        if (dist <= stats.attackRange && !enemyUnit.IsDead)
+        // ── Attack phase ──────────────────────────────────────────────────
+        // Re-evaluate target after moving — might be a different player now.
         {
-            PerformAttack(targetUnit, myPos, playerPos);
-            yield return new WaitForSeconds(stepDelay);
+            var (bestUnit, bestPos) = FindNearestLivingPlayer(room);
+            if (bestUnit != null)
+            {
+                GridPosition myPos = enemyUnit.GridPosition;
+                if (ManhattanDist(myPos, bestPos) <= stats.attackRange)
+                {
+                    PerformAttack(bestUnit, myPos, bestPos, stats);
+                    yield return new WaitForSeconds(stepDelay);
+                }
+            }
         }
 
         onComplete?.Invoke();
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Attack — Server only, uses NetworkedHealthComponent
+    // Find nearest living player in room using NetworkedUnit positions
     // ─────────────────────────────────────────────────────────────────────
 
-    private void PerformAttack(Unit targetUnit, GridPosition myPos, GridPosition playerPos)
+    /// <summary>
+    /// Uses NetworkedUnit.GetGridPosition() which reads netGridX/netGridZ
+    /// NetworkVariables — reliable for ALL clients on the server.
+    /// DO NOT use Unit.GetGridPosition() here: it is only correct for the host.
+    /// Non-host client Unit.gridPosition stays at (0,0) on the server because
+    /// Unit.PlaceInRoom only runs on the owning client, not the server.
+    /// </summary>
+    private (Unit unit, GridPosition pos) FindNearestLivingPlayer(RoomGrid room)
     {
-        EnemyStats stats = enemyUnit.Stats;
+        Unit         best     = null;
+        GridPosition bestPos  = default;
+        int          bestDist = int.MaxValue;
 
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject == null) continue;
+
+            var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
+            if (health != null && health.IsDead) continue;
+
+            var netUnit = client.PlayerObject.GetComponent<NetworkedUnit>();
+            if (netUnit == null) continue;
+            if (netUnit.GetCurrentRoomGrid() != room) continue;
+
+            GridPosition pos  = netUnit.GetGridPosition();
+            int          dist = ManhattanDist(enemyUnit.GridPosition, pos);
+
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best     = client.PlayerObject.GetComponent<Unit>();
+                bestPos  = pos;
+            }
+        }
+
+        return (best, bestPos);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Attack
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void PerformAttack(Unit target, GridPosition myPos, GridPosition playerPos, EnemyStats stats)
+    {
         if (stats.attackData == null)
         {
-            Debug.LogWarning($"[NetworkedEnemyAI] {stats?.enemyName} has no attackData.");
+            Debug.LogWarning($"[NetworkedEnemyAI] {stats.enemyName} has no attackData.");
             return;
         }
 
-        NetworkedHealthComponent playerHealth = targetUnit.GetComponent<NetworkedHealthComponent>();
-        if (playerHealth == null)
+        var netHealth = target.GetComponent<NetworkedHealthComponent>();
+        if (netHealth == null)
         {
-            // Fall back to old HealthComponent
-            HealthComponent oldHealth = targetUnit.GetComponent<HealthComponent>();
-            oldHealth?.TakeDamage(stats.attackData.baseDamage);
-            Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg (old HC).");
+            target.GetComponent<HealthComponent>()?.TakeDamage(stats.attackData.baseDamage);
             return;
         }
 
         if (stats.attackData.attackPattern != null)
         {
-            Vector2Int facing = GetFacingToward(myPos, playerPos);
-            List<GridPosition> hitTiles = stats.attackData.attackPattern
-                .GetAffectedPositions(myPos, facing);
+            Vector2Int         facing   = GetFacingToward(myPos, playerPos);
+            List<GridPosition> hitTiles = stats.attackData.attackPattern.GetAffectedPositions(myPos, facing);
 
-            bool hit = false;
             foreach (GridPosition tile in hitTiles)
             {
                 if (tile == playerPos)
                 {
-                    playerHealth.TakeDamage(stats.attackData.baseDamage);
-                    hit = true;
-                    Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg.");
+                    netHealth.TakeDamage(stats.attackData.baseDamage);
+                    Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit {target.name} for {stats.attackData.baseDamage}.");
+                    return;
                 }
             }
-
-            if (!hit)
-            {
-                // Pattern missed — direct hit fallback
-                playerHealth.TakeDamage(stats.attackData.baseDamage);
-                Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit player (direct) for {stats.attackData.baseDamage} dmg.");
-            }
+            // Pattern did not cover player tile — attack misses, no damage
+            Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} missed {target.name} (pattern miss).");
         }
         else
         {
-            playerHealth.TakeDamage(stats.attackData.baseDamage);
-            Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg.");
+            netHealth.TakeDamage(stats.attackData.baseDamage);
+            Debug.Log($"[NetworkedEnemyAI] {stats.enemyName} hit {target.name} for {stats.attackData.baseDamage}.");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Occupancy check — prevents enemies stacking on each other or on players
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if the given tile is occupied by another enemy or a living player.
+    /// We build this from data we already own — no RoomGrid query method required.
+    /// </summary>
+    private bool IsTileOccupied(GridPosition pos, RoomGrid room)
+    {
+        // Check other enemies in this room
+        var enemies = NetworkedEnemyManager.Instance?.GetEnemiesInRoom(room);
+        if (enemies != null)
+        {
+            foreach (var other in enemies)
+            {
+                if (other == enemyUnit) continue;
+                if (other == null || other.IsDead) continue;
+                if (other.GridPosition == pos) return true;
+            }
+        }
+
+        // Check living players — downed players don't block tiles (they're on the ground)
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject == null) continue;
+            var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
+            if (health != null && (health.IsDead || health.IsDown)) continue;
+            var netUnit = client.PlayerObject.GetComponent<NetworkedUnit>();
+            if (netUnit == null || netUnit.GetCurrentRoomGrid() != room) continue;
+            if (netUnit.GetGridPosition() == pos) return true;
+        }
+
+        return false;
+    }
 
     private int ManhattanDist(GridPosition a, GridPosition b)
         => Mathf.Abs(a.x - b.x) + Mathf.Abs(a.z - b.z);
@@ -181,9 +232,8 @@ public class NetworkedEnemyAI : NetworkBehaviour
     {
         int dx = to.x - from.x;
         int dz = to.z - from.z;
-        if (Mathf.Abs(dz) > Mathf.Abs(dx))
-            return dz >= 0 ? new Vector2Int(0, 1) : new Vector2Int(0, -1);
-        else
-            return dx >= 0 ? new Vector2Int(1, 0) : new Vector2Int(-1, 0);
+        return Mathf.Abs(dz) > Mathf.Abs(dx)
+            ? (dz >= 0 ? new Vector2Int(0, 1) : new Vector2Int(0, -1))
+            : (dx >= 0 ? new Vector2Int(1, 0) : new Vector2Int(-1, 0));
     }
 }

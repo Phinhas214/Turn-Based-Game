@@ -142,8 +142,22 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         SubmitEndTurnServerRpc(NetworkManager.Singleton.LocalClientId);
     }
 
+    /// <summary>
+    /// Called server-side (e.g. from ReviveAction) to submit end-turn on behalf of
+    /// a specific client. This avoids the SubmitEndTurn() → ServerRpc path which
+    /// would use the server's clientId (0) instead of the actual player's id.
+    /// </summary>
+    public void SubmitEndTurnForClient(ulong clientId)
+    {
+        if (!IsServer) return;
+        ProcessSubmitEndTurn(clientId);
+    }
+
     [ServerRpc(RequireOwnership = false)]
-    private void SubmitEndTurnServerRpc(ulong clientId)
+    private void SubmitEndTurnServerRpc(ulong clientId) => ProcessSubmitEndTurn(clientId);
+
+    // Shared logic used by both the ServerRpc and the direct server-side call
+    private void ProcessSubmitEndTurn(ulong clientId)
     {
         RoomGrid room = GetPlayerRoom(clientId);
         if (room == null)
@@ -153,31 +167,41 @@ public class MultiplayerTurnSystem : NetworkBehaviour
         }
 
         RoomCombatState state = GetOrCreateRoomState(room);
-
         if (state.enemyPhaseRunning) return;
         if (state.submitted.Contains(clientId)) return;
 
         state.submitted.Add(clientId);
-
-        // Show ready indicator above this player on all clients
         SetPlayerReadyIndicatorClientRpc(clientId, true);
 
-        // Count how many living players are in this room
+        CheckRoomReady(room, state);
+    }
+
+    // Auto-submit dead players so they never block a room's turn from advancing.
+    // Called whenever someone submits or a player dies.
+    private void CheckRoomReady(RoomGrid room, RoomCombatState state)
+    {
+        if (state.enemyPhaseRunning) return;
+
         List<ulong> roomPlayers = GetLivingPlayersInRoom(room);
+
+        // Dead players auto-submit so the room is never stuck waiting for a corpse
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (!IsClientAlive(client.ClientId) && GetPlayerRoom(client.ClientId) == room)
+                state.submitted.Add(client.ClientId);
+        }
+
         int ready = 0;
         foreach (ulong id in roomPlayers)
             if (state.submitted.Contains(id)) ready++;
 
-        // Broadcast ready count only to players in this room
         BroadcastRoomReadyCountToRoom(room, ready, roomPlayers.Count);
-
         Debug.Log($"[TurnSystem] Room {room.gameObject.name}: {ready}/{roomPlayers.Count} ready.");
 
-        // Check if all players in THIS room have submitted
-        bool allReady = true;
-        foreach (ulong id in roomPlayers)
-            if (!state.submitted.Contains(id)) { allReady = false; break; }
+        // If no living players in room, nothing to run
+        if (roomPlayers.Count == 0) return;
 
+        bool allReady = roomPlayers.TrueForAll(id => state.submitted.Contains(id));
         if (allReady)
             StartCoroutine(RunRoomTurn(room, state, roomPlayers));
     }
@@ -242,7 +266,24 @@ public class MultiplayerTurnSystem : NetworkBehaviour
     private RoomGrid GetPlayerRoom(ulong clientId)
     {
         if (!NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client)) return null;
-        return client.PlayerObject?.GetComponent<NetworkedUnit>()?.GetCurrentRoomGrid();
+
+        NetworkedUnit netUnit = client.PlayerObject?.GetComponent<NetworkedUnit>();
+        if (netUnit == null) return null;
+
+        RoomGrid room = netUnit.GetCurrentRoomGrid();
+
+        // Fallback: if NetworkedUnit doesn't have a room yet, try the Unit component.
+        // This can happen briefly after spawn before InitialiseUnitOnClient fires.
+        if (room == null)
+        {
+            Unit unit = client.PlayerObject.GetComponent<Unit>();
+            room = unit?.GetCurrentRoomGrid();
+        }
+
+        if (room == null)
+            Debug.LogWarning($"[TurnSystem] GetPlayerRoom: client {clientId} has no room on server yet.");
+
+        return room;
     }
 
     private List<ulong> GetLivingPlayersInRoom(RoomGrid room)

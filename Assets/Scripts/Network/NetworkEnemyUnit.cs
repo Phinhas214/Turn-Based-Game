@@ -149,9 +149,12 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         netGridX.Value         = newPosition.x;
         netGridZ.Value         = newPosition.z;
 
-        // Send world pos + grid pos to clients so they update both visuals and occupancy
+        // Send world pos + grid pos + room name to clients.
+        // Room name lets clients resolve currentRoomGrid by name lookup if
+        // SyncRoomToClients hasn't arrived yet (avoids LevelGrid bounds issues).
         SyncMoveToClientsClientRpc(newWorldPos.x, newWorldPos.y, newWorldPos.z,
-                                   newPosition.x, newPosition.z);
+                                   newPosition.x, newPosition.z,
+                                   currentRoomGrid.gameObject.name);
 
         if (showDebugLogs)
             Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} moved to {newPosition}");
@@ -210,19 +213,33 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     /// <summary>
     /// Called once after spawn to tell clients which room this enemy is in.
+    /// roomName is the GameObject name e.g. "NormalRoom_(1,0)" — deterministic
+    /// from the generation seed so it is identical on server and all clients.
+    /// We look up by name instead of LevelGrid.GetRoomAtPosition to avoid Y-bounds
+    /// issues that caused GetRoomAtPosition to silently return null.
     /// </summary>
     [ClientRpc]
-    public void SyncRoomToClientsClientRpc(float wx, float wy, float wz, int gx, int gz)
+    public void SyncRoomToClientsClientRpc(float wx, float wy, float wz, int gx, int gz,
+                                           string roomName = "")
     {
         if (IsServer) return;
 
         Vector3      worldPos = new Vector3(wx, wy, wz);
         GridPosition pos      = new GridPosition(gx, gz);
 
-        RoomGrid room = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
+        // Prefer name lookup — reliable across all clients
+        RoomGrid room = null;
+        if (!string.IsNullOrEmpty(roomName))
+            foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
+                if (rg.gameObject.name == roomName) { room = rg; break; }
+
+        // Fallback to world-position lookup
+        if (room == null)
+            room = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
+
         if (room == null)
         {
-            Debug.LogWarning($"[NetworkedEnemyUnit] SyncRoomToClients: no room found at {worldPos}");
+            Debug.LogWarning($"[NetworkedEnemyUnit] SyncRoomToClients: no room found for '{roomName}' at {worldPos}");
             return;
         }
 
@@ -231,7 +248,7 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
         currentRoomGrid    = room;
         gridPosition       = pos;
-        transform.position = worldPos; // snap visual in case NT hasn't arrived yet
+        transform.position = worldPos;
         room.AddEnemyAtGridPosition(pos, GetCompatUnit());
         isInitialized = true;
 
@@ -241,25 +258,29 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     /// <summary>
     /// Called every move — syncs grid occupancy AND snaps visual position on clients.
+    /// roomName lets clients resolve their room by name if SyncRoomToClients
+    /// hasn't arrived yet, avoiding a fragile LevelGrid.GetRoomAtPosition call.
     /// </summary>
     [ClientRpc]
-    public void SyncMoveToClientsClientRpc(float wx, float wy, float wz, int gx, int gz)
+    public void SyncMoveToClientsClientRpc(float wx, float wy, float wz, int gx, int gz,
+                                           string roomName = "")
     {
         if (IsServer) return;
 
-        // If SyncRoomToClients hasn't arrived yet, try to resolve room now
+        // If SyncRoomToClients hasn't set currentRoomGrid yet, resolve by name
+        if (currentRoomGrid == null && !string.IsNullOrEmpty(roomName))
+            foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
+                if (rg.gameObject.name == roomName) { currentRoomGrid = rg; break; }
+
         if (currentRoomGrid == null && LevelGrid.Instance != null)
             currentRoomGrid = LevelGrid.Instance.GetRoomAtPosition(new Vector3(wx, wy, wz));
 
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
-        GridPosition newPos = new GridPosition(gx, gz);
-        gridPosition        = newPos;
-
-        // FIX 3: update the transform so the enemy visually moves on clients.
-        // NetworkTransform will then interpolate from here on subsequent frames.
-        transform.position = new Vector3(wx, wy, wz);
+        GridPosition newPos    = new GridPosition(gx, gz);
+        gridPosition           = newPos;
+        transform.position     = new Vector3(wx, wy, wz);
 
         if (currentRoomGrid != null)
         {

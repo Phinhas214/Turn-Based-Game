@@ -26,26 +26,13 @@ public class MoveAction : BaseAction
 
     public bool CanMove() => GetMoveDistance() > 0;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Room grid helper — prefers NetworkedUnit so both components stay in sync
-    // ─────────────────────────────────────────────────────────────────────
-
     // ── True if we are in an active network session (MP), false in SP ──────
     private static bool IsNetworked =>
         Unity.Netcode.NetworkManager.Singleton != null &&
         Unity.Netcode.NetworkManager.Singleton.IsListening;
 
-    private RoomGrid GetUnitRoomGrid()
-    {
-        // Unit.currentRoomGrid is always accurate — updated by PlaceInRoom and Unit.Update
-        return unit.GetCurrentRoomGrid();
-    }
-
-    private GridPosition GetUnitGridPosition()
-    {
-        // Unit.gridPosition is always accurate — updated every frame from transform.position
-        return unit.GetGridPosition();
-    }
+    private RoomGrid GetUnitRoomGrid()   => unit.GetCurrentRoomGrid();
+    private GridPosition GetUnitGridPosition() => unit.GetGridPosition();
 
     // ─────────────────────────────────────────────────────────────────────
 
@@ -98,6 +85,8 @@ public class MoveAction : BaseAction
 
         // Update NetworkedUnit's grid position immediately so GetValidActionGridPositionList
         // radiates from the correct position as soon as this move is committed.
+        // SyncGridPositionAfterMove → UpdatePositionServerRpc → server gridPosition updated
+        // so enemy AI reads the correct tile on their next turn.
         if (IsNetworked && cachedNetUnit != null)
         {
             cachedNetUnit.IsMoving = true;
@@ -122,7 +111,6 @@ public class MoveAction : BaseAction
             transform.position = target;
         }
 
-        // Clear IsMoving now that the visual coroutine is done.
         if (IsNetworked && cachedNetUnit != null)
             cachedNetUnit.IsMoving = false;
 
@@ -156,8 +144,8 @@ public class MoveAction : BaseAction
             return validList;
         }
 
-        GridPosition unitPos = GetUnitGridPosition();
-        int moveDistance = GetMoveDistance();
+        GridPosition unitPos     = GetUnitGridPosition();
+        int          moveDistance = GetMoveDistance();
 
         Debug.Log($"[MoveAction] GetValidActionGridPositionList: unitPos={unitPos} moveDistance={moveDistance} room={currentRoom.gameObject.name} unit.isInitialized={unit.IsInitialized()} unit.roomGrid={(unit.GetCurrentRoomGrid()?.gameObject.name ?? "NULL")}");
 
@@ -174,6 +162,7 @@ public class MoveAction : BaseAction
 
                 if (!currentRoom.IsValidGridPosition(testPos)) continue;
                 if (!tilemapGrid.IsWalkable(testPos)) continue;
+                if (IsTileOccupiedByOther(testPos, currentRoom)) continue;
 
                 List<GridPosition> path = pathfinder.FindPath(unitPos, testPos);
                 if (path.Count > 0 && path.Count <= moveDistance)
@@ -184,6 +173,41 @@ public class MoveAction : BaseAction
         return validList;
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Occupancy check — prevents players moving onto enemies or other players
+    // ─────────────────────────────────────────────────────────────────────
+
+    private bool IsTileOccupiedByOther(GridPosition pos, RoomGrid room)
+    {
+        // Living enemies in this room
+        if (NetworkedEnemyManager.Instance != null)
+        {
+            foreach (var enemy in NetworkedEnemyManager.Instance.GetEnemiesInRoom(room))
+            {
+                if (enemy == null || enemy.IsDead) continue;
+                if (enemy.GridPosition == pos) return true;
+            }
+        }
+
+        // Other living players (MP only)
+        if (IsNetworked)
+        {
+            foreach (var client in Unity.Netcode.NetworkManager.Singleton.ConnectedClientsList)
+            {
+                if (client.PlayerObject == null) continue;
+                if (client.PlayerObject == unit.gameObject) continue; // not our own tile
+                var health = client.PlayerObject.GetComponent<NetworkedHealthComponent>();
+                // Dead and downed players don't block movement tiles
+                if (health != null && (health.IsDead || health.IsDown)) continue;
+                var netUnit = client.PlayerObject.GetComponent<NetworkedUnit>();
+                if (netUnit == null || netUnit.GetCurrentRoomGrid() != room) continue;
+                if (netUnit.GetGridPosition() == pos) return true;
+            }
+        }
+
+        return false;
+    }
+
     public override string GetActionName() => "Move";
 
     public int GetMoveCost(GridPosition targetGridPosition)
@@ -192,13 +216,7 @@ public class MoveAction : BaseAction
         if (currentRoom == null) return -1;
 
         GridPosition startPos = unit.GetGridPosition();
-
-        Pathfinder pathfinder = new Pathfinder(currentRoom);
-        List<GridPosition> path = pathfinder.FindPath(startPos, targetGridPosition);
-
-        if (path.Count == 0)
-            return -1;
-
-        return path.Count;
+        List<GridPosition> path = new Pathfinder(currentRoom).FindPath(startPos, targetGridPosition);
+        return path.Count == 0 ? -1 : path.Count;
     }
 }

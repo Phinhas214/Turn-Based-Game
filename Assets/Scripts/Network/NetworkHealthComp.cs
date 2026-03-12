@@ -2,73 +2,52 @@ using System;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Networked replacement for HealthComponent.
-///
-/// RULES:
-///   - Health is stored in a NetworkVariable — readable by ALL clients.
-///   - Only the SERVER can write health (via TakeDamage / Heal ServerRpcs).
-///   - OnHealthChanged and OnDeath events fire on ALL clients via ClientRpc.
-///   - DamageNumbers and flash effects spawn locally on each client when they
-///     receive the health-changed notification.
-///
-/// SETUP:
-///   - Replace HealthComponent on your Unit and EnemyUnit prefabs with this script.
-///   - Prefab must have a NetworkObject component.
-///   - Keep the DamageNumber prefab reference and flash object references.
-///
-/// MIGRATION:
-///   - External code calling health.TakeDamage(n) should instead call
-///     health.RequestTakeDamage(n) from a client, OR call TakeDamage directly
-///     if already on the server.
-/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkedHealthComponent : NetworkBehaviour
 {
-    // ── Network state ─────────────────────────────────────────────────────
-    private NetworkVariable<int> netCurrentHealth = new NetworkVariable<int>(
+    private NetworkVariable<int>  netCurrentHealth = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private NetworkVariable<int> netMaxHealth = new NetworkVariable<int>(
+    private NetworkVariable<int>  netMaxHealth = new NetworkVariable<int>(
         100, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> netIsDown = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // ── Inspector ─────────────────────────────────────────────────────────
     [Header("Damage Numbers")]
     [SerializeField] private DamageNumber damageNumberPrefab;
     [SerializeField] private Vector3 damageNumberOffset = new Vector3(0f, 1.5f, 0f);
-
     [Header("Damage Flash")]
     [SerializeField] private GameObject damageFlashObject;
     [SerializeField] private float flashDuration = 0.15f;
     [SerializeField] private int   flashCount    = 1;
-
     [Header("Health Settings")]
-    [Min(1)] [SerializeField] private int maxHealth    = 100;
+    [Min(1)] [SerializeField] private int maxHealth      = 100;
     [Min(0)] [SerializeField] private int startingHealth = 0;
-
     [Header("Death Behaviour")]
     [SerializeField] private bool  destroyOnDeath = false;
-    [SerializeField, Min(0f)] private float deathDelay = 0f;
-
+    [SerializeField, Min(0f)] private float deathDelay  = 0f;
     [Header("Debug (read-only in play mode)")]
     [SerializeField] private int _currentHealthDebug;
 
-    // ── Events — fire on ALL clients ──────────────────────────────────────
     public event Action<int, int> OnHealthChanged;
     public event Action           OnDeath;
+    public event Action           OnRevived;
 
-    // ── Private ───────────────────────────────────────────────────────────
+    [Header("Revive Settings")]
+    [SerializeField, Range(0f, 1f)] private float reviveHealthPercent = 0.25f;
+
     private SpriteRenderer flashRenderer;
     private Coroutine      flashRoutine;
 
-    // ── Properties ────────────────────────────────────────────────────────
-    public int   CurrentHealth  => netCurrentHealth.Value;
-    public int   MaxHealth      => netMaxHealth.Value;
-    public bool  IsDead         => netCurrentHealth.Value <= 0;
-    public float HealthPercent  => netMaxHealth.Value > 0 ? (float)netCurrentHealth.Value / netMaxHealth.Value : 0f;
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────
+    public int   CurrentHealth => netCurrentHealth.Value;
+    public int   MaxHealth     => netMaxHealth.Value;
+    // IsDead: used by enemies and turn system to skip this player entirely.
+    // In single-player: health <= 0 means dead.
+    // In multiplayer: player is "downed" (netIsDown) not dead — allies can revive them.
+    // We treat downed as dead for AI and turn purposes; it just isn't permanent.
+    public bool  IsDead  => netCurrentHealth.Value <= 0;
+    public bool  IsDown  => netIsDown.Value;
+    public float HealthPercent => netMaxHealth.Value > 0
+        ? (float)netCurrentHealth.Value / netMaxHealth.Value : 0f;
 
     private void Awake()
     {
@@ -78,8 +57,6 @@ public class NetworkedHealthComponent : NetworkBehaviour
             damageFlashObject.SetActive(true);
             SetFlashAlpha(0f);
         }
-
-        // Resolve max health from IHasHealth on the same GameObject
         IHasHealth statsProvider = GetComponent<IHasHealth>();
         if (statsProvider != null)
             maxHealth = statsProvider.GetMaxHealth();
@@ -87,16 +64,12 @@ public class NetworkedHealthComponent : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Server sets initial values
         if (IsServer)
         {
             netMaxHealth.Value     = maxHealth;
             netCurrentHealth.Value = startingHealth > 0
-                ? Mathf.Min(startingHealth, maxHealth)
-                : maxHealth;
+                ? Mathf.Min(startingHealth, maxHealth) : maxHealth;
         }
-
-        // All clients subscribe to health changes for local visuals
         netCurrentHealth.OnValueChanged += HandleNetHealthChanged;
         _currentHealthDebug = netCurrentHealth.Value;
     }
@@ -106,70 +79,64 @@ public class NetworkedHealthComponent : NetworkBehaviour
         netCurrentHealth.OnValueChanged -= HandleNetHealthChanged;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Public API — called from game logic
-    // ─────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Apply damage. Can be called from server directly.
-    /// From a client, call RequestTakeDamage() instead.
-    /// </summary>
     public void TakeDamage(int amount)
     {
-        if (!IsServer)
-        {
-            RequestTakeDamageServerRpc(amount);
-            return;
-        }
+        if (!IsServer) { RequestTakeDamageServerRpc(amount); return; }
         ApplyDamageOnServer(amount);
     }
 
-    /// <summary>Request damage from a client — routes to server.</summary>
-    public void RequestTakeDamage(int amount)
+    /// <summary>
+    /// Revives a downed player, restoring them to reviveHealthPercent of max HP.
+    /// Call this from the reviving player's action (server or ServerRpc).
+    /// </summary>
+    public void Revive()
     {
-        RequestTakeDamageServerRpc(amount);
+        if (!IsServer) { ReviveServerRpc(); return; }
+        ApplyReviveOnServer();
     }
 
-    /// <summary>
-    /// Heal. Can be called from server directly.
-    /// From a client, call RequestHeal() instead.
-    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    private void ReviveServerRpc() => ApplyReviveOnServer();
+
+    private void ApplyReviveOnServer()
+    {
+        if (!IsDown) return;
+        int reviveHp = Mathf.Max(1, Mathf.RoundToInt(netMaxHealth.Value * reviveHealthPercent));
+        netCurrentHealth.Value = reviveHp;
+        netIsDown.Value        = false;
+        TriggerReviveClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerReviveClientRpc()
+    {
+        OnRevived?.Invoke();
+        // Re-enable the GameObject if it was hidden on death
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
+    }
+
+    public void RequestTakeDamage(int amount) => RequestTakeDamageServerRpc(amount);
+
     public void Heal(int amount)
     {
-        if (!IsServer)
-        {
-            RequestHealServerRpc(amount);
-            return;
-        }
+        if (!IsServer) { RequestHealServerRpc(amount); return; }
         ApplyHealOnServer(amount);
     }
 
     public void RequestHeal(int amount) => RequestHealServerRpc(amount);
 
-    /// <summary>
-    /// Set max health and refill current. Server or IHasHealth init only.
-    /// </summary>
     public void InitializeHealth(int newMaxHealth)
     {
-        if (!IsServer)
-        {
-            InitializeHealthServerRpc(newMaxHealth);
-            return;
-        }
+        if (!IsServer) { InitializeHealthServerRpc(newMaxHealth); return; }
         netMaxHealth.Value     = Mathf.Max(1, newMaxHealth);
         netCurrentHealth.Value = netMaxHealth.Value;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Server RPCs
-    // ─────────────────────────────────────────────────────────────────────
-
     [ServerRpc(RequireOwnership = false)]
     private void RequestTakeDamageServerRpc(int amount) => ApplyDamageOnServer(amount);
-
     [ServerRpc(RequireOwnership = false)]
     private void RequestHealServerRpc(int amount) => ApplyHealOnServer(amount);
-
     [ServerRpc(RequireOwnership = false)]
     private void InitializeHealthServerRpc(int newMax)
     {
@@ -177,21 +144,27 @@ public class NetworkedHealthComponent : NetworkBehaviour
         netCurrentHealth.Value = netMaxHealth.Value;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Server-side logic
-    // ─────────────────────────────────────────────────────────────────────
-
     private void ApplyDamageOnServer(int amount)
     {
         if (IsDead || amount <= 0) return;
-
         netCurrentHealth.Value = Mathf.Max(0, netCurrentHealth.Value - amount);
-
-        // Trigger damage visuals on all clients
         TriggerDamageVisualsClientRpc(amount);
-
         if (netCurrentHealth.Value == 0)
-            TriggerDeathClientRpc();
+        {
+            // Check if this is a player (has NetworkedUnit) or an enemy/prop
+            bool isPlayer = GetComponent<NetworkedUnit>() != null;
+            if (isPlayer)
+            {
+                // Players enter DOWNED state — allies can revive them
+                netIsDown.Value = true;
+                TriggerDownedClientRpc();
+            }
+            else
+            {
+                // Enemies and non-player objects die normally
+                TriggerDeathClientRpc();
+            }
+        }
     }
 
     private void ApplyHealOnServer(int amount)
@@ -199,10 +172,6 @@ public class NetworkedHealthComponent : NetworkBehaviour
         if (IsDead || amount <= 0) return;
         netCurrentHealth.Value = Mathf.Min(netMaxHealth.Value, netCurrentHealth.Value + amount);
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // ClientRpcs — visuals/events on all clients
-    // ─────────────────────────────────────────────────────────────────────
 
     [ClientRpc]
     private void TriggerDamageVisualsClientRpc(int amount)
@@ -212,19 +181,24 @@ public class NetworkedHealthComponent : NetworkBehaviour
     }
 
     [ClientRpc]
+    private void TriggerDownedClientRpc()
+    {
+        // Player is downed — fire OnDeath so UI/animations react the same way,
+        // but the player object stays in the world so allies can revive them.
+        OnDeath?.Invoke();
+        // Hide or play downed animation — just set inactive for now
+        gameObject.SetActive(false);
+    }
+
+    [ClientRpc]
     private void TriggerDeathClientRpc()
     {
         OnDeath?.Invoke();
-
         if (deathDelay > 0f)
             Invoke(nameof(ExecuteDeath), deathDelay);
         else
             ExecuteDeath();
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // NetworkVariable callback — fires on all clients when health changes
-    // ─────────────────────────────────────────────────────────────────────
 
     private void HandleNetHealthChanged(int oldVal, int newVal)
     {
@@ -232,17 +206,42 @@ public class NetworkedHealthComponent : NetworkBehaviour
         OnHealthChanged?.Invoke(newVal, netMaxHealth.Value);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Local visual effects (same as old HealthComponent)
-    // ─────────────────────────────────────────────────────────────────────
+    private void ExecuteDeath()
+    {
+        // NEVER call Destroy() on a spawned NetworkObject from a non-server client.
+        // Server despawns it which automatically cleans up on all clients.
+        bool isNetworked = TryGetComponent<NetworkObject>(out var netObj);
+
+        if (isNetworked)
+        {
+            if (IsServer)
+            {
+                if (destroyOnDeath)
+                    netObj.Despawn(true);
+                else
+                    gameObject.SetActive(false);
+            }
+            else
+            {
+                // Client — just hide, wait for server despawn
+                gameObject.SetActive(false);
+            }
+        }
+        else
+        {
+            // SP non-networked object — safe to destroy
+            if (destroyOnDeath)
+                Destroy(gameObject, deathDelay);
+            else
+                gameObject.SetActive(false);
+        }
+    }
 
     private void SpawnDamageNumber(int amount)
     {
         if (!damageNumberPrefab) return;
-        DamageNumber dmg = Instantiate(
-            damageNumberPrefab,
-            transform.position + damageNumberOffset,
-            Quaternion.identity);
+        DamageNumber dmg = Instantiate(damageNumberPrefab,
+            transform.position + damageNumberOffset, Quaternion.identity);
         dmg.Initialize(amount);
     }
 
@@ -282,21 +281,5 @@ public class NetworkedHealthComponent : NetworkBehaviour
         Color c = flashRenderer.color;
         c.a = alpha;
         flashRenderer.color = c;
-    }
-
-    private void ExecuteDeath()
-    {
-        if (destroyOnDeath)
-        {
-            // On server, despawn the network object (this also destroys on clients)
-            if (IsServer && TryGetComponent<NetworkObject>(out var netObj))
-                netObj.Despawn();
-            else if (!IsServer)
-                gameObject.SetActive(false); // Wait for server to despawn
-        }
-        else
-        {
-            gameObject.SetActive(false);
-        }
     }
 }

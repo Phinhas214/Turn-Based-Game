@@ -138,6 +138,17 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         enemyUnit.PlaceOnGrid(roomGrid, position);
         NetworkedEnemyManager.Instance?.RegisterEnemy(enemyUnit);
 
+        // Tell all clients which room this enemy is in so their local
+        // RoomGrid occupancy stays accurate for pathfinding checks.
+        // Pass roomGrid.gameObject.name so clients can look up by name —
+        // more reliable than LevelGrid.GetRoomAtPosition which can miss on Y bounds.
+        enemyUnit.SyncRoomToClientsClientRpc(
+            go.transform.position.x,
+            go.transform.position.y,
+            go.transform.position.z,
+            position.x, position.z,
+            roomGrid.gameObject.name);
+
         Debug.Log($"[NetworkedEnemySpawner] Spawned {prefab.name} at {position}");
         return enemyUnit;
     }
