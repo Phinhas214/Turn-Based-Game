@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Represents an enemy on the grid.
@@ -34,6 +35,12 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
     public bool            IsInitialized   => isInitialized;
     public bool            IsDead          => health != null && health.IsDead;
 
+
+    public void SetSelected(bool selected)
+    {
+        if (selectedVisual != null)
+            selectedVisual.SetActive(selected);
+    }
     // ── IHasHealth ─────────────────────────────────────────────────────────
     // HealthComponent calls this in Awake — must be available before Start.
     // EnemyStats is a serialized field so it's ready at Awake time.
@@ -122,8 +129,9 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
 
     private void HandleDeath()
     {
+        // 1. COMMON CLEANUP (Runs in both Single-Player and Multiplayer)
         if (showDebugLogs)
-            Debug.Log($"[EnemyUnit] {stats?.enemyName} died.");
+            Debug.Log($"[EnemyUnit] {stats?.enemyName} death logic triggered.");
 
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
@@ -131,12 +139,19 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
         OnEnemyDied?.Invoke(this);
         EnemyManager.Instance?.UnregisterEnemy(this);
 
-        Destroy(gameObject, 0.5f);
-    }
+        // 2. THE NETWORK GUARD
+        // Check if this specific object is currently managed by Netcode
+        if (TryGetComponent<NetworkObject>(out var netObj) && netObj.IsSpawned)
+        {
+            // In multiplayer, we STOP here.
+            // We let NetworkedEnemyUnit handle the Despawn on the Server.
+            // Calling Destroy() here on a Client is what causes your crash.
+            return; 
+        }
 
-    public void SetSelected(bool selected)
-    {
-        if (selectedVisual != null)
-            selectedVisual.SetActive(selected);
+        // 3. SINGLE PLAYER FALLBACK
+        // If there is no NetworkObject, or it's not spawned (Single Player), 
+        // we use the standard Destroy.
+        Destroy(gameObject, 0.5f);
     }
 }

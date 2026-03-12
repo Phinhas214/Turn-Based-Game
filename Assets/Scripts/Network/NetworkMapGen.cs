@@ -11,11 +11,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     public struct RoomSyncData : INetworkSerializable
     {
         public int   PrefabIndex;
-        public float WorldX;
-        public float WorldY;
-        public float WorldZ;
-        public int   GridX;
-        public int   GridZ;
+        public float WorldX, WorldY, WorldZ;
+        public int   GridX, GridZ;
 
         public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
         {
@@ -28,11 +25,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         }
     }
 
-    [Header("Room Prefabs (same order on all clients)")]
+    [Header("Room Prefabs")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
     [SerializeField] private GameObject hallwayPrefab;
 
-    [Header("Player Prefabs (index matches character selection)")]
+    [Header("Player Prefabs")]
     [SerializeField] private List<GameObject> playerPrefabs;
 
     [Header("Generation Settings")]
@@ -40,9 +37,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     [SerializeField] private int   maxRooms          = 10;
     [SerializeField] private float specialRoomChance = 0.3f;
     [SerializeField] private float cellSize          = 2f;
-    [SerializeField] private float roomSpacing       = 0f;
 
-    [Header("Fallback (if no character selection data)")]
+    [Header("Fallback")]
     [SerializeField] private GameObject fallbackPlayerPrefab;
 
     [Serializable]
@@ -58,10 +54,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
     public static Action OnLevelReady;
 
-    private List<PlacedRoom>                        placedRooms;
-    private Dictionary<Vector2Int, PlacedRoom>      roomGrid;
-    private Dictionary<(PlacedRoom, LevelGenerator.Direction), PlacedRoom> roomConnections;
-    private int                                     generationSeed;
+    private List<PlacedRoom>                                                    placedRooms;
+    private Dictionary<Vector2Int, PlacedRoom>                                  roomGrid;
+    private Dictionary<(PlacedRoom, LevelGenerator.Direction), PlacedRoom>      roomConnections;
+    private int                                                                  generationSeed;
+    private System.Random                                                        isolatedRandom;
+    private HashSet<ulong>                                                       clientsConfirmedReady = new HashSet<ulong>();
 
     public class PlacedRoom
     {
@@ -109,21 +107,15 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         GenerateRoomLayout();
         InitializeRoomGrids();
         InitializeDoors();
-        NetworkedUnit.RebuildRoomGridCache();
 
         SyncLevelToClientsClientRpc(generationSeed, null);
         StartCoroutine(WaitForAllClientsReadyThenSpawn());
     }
 
-    private HashSet<ulong> clientsConfirmedReady = new HashSet<ulong>();
-
     [ServerRpc(RequireOwnership = false)]
     public void ClientLevelReadyServerRpc(ServerRpcParams rpcParams = default)
     {
-        ulong senderId = rpcParams.Receive.SenderClientId;
-        clientsConfirmedReady.Add(senderId);
-        int nonHostClients = NetworkManager.Singleton.ConnectedClientsList.Count - 1;
-        Debug.Log($"[NetworkedLevelGenerator] Client {senderId} ready ({clientsConfirmedReady.Count}/{nonHostClients})");
+        clientsConfirmedReady.Add(rpcParams.Receive.SenderClientId);
     }
 
     private IEnumerator WaitForAllClientsReadyThenSpawn()
@@ -132,7 +124,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
         if (nonHostClients <= 0)
         {
-            Debug.Log("[NetworkedLevelGenerator] Solo host — spawning immediately.");
             SpawnAllPlayers();
             OnLevelReady?.Invoke();
             yield break;
@@ -144,7 +135,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             yield return null;
         }
 
-        Debug.Log("[NetworkedLevelGenerator] All clients confirmed ready — spawning players.");
         SpawnAllPlayers();
         OnLevelReady?.Invoke();
     }
@@ -153,11 +143,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     private void SyncLevelToClientsClientRpc(int seed, RoomSyncData[] rooms)
     {
         if (IsServer) return;
-        Debug.Log($"[NetworkedLevelGenerator] Client received seed {seed} — regenerating level locally.");
         RegenerateLevelFromSeed(seed);
     }
-
-    private System.Random isolatedRandom;
 
     private void RegenerateLevelFromSeed(int seed)
     {
@@ -174,7 +161,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         InitializeRoomGrids();
         InitializeDoors();
         ReconstructConnectionsFromGrid();
-        NetworkedUnit.RebuildRoomGridCache();
 
         PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
         if (startRoom != null)
@@ -185,8 +171,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
         ClientLevelReadyServerRpc();
         StartCoroutine(WaitForLocalPlayerThenFireReady());
-
-        Debug.Log($"[NetworkedLevelGenerator] Client level built from seed {seed} — {placedRooms.Count} rooms.");
     }
 
     private void ReconstructConnectionsFromGrid()
@@ -207,30 +191,24 @@ public class NetworkedLevelGenerator : NetworkBehaviour
                 roomConnections[(b, GetOppositeDirection(dir))] = a;
             }
         }
-        Debug.Log($"[NetworkedLevelGenerator] Client rebuilt {roomConnections.Count} room connections.");
     }
 
     private IEnumerator WaitForLocalPlayerThenFireReady()
     {
-        const int scanInterval = 10;
-        int       frameCount   = 0;
-        float     timeout      = 15f;
-        float     elapsed      = 0f;
+        float timeout = 15f;
+        float elapsed = 0f;
+        int   frame   = 0;
 
         while (elapsed < timeout)
         {
             elapsed += Time.deltaTime;
-            frameCount++;
-
-            if (frameCount % scanInterval == 0)
+            if (++frame % 10 == 0)
             {
-                Unit[] units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
-                foreach (Unit unit in units)
+                foreach (Unit unit in FindObjectsByType<Unit>(FindObjectsSortMode.None))
                 {
-                    NetworkObject netObj = unit.GetComponent<NetworkObject>();
+                    var netObj = unit.GetComponent<NetworkObject>();
                     if (netObj != null && netObj.IsOwner)
                     {
-                        Debug.Log("[NetworkedLevelGenerator] Local player found — firing OnLevelReady.");
                         OnLevelReady?.Invoke();
                         yield break;
                     }
@@ -239,38 +217,29 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             yield return null;
         }
 
-        Debug.LogWarning("[NetworkedLevelGenerator] Timed out waiting for local player. Firing OnLevelReady anyway.");
         OnLevelReady?.Invoke();
     }
 
     private void SpawnAllPlayers()
     {
         PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
-        if (startRoom == null)
-        {
-            Debug.LogError("[NetworkedLevelGenerator] No start room found for player spawning!");
-            return;
-        }
+        if (startRoom == null) { Debug.LogError("[NetworkedLevelGenerator] No start room!"); return; }
 
         RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom));
         LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
 
         var connectedClients = NetworkManager.Singleton.ConnectedClientsList;
-
         int centerX = startRoom.roomGrid.GetWidth()  / 2;
         int centerZ = startRoom.roomGrid.GetHeight() / 2;
 
         for (int i = 0; i < connectedClients.Count; i++)
         {
             ulong clientId = connectedClients[i].ClientId;
-
-            int charIndex = (LobbySync.Instance != null)
-                ? LobbySync.Instance.GetCharacterIndex(clientId)
-                : 0;
-
-            Debug.Log($"[NetworkedLevelGenerator] Client {clientId} → charIndex {charIndex}");
+            int charIndex  = LobbySync.Instance != null
+                ? LobbySync.Instance.GetCharacterIndex(clientId) : 0;
 
             GameObject prefabToSpawn = GetPlayerPrefab(charIndex);
+            if (prefabToSpawn == null) continue;
 
             GridPosition spawnPos = new GridPosition(
                 centerX + (i % 2 == 0 ? -1 : 1),
@@ -281,34 +250,25 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             Vector3 spawnWorldPos = startRoom.roomGrid.GetWorldPosition(spawnPos);
 
-            GameObject playerGO = Instantiate(prefabToSpawn, spawnWorldPos, Quaternion.identity);
-            NetworkObject netObj = playerGO.GetComponent<NetworkObject>();
+            GameObject    playerGO = Instantiate(prefabToSpawn, spawnWorldPos, Quaternion.identity);
+            NetworkObject netObj   = playerGO.GetComponent<NetworkObject>();
 
-            if (netObj == null)
-            {
-                Debug.LogError("[NetworkedLevelGenerator] Player prefab missing NetworkObject!");
-                Destroy(playerGO);
-                continue;
-            }
+            if (netObj == null) { Debug.LogError("[NetworkedLevelGenerator] Player prefab missing NetworkObject!"); Destroy(playerGO); continue; }
 
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
             Unit unit = playerGO.GetComponent<Unit>();
-            if (unit != null)
-                unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
+            if (unit != null) unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
             NetworkedUnit netUnit = playerGO.GetComponent<NetworkedUnit>();
-            if (netUnit != null)
-                netUnit.PlaceInRoom(startRoom.roomGrid, spawnPos);
+            if (netUnit != null) netUnit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
             RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom), clientId);
 
-            Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
-
-            ulong         capturedClientId = clientId;
-            GridPosition  capturedSpawnPos = spawnPos;
-            RoomGrid      capturedRoomGrid = startRoom.roomGrid;
-            NetworkedUnit capturedNetUnit  = netUnit;
+            ulong         capturedClientId  = clientId;
+            GridPosition  capturedSpawnPos  = spawnPos;
+            RoomGrid      capturedRoomGrid  = startRoom.roomGrid;
+            NetworkedUnit capturedNetUnit   = netUnit;
             StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
         }
     }
@@ -317,7 +277,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
                                                GridPosition spawnPos, ulong clientId)
     {
         yield return new WaitForSeconds(0.5f);
-
         if (netUnit == null || roomGrid == null) yield break;
 
         Vector3 spawnWorldPos = roomGrid.GetWorldPosition(spawnPos);
@@ -329,18 +288,16 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         netUnit.InitialiseUnitOnClientClientRpc(
             spawnPos.x, spawnPos.z,
             spawnWorldPos.x, spawnWorldPos.y, spawnWorldPos.z,
+            roomGrid.gameObject.name,
             ownerOnly);
-
-        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId}");
     }
 
     private GameObject GetPlayerPrefab(int charIndex)
     {
         if (playerPrefabs != null && charIndex >= 0 && charIndex < playerPrefabs.Count)
             return playerPrefabs[charIndex];
-        if (fallbackPlayerPrefab != null)
-            return fallbackPlayerPrefab;
-        Debug.LogError("[NetworkedLevelGenerator] No valid player prefab found!");
+        if (fallbackPlayerPrefab != null) return fallbackPlayerPrefab;
+        Debug.LogError("[NetworkedLevelGenerator] No valid player prefab!");
         return null;
     }
 
@@ -352,11 +309,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             list.Add(new RoomSyncData
             {
                 PrefabIndex = room.prefabIndex,
-                WorldX      = room.worldPosition.x,
-                WorldY      = room.worldPosition.y,
-                WorldZ      = room.worldPosition.z,
-                GridX       = room.gridPosition.x,
-                GridZ       = room.gridPosition.y
+                WorldX = room.worldPosition.x,
+                WorldY = room.worldPosition.y,
+                WorldZ = room.worldPosition.z,
+                GridX  = room.gridPosition.x,
+                GridZ  = room.gridPosition.y
             });
         }
         return list.ToArray();
@@ -368,25 +325,13 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         {
             if (data.prefab == null) continue;
             RoomTilemapSetup setup = data.prefab.GetComponent<RoomTilemapSetup>();
-            if (setup != null)
-            {
-                data.width      = setup.GetWidth();
-                data.height     = setup.GetHeight();
-                data.gridOffset = setup.GetGridOffset();
-            }
-            else
-            {
-                data.width  = 10;
-                data.height = 10;
-            }
+            if (setup != null) { data.width = setup.GetWidth(); data.height = setup.GetHeight(); data.gridOffset = setup.GetGridOffset(); }
+            else               { data.width = 10; data.height = 10; }
         }
     }
 
-    private int GenRange(int min, int max)
-        => isolatedRandom != null ? isolatedRandom.Next(min, max + 1) : UnityEngine.Random.Range(min, max + 1);
-
-    private float GenValue()
-        => isolatedRandom != null ? (float)isolatedRandom.NextDouble() : UnityEngine.Random.value;
+    private int   GenRange(int min, int max) => isolatedRandom != null ? isolatedRandom.Next(min, max + 1) : UnityEngine.Random.Range(min, max + 1);
+    private float GenValue()                 => isolatedRandom != null ? (float)isolatedRandom.NextDouble() : UnityEngine.Random.value;
 
     private void ShuffleListGen<T>(List<T> list)
     {
@@ -429,25 +374,16 @@ public class NetworkedLevelGenerator : NetworkBehaviour
                     CreateHallway(current, newRoom, dir);
                     current.connector.MarkConnectionUsed(dir);
                     newRoom.connector.MarkConnectionUsed(GetOppositeDirection(dir));
-
-                    if (roomType != LevelGenerator.RoomType.End)
-                        queue.Enqueue(newRoom);
-
+                    if (roomType != LevelGenerator.RoomType.End) queue.Enqueue(newRoom);
                     roomCount++;
                     if (roomCount % toMake == 0) break;
                 }
                 else
                 {
-                    if (!queue.Contains(current))
-                        queue.Enqueue(current);
+                    if (!queue.Contains(current)) queue.Enqueue(current);
                 }
             }
         }
-
-        if (roomCount < target)
-            Debug.LogWarning($"[NetworkedLevelGenerator] Only placed {roomCount}/{target} rooms.");
-        else
-            Debug.Log($"[NetworkedLevelGenerator] Generated {placedRooms.Count} rooms.");
     }
 
     private PlacedRoom PlaceRoom(LevelGenerator.RoomType roomType, Vector2Int gridPos, Vector3 worldPos)
@@ -455,8 +391,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         if (roomGrid.ContainsKey(gridPos)) return null;
         RoomPrefabData prefabData = GetRandomRoomPrefab(roomType);
         if (prefabData == null) return null;
-        int prefabIndex = roomPrefabs.IndexOf(prefabData);
-        return InstantiateRoom(prefabData, prefabIndex, gridPos, worldPos);
+        return InstantiateRoom(prefabData, roomPrefabs.IndexOf(prefabData), gridPos, worldPos);
     }
 
     private PlacedRoom InstantiateRoom(RoomPrefabData prefabData, int prefabIndex, Vector2Int gridPos, Vector3 worldPos)
@@ -465,12 +400,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         instance.name = $"{prefabData.roomType}Room_({gridPos.x},{gridPos.y})";
 
         RoomConnector connector = instance.GetComponent<RoomConnector>();
-        if (connector == null)
-        {
-            Debug.LogError($"[NetworkedLevelGenerator] {prefabData.prefab.name} missing RoomConnector!");
-            Destroy(instance);
-            return null;
-        }
+        if (connector == null) { Debug.LogError($"[NetworkedLevelGenerator] {prefabData.prefab.name} missing RoomConnector!"); Destroy(instance); return null; }
 
         var placed = new PlacedRoom
         {
@@ -491,12 +421,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            RoomTilemapSetup setup = room.roomInstance.GetComponent<RoomTilemapSetup>();
-            if (setup == null) setup = room.roomInstance.AddComponent<RoomTilemapSetup>();
+            RoomTilemapSetup setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
+                                    ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
             setup.Initialize();
 
-            RoomGrid rg = room.roomInstance.GetComponent<RoomGrid>();
-            if (rg == null) rg = room.roomInstance.AddComponent<RoomGrid>();
+            RoomGrid rg = room.roomInstance.GetComponent<RoomGrid>()
+                          ?? room.roomInstance.AddComponent<RoomGrid>();
 
             rg.Initialize(setup.GetWidth(), setup.GetHeight(), setup.GetCellSize(),
                           room.worldPosition, setup.GetGridOffset(), null);
@@ -515,8 +445,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
     private void ClearLevel()
     {
-        foreach (Transform child in transform)
-            Destroy(child.gameObject);
+        foreach (Transform child in transform) Destroy(child.gameObject);
     }
 
     private PlacedRoom PlaceRoomInDirection(PlacedRoom existing, LevelGenerator.Direction dir, LevelGenerator.RoomType type)
@@ -533,12 +462,9 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         var oppDir = GetOppositeDirection(dir);
         if (!tempConn.HasConnectionPoint(oppDir)) return null;
 
-        var entry = tempConn.GetConnectionPoint(oppDir);
-
-        Vector2Int gridOffset = GetDirectionOffset(dir);
-        Vector3    worldDir   = new Vector3(gridOffset.x, 0, gridOffset.y);
-        Vector3    newPos     = exit.transform.position - entry.transform.localPosition + (worldDir * roomSpacing);
-        Vector2Int newGrid    = existing.gridPosition + gridOffset;
+        var    entry  = tempConn.GetConnectionPoint(oppDir);
+        Vector3    newPos  = exit.transform.position - entry.transform.localPosition;
+        Vector2Int newGrid = existing.gridPosition + GetDirectionOffset(dir);
 
         return PlaceRoom(type, newGrid, newPos);
     }
@@ -565,15 +491,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     {
         var available = new List<LevelGenerator.Direction>();
         if (room.connector == null) return available;
-
         foreach (LevelGenerator.Direction dir in Enum.GetValues(typeof(LevelGenerator.Direction)))
         {
-            if (room.connector.IsDirectionAvailable(dir))
-            {
-                Vector2Int check = room.gridPosition + GetDirectionOffset(dir);
-                if (!roomGrid.ContainsKey(check))
-                    available.Add(dir);
-            }
+            if (room.connector.IsDirectionAvailable(dir) &&
+                !roomGrid.ContainsKey(room.gridPosition + GetDirectionOffset(dir)))
+                available.Add(dir);
         }
         return available;
     }
@@ -602,10 +524,10 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     {
         switch (dir)
         {
-            case LevelGenerator.Direction.North: return new Vector2Int( 0,  1);
-            case LevelGenerator.Direction.South: return new Vector2Int( 0, -1);
-            case LevelGenerator.Direction.East:  return new Vector2Int( 1,  0);
-            case LevelGenerator.Direction.West:  return new Vector2Int(-1,  0);
+            case LevelGenerator.Direction.North: return new Vector2Int(0,  1);
+            case LevelGenerator.Direction.South: return new Vector2Int(0, -1);
+            case LevelGenerator.Direction.East:  return new Vector2Int(1,  0);
+            case LevelGenerator.Direction.West:  return new Vector2Int(-1, 0);
             default: return Vector2Int.zero;
         }
     }
@@ -622,28 +544,9 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         }
     }
 
-    private void ShuffleList<T>(List<T> list)
-    {
-        for (int i = 0; i < list.Count; i++)
-        {
-            int j = UnityEngine.Random.Range(i, list.Count);
-            T tmp = list[i]; list[i] = list[j]; list[j] = tmp;
-        }
-    }
-
-    public PlacedRoom GetPlacedRoomAt(Vector2Int gridPos)
-    {
-        roomGrid.TryGetValue(gridPos, out PlacedRoom room);
-        return room;
-    }
-
-    public List<PlacedRoom> GetAllRooms() => placedRooms;
-
-    public PlacedRoom GetConnectedRoom(PlacedRoom room, LevelGenerator.Direction dir)
-    {
-        roomConnections.TryGetValue((room, dir), out PlacedRoom connected);
-        return connected;
-    }
+    public PlacedRoom             GetPlacedRoomAt(Vector2Int gridPos) { roomGrid.TryGetValue(gridPos, out PlacedRoom room); return room; }
+    public List<PlacedRoom>       GetAllRooms()                       => placedRooms;
+    public PlacedRoom             GetConnectedRoom(PlacedRoom room, LevelGenerator.Direction dir) { roomConnections.TryGetValue((room, dir), out PlacedRoom connected); return connected; }
 
     public LevelGenerator.PlacedRoom ConvertToOldPlacedRoom(PlacedRoom room)
     {
