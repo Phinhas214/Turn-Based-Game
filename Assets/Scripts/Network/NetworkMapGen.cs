@@ -293,14 +293,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
-            // FIX HOST SPAWN: Set transform.position directly right after SpawnAsPlayerObject.
-            // NGO's NetworkTransform hasn't ticked yet at this point, so there is no "previous"
-            // position to interpolate from — the first NT snapshot will already be at spawnWorldPos.
-            // We cannot use NetworkTransform.Teleport() here because that requires being called
-            // from the authoritative side of the NT, which varies by authority mode and is not
-            // guaranteed to be the level generator's context.
-            playerGO.transform.position = spawnWorldPos;
-
             Unit unit = playerGO.GetComponent<Unit>();
             if (unit != null)
                 unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
@@ -313,25 +305,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
 
-            ulong        capturedClientId  = clientId;
-            GridPosition capturedSpawnPos  = spawnPos;
-            RoomGrid     capturedRoomGrid  = startRoom.roomGrid;
+            ulong         capturedClientId = clientId;
+            GridPosition  capturedSpawnPos = spawnPos;
+            RoomGrid      capturedRoomGrid = startRoom.roomGrid;
             NetworkedUnit capturedNetUnit  = netUnit;
-
-            // FIX HOST SPAWN: The host (server) is ALSO a client, so it receives
-            // InitialiseUnitOnClientClientRpc just like remote clients. This caused the
-            // host to get placed wrong because:
-            //   1. PlaceInRoom above sets host position correctly on the server side.
-            //   2. Then the delayed RPC arrives at the host-as-client and calls
-            //      ApplyClientInitialisation again — sometimes resolving a different room
-            //      (e.g. the room the camera is looking at) and overwriting the correct placement.
-            //
-            // Fix: for the HOST (server clientId == NetworkManager.ServerClientId), skip the
-            // delayed RPC entirely. The host's placement is already authoritative from
-            // PlaceInRoom above. For remote clients, send the RPC as before.
-            bool isHostPlayer = (clientId == NetworkManager.Singleton.LocalClientId && IsHost);
-            if (!isHostPlayer)
-                StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
+            StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
         }
     }
 
@@ -343,19 +321,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         if (netUnit == null || roomGrid == null) yield break;
 
         Vector3 spawnWorldPos = roomGrid.GetWorldPosition(spawnPos);
-
-        // KEY FIX: Re-snap the server-side transform.position right before sending the RPC.
-        // NetworkTransform is server-authoritative — the client's visual position is entirely
-        // driven by what the server broadcasts via NT. Even if the client-side RPC runs
-        // ApplyClientInitialisation correctly, NT will override transform.position with whatever
-        // the server last broadcast. By forcing the server transform here (right before the RPC),
-        // the next NT tick carries the correct spawn position to the client.
-        netUnit.transform.position = spawnWorldPos;
-        netUnit.PlaceInRoom(roomGrid, spawnPos);
-
-        // Small yield to let NT broadcast the corrected position before the client RPC runs
-        yield return null;
-
         ClientRpcParams ownerOnly = new ClientRpcParams
         {
             Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { clientId } }
@@ -366,7 +331,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             spawnWorldPos.x, spawnWorldPos.y, spawnWorldPos.z,
             ownerOnly);
 
-        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId} at {spawnWorldPos}");
+        Debug.Log($"[NetworkedLevelGenerator] Sent InitialiseUnitOnClient RPC to client {clientId}");
     }
 
     private GameObject GetPlayerPrefab(int charIndex)

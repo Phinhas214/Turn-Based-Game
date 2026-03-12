@@ -354,4 +354,8 @@ public class NetworkedUnit : NetworkBehaviour
     }
 
     private Unit GetUnitCompat() => GetComponent<Unit>();
+
+    // Stub kept for compatibility with NetworkMapGen.cs calls.
+    // The cache system was removed — LevelGrid.GetRoomAtPosition is used directly instead.
+    public static void RebuildRoomGridCache() { }
 }
