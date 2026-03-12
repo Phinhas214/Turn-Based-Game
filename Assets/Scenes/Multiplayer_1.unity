@@ -1478,10 +1478,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3204d5b16bef6ed4dab4fcc77f7120f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DiceRollButton
-  diceBox: {fileID: 1194845797}
-  dieType: 6
-  count: 1
-  spinVisual: {fileID: 0}
 --- !u!114 &171042580
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12409,10 +12405,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3204d5b16bef6ed4dab4fcc77f7120f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DiceRollButton
-  diceBox: {fileID: 427604496}
-  dieType: 6
-  count: 1
-  spinVisual: {fileID: 0}
 --- !u!114 &1155854882
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -44314,6 +44306,10 @@ PrefabInstance:
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: minRooms
       value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
+      propertyPath: roomSpacing
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5153460706557956312, guid: b49db5e15aec3394f9166b60fe00e2f4, type: 3}
       propertyPath: 'playerPrefabs.Array.data[0]'

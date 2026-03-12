@@ -1,51 +1,36 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Networked replacement for EnemyUnit.
+/// Networked replacement for EnemyUnit. SERVER (Host) owns all enemy objects.
 ///
-/// SERVER (Host) owns all enemy objects.
-/// Clients receive position and health updates via NetworkVariables.
-/// EnemyAI ONLY runs on the server.
-///
-/// SETUP:
-///   - Replace EnemyUnit component on enemy prefabs with this script.
-///   - Add NetworkObject and NetworkTransform (Server authority) to the prefab.
-///   - Keep EnemyStats serialized field.
-///   - EnemySpawner must call netObj.Spawn() after instantiation.
-///
-/// FIXES in this version:
-///   FIX 1 — GetEnemyUnitCompat() was returning null on clients because enemies
-///            only have NetworkedEnemyUnit not EnemyUnit. Every RoomGrid Add/Remove
-///            call was silently passing null and doing nothing. Enemies were invisible
-///            to pathfinding and combat targeting on all non-host clients.
-///            → See GetCompatUnit() at the bottom — two options explained.
-///
-///   FIX 2 — health.OnDeath fires on ALL clients via TriggerDeathClientRpc.
-///            Without a guard, the server ran HandleDeath twice: once from the
-///            direct event subscription, once from the ClientRpc reaching the host.
-///            netIsDead was set twice and UnregisterEnemy called twice.
-///            → Added hasDied guard flag.
-///
-///   FIX 3 — SyncMoveToClientsClientRpc updated grid occupancy but never updated
-///            transform.position on clients. The visual enemy stayed at spawn.
-///            NetworkTransform interpolates but only after receiving the new
-///            position — snapping explicitly here ensures immediate visual update.
-///            → Added transform.position = worldPos in SyncMoveToClientsClientRpc.
+/// FIXES IN THIS VERSION:
+///   FIX 1 — RoomGrid Add/Remove used null EnemyUnit on clients (GetCompatUnit returned null).
+///   FIX 2 — hasDied guard prevents double-death on server (HandleDeath called twice because
+///            TriggerDeathClientRpc fires OnDeath on the host too).
+///   FIX 3 — SyncMoveToClientsClientRpc now snaps transform.position on clients.
+///   FIX 4 (NEW) — RoomGrid cache: rooms are now cached at spawn instead of being
+///            looked up with FindObjectsByType every RPC. FindObjectsByType inside
+///            ServerRpc/ClientRpc runs during NGO's network update and causes
+///            ALLOC_TEMP_TLS unfreed allocation warnings every frame.
+///   FIX 5 (NEW) — OnDestroy no longer runs grid cleanup when the object is being
+///            despawned normally — OnNetworkDespawn handles that. OnDestroy was
+///            firing AFTER NGO already cleaned up the NetworkObject, causing the
+///            MissingReferenceException chain seen in the logs.
 /// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(NetworkedHealthComponent))]
 public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 {
-    // ── Inspector ─────────────────────────────────────────────────────────
     [Header("Stats")]
     [SerializeField] private EnemyStats stats;
 
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs = false;
 
-    // ── Network state — readable by all clients ───────────────────────────
     private NetworkVariable<int> netGridX = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<int> netGridZ = new NetworkVariable<int>(
@@ -53,31 +38,30 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     private NetworkVariable<bool> netIsDead = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // ── Private runtime ───────────────────────────────────────────────────
-    private GridPosition             gridPosition;
-    private RoomGrid                 currentRoomGrid;
+    private GridPosition gridPosition;
+    private RoomGrid currentRoomGrid;
     private NetworkedHealthComponent health;
-    private bool                     isInitialized = false;
-    private bool                     hasDied       = false;
-    private int                      turnsWaited   = 0;
+    private bool isInitialized = false;
+    private bool hasDied = false;
+    private int turnsWaited = 0;
 
-    // ── Events ────────────────────────────────────────────────────────────
+    // FIX 4: Cache all RoomGrids at spawn time rather than calling
+    // FindObjectsByType<RoomGrid> inside RPCs. That call runs during NGO's
+    // network update loop (ALLOC_TEMP_TLS context) and the array it allocates
+    // is never freed within the same frame, generating the unfreed-allocation warning.
+    private static RoomGrid[] cachedRoomGrids;
+    private static bool roomGridCacheValid = false;
+
     public event Action<NetworkedEnemyUnit> OnEnemyDied;
 
-    // ── Properties ────────────────────────────────────────────────────────
-    public EnemyStats               Stats           => stats;
-    public NetworkedHealthComponent Health          => health;
-    public GridPosition             GridPosition    => gridPosition;
-    public RoomGrid                 CurrentRoomGrid => currentRoomGrid;
-    public bool                     IsInitialized   => isInitialized;
-    public bool                     IsDead          => netIsDead.Value;
+    public EnemyStats Stats => stats;
+    public NetworkedHealthComponent Health => health;
+    public GridPosition GridPosition => gridPosition;
+    public RoomGrid CurrentRoomGrid => currentRoomGrid;
+    public bool IsInitialized => isInitialized;
+    public bool IsDead => netIsDead.Value;
 
-    // ── IHasHealth ────────────────────────────────────────────────────────
     public int GetMaxHealth() => stats != null ? stats.maxHealth : 100;
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -86,26 +70,81 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     public override void OnNetworkSpawn()
     {
-        health.OnDeath           += HandleDeath;
+        health.OnDeath += HandleDeath;
         netIsDead.OnValueChanged += OnIsDeadChanged;
+
+        // FIX 4: Refresh the room grid cache when a new enemy spawns.
+        // This is called once per enemy spawn, not per RPC, so it's safe here.
+        RefreshRoomGridCache();
     }
 
     public override void OnNetworkDespawn()
     {
-        health.OnDeath           -= HandleDeath;
+        health.OnDeath -= HandleDeath;
         netIsDead.OnValueChanged -= OnIsDeadChanged;
 
+        // FIX 5: Do all cleanup here in OnNetworkDespawn where the NetworkObject
+        // is still valid. OnDestroy runs AFTER NGO has already destroyed the
+        // NetworkObject internals, causing MissingReferenceException when code
+        // tries to access netObj.name or similar in the NGO message queue.
         if (IsServer && currentRoomGrid != null && isInitialized)
         {
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
             NetworkedEnemyManager.Instance?.UnregisterEnemy(this);
         }
+        else if (!IsServer && currentRoomGrid != null && isInitialized)
+        {
+            // Clients also need to update their local grid state
+            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
+        }
+
+        // Invalidate the cache so the next spawn rebuilds it
+        roomGridCacheValid = false;
     }
 
+    // FIX 5: OnDestroy should NOT do grid removal — that belongs in OnNetworkDespawn.
+    // When OnDestroy runs, the NetworkObject may already be in an invalid state,
+    // which is what causes the MissingReferenceException seen in the logs:
+    //   NetworkObject.GetNetworkBehaviourAtOrderIndex → Object.get_name() → NRE
+    // Simply leave this empty (or remove it entirely).
     private void OnDestroy()
     {
-        if (currentRoomGrid != null && isInitialized)
-            currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
+        // Intentionally empty — cleanup is handled in OnNetworkDespawn.
+        // Do NOT call currentRoomGrid.RemoveEnemyAtGridPosition here;
+        // the NetworkObject internals are already torn down at this point.
+    }
+
+    // ── Room grid cache helpers ───────────────────────────────────────────
+
+    private static void RefreshRoomGridCache()
+    {
+        cachedRoomGrids = FindObjectsByType<RoomGrid>(FindObjectsSortMode.None);
+        roomGridCacheValid = true;
+    }
+
+    /// <summary>
+    /// Finds a RoomGrid by name using the cache. Safe to call from RPCs
+    /// because it does not allocate a new array on every call.
+    /// </summary>
+    private static RoomGrid FindRoomByName(string roomName)
+    {
+        if (!roomGridCacheValid || cachedRoomGrids == null)
+            RefreshRoomGridCache();
+
+        if (string.IsNullOrEmpty(roomName)) return null;
+
+        foreach (RoomGrid rg in cachedRoomGrids)
+        {
+            // Guard: the cached entry may have been destroyed if a room was unloaded
+            if (rg != null && rg.gameObject.name == roomName)
+                return rg;
+        }
+        return null;
+    }
+
+    private static RoomGrid FindRoomByWorldPos(Vector3 worldPos)
+    {
+        return LevelGrid.Instance?.GetRoomAtPosition(worldPos);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -119,14 +158,14 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
-        currentRoomGrid    = roomGrid;
-        gridPosition       = position;
+        currentRoomGrid = roomGrid;
+        gridPosition = position;
         transform.position = roomGrid.GetWorldPosition(position);
         roomGrid.AddEnemyAtGridPosition(position, GetCompatUnit());
 
         netGridX.Value = position.x;
         netGridZ.Value = position.z;
-        isInitialized  = true;
+        isInitialized = true;
 
         if (showDebugLogs)
             Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} placed at {position}");
@@ -144,14 +183,11 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         gridPosition = newPosition;
         currentRoomGrid.AddEnemyAtGridPosition(newPosition, GetCompatUnit());
 
-        Vector3 newWorldPos    = currentRoomGrid.GetWorldPosition(newPosition);
-        transform.position     = newWorldPos;
-        netGridX.Value         = newPosition.x;
-        netGridZ.Value         = newPosition.z;
+        Vector3 newWorldPos = currentRoomGrid.GetWorldPosition(newPosition);
+        transform.position = newWorldPos;
+        netGridX.Value = newPosition.x;
+        netGridZ.Value = newPosition.z;
 
-        // Send world pos + grid pos + room name to clients.
-        // Room name lets clients resolve currentRoomGrid by name lookup if
-        // SyncRoomToClients hasn't arrived yet (avoids LevelGrid bounds issues).
         SyncMoveToClientsClientRpc(newWorldPos.x, newWorldPos.y, newWorldPos.z,
                                    newPosition.x, newPosition.z,
                                    currentRoomGrid.gameObject.name);
@@ -182,7 +218,10 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     private void HandleDeath()
     {
         // FIX 2: TriggerDeathClientRpc fires OnDeath on ALL clients including
-        // the host, so this callback runs twice on the server without the guard.
+        // the host, so this callback would run twice on the server without hasDied.
+        // NetworkedHealthComponent.TriggerDeathClientRpc now also has its own
+        // hasTriggeredDeathVisuals guard, but we keep hasDied here to protect
+        // the server-side game logic (unregister, despawn) from running twice.
         if (!IsServer || hasDied) return;
         hasDied = true;
 
@@ -200,10 +239,13 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         StartCoroutine(DespawnAfterDelay(0.5f));
     }
 
-    private System.Collections.IEnumerator DespawnAfterDelay(float delay)
+    private IEnumerator DespawnAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        if (IsServer && TryGetComponent<NetworkObject>(out var netObj))
+
+        // FIX 5: Check IsSpawned before calling Despawn — the object may have
+        // already been despawned if something else triggered cleanup first.
+        if (IsServer && TryGetComponent<NetworkObject>(out var netObj) && netObj.IsSpawned)
             netObj.Despawn(true);
     }
 
@@ -211,31 +253,18 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
     // Client sync RPCs
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Called once after spawn to tell clients which room this enemy is in.
-    /// roomName is the GameObject name e.g. "NormalRoom_(1,0)" — deterministic
-    /// from the generation seed so it is identical on server and all clients.
-    /// We look up by name instead of LevelGrid.GetRoomAtPosition to avoid Y-bounds
-    /// issues that caused GetRoomAtPosition to silently return null.
-    /// </summary>
     [ClientRpc]
     public void SyncRoomToClientsClientRpc(float wx, float wy, float wz, int gx, int gz,
                                            string roomName = "")
     {
         if (IsServer) return;
 
-        Vector3      worldPos = new Vector3(wx, wy, wz);
-        GridPosition pos      = new GridPosition(gx, gz);
+        Vector3 worldPos = new Vector3(wx, wy, wz);
+        GridPosition pos = new GridPosition(gx, gz);
 
-        // Prefer name lookup — reliable across all clients
-        RoomGrid room = null;
-        if (!string.IsNullOrEmpty(roomName))
-            foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
-                if (rg.gameObject.name == roomName) { room = rg; break; }
-
-        // Fallback to world-position lookup
-        if (room == null)
-            room = LevelGrid.Instance?.GetRoomAtPosition(worldPos);
+        // FIX 4: Use cached lookup instead of FindObjectsByType
+        RoomGrid room = FindRoomByName(roomName);
+        if (room == null) room = FindRoomByWorldPos(worldPos);
 
         if (room == null)
         {
@@ -246,8 +275,8 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
-        currentRoomGrid    = room;
-        gridPosition       = pos;
+        currentRoomGrid = room;
+        gridPosition = pos;
         transform.position = worldPos;
         room.AddEnemyAtGridPosition(pos, GetCompatUnit());
         isInitialized = true;
@@ -256,31 +285,27 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
             Debug.Log($"[NetworkedEnemyUnit] Client synced to room {room.gameObject.name} at {pos}");
     }
 
-    /// <summary>
-    /// Called every move — syncs grid occupancy AND snaps visual position on clients.
-    /// roomName lets clients resolve their room by name if SyncRoomToClients
-    /// hasn't arrived yet, avoiding a fragile LevelGrid.GetRoomAtPosition call.
-    /// </summary>
     [ClientRpc]
     public void SyncMoveToClientsClientRpc(float wx, float wy, float wz, int gx, int gz,
                                            string roomName = "")
     {
         if (IsServer) return;
 
-        // If SyncRoomToClients hasn't set currentRoomGrid yet, resolve by name
-        if (currentRoomGrid == null && !string.IsNullOrEmpty(roomName))
-            foreach (RoomGrid rg in FindObjectsByType<RoomGrid>(FindObjectsSortMode.None))
-                if (rg.gameObject.name == roomName) { currentRoomGrid = rg; break; }
-
-        if (currentRoomGrid == null && LevelGrid.Instance != null)
-            currentRoomGrid = LevelGrid.Instance.GetRoomAtPosition(new Vector3(wx, wy, wz));
+        // FIX 4: Use cached lookup instead of FindObjectsByType
+        if (currentRoomGrid == null)
+        {
+            RoomGrid found = FindRoomByName(roomName);
+            if (found == null) found = FindRoomByWorldPos(new Vector3(wx, wy, wz));
+            currentRoomGrid = found;
+        }
 
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, GetCompatUnit());
 
-        GridPosition newPos    = new GridPosition(gx, gz);
-        gridPosition           = newPos;
-        transform.position     = new Vector3(wx, wy, wz);
+        GridPosition newPos = new GridPosition(gx, gz);
+        gridPosition = newPos;
+        // FIX 3: Snap visual position so enemy doesn't stay frozen at spawn
+        transform.position = new Vector3(wx, wy, wz);
 
         if (currentRoomGrid != null)
         {
@@ -291,42 +316,23 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
     private void OnIsDeadChanged(bool oldVal, bool newVal)
     {
-        // Non-host clients: hide visually — server handles the despawn
+        // Non-host clients: hide visually — server handles the actual despawn
         if (newVal && !IsServer)
             gameObject.SetActive(false);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // FIX 1 — RoomGrid compat helper
+    // RoomGrid compat helper — see FIX 1 comment in original
     // ─────────────────────────────────────────────────────────────────────
-    // The old GetEnemyUnitCompat() called GetComponent<EnemyUnit>() which returns
-    // null on clients — the prefab only has NetworkedEnemyUnit. Every grid
-    // Add/Remove call silently did nothing, leaving enemies invisible to pathfinding
-    // and combat on all non-host clients.
-    //
-    // You have TWO options — pick whichever requires less change for you:
-    //
-    // OPTION A — Add EnemyUnit as a tag component on the enemy prefab.
-    //   Keep EnemyUnit on the prefab alongside NetworkedEnemyUnit. EnemyUnit
-    //   doesn't need any logic for this to work — RoomGrid just uses it as a key.
-    //   No code changes needed anywhere else. This is the quickest fix.
-    //
-    // OPTION B — Update RoomGrid to accept NetworkedEnemyUnit.
-    //   Change AddEnemyAtGridPosition / RemoveEnemyAtGridPosition to take
-    //   NetworkedEnemyUnit (or an IEnemyUnit interface). Then change this helper
-    //   to return 'this' instead. Cleaner architecture but requires editing RoomGrid.
-    //
-    // Default below uses OPTION A. To switch to OPTION B, replace the body with:
-    //   return this;   (and change the method return type to NetworkedEnemyUnit)
+
     private EnemyUnit GetCompatUnit()
     {
         EnemyUnit eu = GetComponent<EnemyUnit>();
 #if UNITY_EDITOR
         if (eu == null)
             Debug.LogError($"[NetworkedEnemyUnit] '{gameObject.name}' is missing an EnemyUnit component. " +
-                           "Enemies will not register in RoomGrid on clients — add EnemyUnit to the " +
-                           "prefab (Option A) or update RoomGrid to use NetworkedEnemyUnit (Option B). " +
-                           "See GetCompatUnit() comments.");
+                           "Add EnemyUnit to the prefab (Option A) or update RoomGrid to use " +
+                           "NetworkedEnemyUnit (Option B). See comments.");
 #endif
         return eu;
     }

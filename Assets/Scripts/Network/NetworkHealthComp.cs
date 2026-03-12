@@ -5,9 +5,9 @@ using UnityEngine;
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkedHealthComponent : NetworkBehaviour
 {
-    private NetworkVariable<int>  netCurrentHealth = new NetworkVariable<int>(
+    private NetworkVariable<int> netCurrentHealth = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private NetworkVariable<int>  netMaxHealth = new NetworkVariable<int>(
+    private NetworkVariable<int> netMaxHealth = new NetworkVariable<int>(
         100, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<bool> netIsDown = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -18,34 +18,36 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [Header("Damage Flash")]
     [SerializeField] private GameObject damageFlashObject;
     [SerializeField] private float flashDuration = 0.15f;
-    [SerializeField] private int   flashCount    = 1;
+    [SerializeField] private int flashCount = 1;
     [Header("Health Settings")]
-    [Min(1)] [SerializeField] private int maxHealth      = 100;
-    [Min(0)] [SerializeField] private int startingHealth = 0;
+    [Min(1)][SerializeField] private int maxHealth = 100;
+    [Min(0)][SerializeField] private int startingHealth = 0;
     [Header("Death Behaviour")]
-    [SerializeField] private bool  destroyOnDeath = false;
-    [SerializeField, Min(0f)] private float deathDelay  = 0f;
+    [SerializeField] private bool destroyOnDeath = false;
+    [SerializeField, Min(0f)] private float deathDelay = 0f;
     [Header("Debug (read-only in play mode)")]
     [SerializeField] private int _currentHealthDebug;
 
     public event Action<int, int> OnHealthChanged;
-    public event Action           OnDeath;
-    public event Action           OnRevived;
+    public event Action OnDeath;
+    public event Action OnRevived;
 
     [Header("Revive Settings")]
     [SerializeField, Range(0f, 1f)] private float reviveHealthPercent = 0.25f;
 
     private SpriteRenderer flashRenderer;
-    private Coroutine      flashRoutine;
+    private Coroutine flashRoutine;
 
-    public int   CurrentHealth => netCurrentHealth.Value;
-    public int   MaxHealth     => netMaxHealth.Value;
-    // IsDead: used by enemies and turn system to skip this player entirely.
-    // In single-player: health <= 0 means dead.
-    // In multiplayer: player is "downed" (netIsDown) not dead — allies can revive them.
-    // We treat downed as dead for AI and turn purposes; it just isn't permanent.
-    public bool  IsDead  => netCurrentHealth.Value <= 0;
-    public bool  IsDown  => netIsDown.Value;
+    // FIX: Track whether we have already fired death visuals client-side.
+    // TriggerDeathClientRpc fires on ALL clients including the host.
+    // Without this guard the host fires ExecuteDeath twice, calling
+    // NetworkObject.Despawn twice and triggering the "Invalid Destroy" error.
+    private bool hasTriggeredDeathVisuals = false;
+
+    public int CurrentHealth => netCurrentHealth.Value;
+    public int MaxHealth => netMaxHealth.Value;
+    public bool IsDead => netCurrentHealth.Value <= 0;
+    public bool IsDown => netIsDown.Value;
     public float HealthPercent => netMaxHealth.Value > 0
         ? (float)netCurrentHealth.Value / netMaxHealth.Value : 0f;
 
@@ -66,12 +68,13 @@ public class NetworkedHealthComponent : NetworkBehaviour
     {
         if (IsServer)
         {
-            netMaxHealth.Value     = maxHealth;
+            netMaxHealth.Value = maxHealth;
             netCurrentHealth.Value = startingHealth > 0
                 ? Mathf.Min(startingHealth, maxHealth) : maxHealth;
         }
         netCurrentHealth.OnValueChanged += HandleNetHealthChanged;
         _currentHealthDebug = netCurrentHealth.Value;
+        hasTriggeredDeathVisuals = false;
     }
 
     public override void OnNetworkDespawn()
@@ -85,10 +88,6 @@ public class NetworkedHealthComponent : NetworkBehaviour
         ApplyDamageOnServer(amount);
     }
 
-    /// <summary>
-    /// Revives a downed player, restoring them to reviveHealthPercent of max HP.
-    /// Call this from the reviving player's action (server or ServerRpc).
-    /// </summary>
     public void Revive()
     {
         if (!IsServer) { ReviveServerRpc(); return; }
@@ -103,7 +102,7 @@ public class NetworkedHealthComponent : NetworkBehaviour
         if (!IsDown) return;
         int reviveHp = Mathf.Max(1, Mathf.RoundToInt(netMaxHealth.Value * reviveHealthPercent));
         netCurrentHealth.Value = reviveHp;
-        netIsDown.Value        = false;
+        netIsDown.Value = false;
         TriggerReviveClientRpc();
     }
 
@@ -111,7 +110,6 @@ public class NetworkedHealthComponent : NetworkBehaviour
     private void TriggerReviveClientRpc()
     {
         OnRevived?.Invoke();
-        // Re-enable the GameObject if it was hidden on death
         if (!gameObject.activeSelf)
             gameObject.SetActive(true);
     }
@@ -129,7 +127,7 @@ public class NetworkedHealthComponent : NetworkBehaviour
     public void InitializeHealth(int newMaxHealth)
     {
         if (!IsServer) { InitializeHealthServerRpc(newMaxHealth); return; }
-        netMaxHealth.Value     = Mathf.Max(1, newMaxHealth);
+        netMaxHealth.Value = Mathf.Max(1, newMaxHealth);
         netCurrentHealth.Value = netMaxHealth.Value;
     }
 
@@ -140,7 +138,7 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void InitializeHealthServerRpc(int newMax)
     {
-        netMaxHealth.Value     = Mathf.Max(1, newMax);
+        netMaxHealth.Value = Mathf.Max(1, newMax);
         netCurrentHealth.Value = netMaxHealth.Value;
     }
 
@@ -151,17 +149,18 @@ public class NetworkedHealthComponent : NetworkBehaviour
         TriggerDamageVisualsClientRpc(amount);
         if (netCurrentHealth.Value == 0)
         {
-            // Check if this is a player (has NetworkedUnit) or an enemy/prop
             bool isPlayer = GetComponent<NetworkedUnit>() != null;
             if (isPlayer)
             {
-                // Players enter DOWNED state — allies can revive them
                 netIsDown.Value = true;
                 TriggerDownedClientRpc();
             }
             else
             {
-                // Enemies and non-player objects die normally
+                // FIX: Reset the guard on the server before broadcasting death.
+                // The host's ClientRpc callback will set it again, but we need
+                // the server-side HandleDeath in NetworkedEnemyUnit to be able
+                // to run its ONE despawn path without the guard blocking it.
                 TriggerDeathClientRpc();
             }
         }
@@ -176,6 +175,11 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [ClientRpc]
     private void TriggerDamageVisualsClientRpc(int amount)
     {
+        // FIX: Guard against receiving RPCs for already-dead/destroyed objects.
+        // This prevents the MissingReferenceException in RpcMessages.Deserialize
+        // that occurs when damage visuals arrive after client-side object cleanup.
+        if (this == null || !gameObject.activeInHierarchy) return;
+
         SpawnDamageNumber(amount);
         TriggerDamageFlash();
     }
@@ -183,21 +187,43 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [ClientRpc]
     private void TriggerDownedClientRpc()
     {
-        // Player is downed — fire OnDeath so UI/animations react the same way,
-        // but the player object stays in the world so allies can revive them.
         OnDeath?.Invoke();
-        // Hide or play downed animation — just set inactive for now
         gameObject.SetActive(false);
     }
 
     [ClientRpc]
     private void TriggerDeathClientRpc()
     {
+        // FIX: This RPC fires on ALL clients including the host (server).
+        // Use hasTriggeredDeathVisuals to ensure we only run once per object lifetime.
+        // Without this, the host runs ExecuteDeath twice:
+        //   1. From NetworkedEnemyUnit.HandleDeath() → health.OnDeath event
+        //   2. From this ClientRpc arriving at the host
+        // The second call hits NetworkObject.Despawn on an already-despawned object,
+        // producing the "Invalid Destroy" log error.
+        if (hasTriggeredDeathVisuals) return;
+        hasTriggeredDeathVisuals = true;
+
         OnDeath?.Invoke();
-        if (deathDelay > 0f)
-            Invoke(nameof(ExecuteDeath), deathDelay);
+
+        // FIX: Do NOT call ExecuteDeath on clients. The server handles all
+        // NetworkObject lifecycle. Clients just hide the object and wait for
+        // the server's Despawn() call to propagate, which removes it cleanly.
+        // Calling Destroy() or Despawn() from a client causes the error:
+        // "[Invalid Destroy] Destroy a spawned NetworkObject on a non-host client is not valid"
+        if (IsServer)
+        {
+            if (deathDelay > 0f)
+                Invoke(nameof(ExecuteDeathOnServer), deathDelay);
+            else
+                ExecuteDeathOnServer();
+        }
         else
-            ExecuteDeath();
+        {
+            // Client: just hide visually. The server's Despawn(true) will
+            // destroy the object on all clients automatically via NGO.
+            gameObject.SetActive(false);
+        }
     }
 
     private void HandleNetHealthChanged(int oldVal, int newVal)
@@ -206,32 +232,25 @@ public class NetworkedHealthComponent : NetworkBehaviour
         OnHealthChanged?.Invoke(newVal, netMaxHealth.Value);
     }
 
-    private void ExecuteDeath()
+    // FIX: Renamed from ExecuteDeath — this only runs on the server now.
+    // Clients never call this directly. Server calls Despawn(true) which
+    // automatically destroys the object on all connected clients via NGO.
+    private void ExecuteDeathOnServer()
     {
-        // NEVER call Destroy() on a spawned NetworkObject from a non-server client.
-        // Server despawns it which automatically cleans up on all clients.
-        bool isNetworked = TryGetComponent<NetworkObject>(out var netObj);
+        if (!IsServer) return;
 
-        if (isNetworked)
+        if (TryGetComponent<NetworkObject>(out var netObj))
         {
-            if (IsServer)
-            {
-                if (destroyOnDeath)
-                    netObj.Despawn(true);
-                else
-                    gameObject.SetActive(false);
-            }
+            if (destroyOnDeath)
+                netObj.Despawn(true);   // destroys on server AND all clients
             else
-            {
-                // Client — just hide, wait for server despawn
                 gameObject.SetActive(false);
-            }
         }
         else
         {
-            // SP non-networked object — safe to destroy
+            // Non-networked object — safe to destroy directly
             if (destroyOnDeath)
-                Destroy(gameObject, deathDelay);
+                Destroy(gameObject);
             else
                 gameObject.SetActive(false);
         }

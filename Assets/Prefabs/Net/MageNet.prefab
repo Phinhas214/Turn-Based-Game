@@ -124,7 +124,6 @@ GameObject:
   - component: {fileID: 6396760386016016663}
   - component: {fileID: 2670622558486907118}
   - component: {fileID: 844497541243359373}
-  - component: {fileID: 8805797687680868294}
   - component: {fileID: 7179144902295360574}
   - component: {fileID: 2639212505980165156}
   - component: {fileID: 4896305900031482026}
@@ -133,6 +132,7 @@ GameObject:
   - component: {fileID: 8576501463249831871}
   - component: {fileID: 6502254005860565181}
   - component: {fileID: 7088535869859187341}
+  - component: {fileID: 8805797687680868294}
   m_Layer: 7
   m_Name: MageNet
   m_TagString: Untagged
@@ -243,18 +243,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedUnit
   ShowTopMostFoldoutHeaderGroup: 1
---- !u!114 &8805797687680868294
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 922802329369371357}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bae6b3e1119e64a28a8c055c442909d9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!65 &7179144902295360574
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -303,6 +291,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
   actionData: {fileID: 11400000, guid: 50ea6a0245b22fa488e3c45de3ea7f65, type: 2}
+  diceBox: {fileID: 0}
   facingRotationSteps: 1
   debugGizmos: 1
 --- !u!114 &8575818164243851910
@@ -346,6 +335,7 @@ MonoBehaviour:
   destroyOnDeath: 0
   deathDelay: 0
   _currentHealthDebug: 0
+  reviveHealthPercent: 0.25
 --- !u!114 &8576501463249831871
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -399,6 +389,18 @@ MonoBehaviour:
   destroyOnDeath: 0
   deathDelay: 0
   _currentHealth: 0
+--- !u!114 &8805797687680868294
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922802329369371357}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bae6b3e1119e64a28a8c055c442909d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1598925190506234163
 GameObject:
   m_ObjectHideFlags: 0

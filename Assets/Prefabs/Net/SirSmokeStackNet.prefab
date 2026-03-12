@@ -321,6 +321,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
   actionData: {fileID: 11400000, guid: 3c98bd948d1ce4a449eae030c63833d1, type: 2}
+  diceBox: {fileID: 0}
   facingRotationSteps: 1
   debugGizmos: 0
 --- !u!114 &7088535869859187341
@@ -402,6 +403,7 @@ MonoBehaviour:
   destroyOnDeath: 1
   deathDelay: 1
   _currentHealthDebug: 0
+  reviveHealthPercent: 0.25
 --- !u!1 &3413187921309941082
 GameObject:
   m_ObjectHideFlags: 0

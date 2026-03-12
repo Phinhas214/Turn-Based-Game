@@ -5,44 +5,16 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Networked replacement for LevelGenerator.
-///
-/// HOW IT WORKS:
-///   HOST:
-///     - Generates the level using a random seed (same algorithm as before).
-///     - After generation, sends a compact RoomSyncData[] to all clients via ClientRpc.
-///     - Spawns one NetworkObject player prefab per connected client.
-///     - Spawns enemies as NetworkObjects (server-owned).
-///
-///   CLIENTS:
-///     - Receive RoomSyncData[] (prefab index + world position for each room).
-///     - Instantiate the same room prefabs at the same positions locally.
-///     - Do NOT run any generation logic — they just build from the host's data.
-///     - Clients never spawn players or enemies themselves.
-///
-/// CHARACTER SELECTION:
-///   - Before the game starts, each player picks a character index in the lobby.
-///   - NetworkGameManager.GetCharacterSelections() returns a Dictionary<UGS_ID, int>.
-///   - This generator reads that and maps UGS IDs to connected client IDs.
-///
-/// SETUP:
-///   - Replace LevelGenerator with this script on your level generator GameObject.
-///   - Add NetworkObject component to this GameObject.
-///   - Fill playerPrefabs list (one per character class).
-///   - Fill roomPrefabs as before.
-/// </summary>
 public class NetworkedLevelGenerator : NetworkBehaviour
 {
-    // ── Sync data — minimal footprint sent over the network ───────────────
     [Serializable]
     public struct RoomSyncData : INetworkSerializable
     {
-        public int   PrefabIndex;   // index into roomPrefabs list
+        public int   PrefabIndex;
         public float WorldX;
         public float WorldY;
         public float WorldZ;
-        public int   GridX;         // layout grid position (not world)
+        public int   GridX;
         public int   GridZ;
 
         public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
@@ -56,27 +28,23 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         }
     }
 
-    // ── Inspector ─────────────────────────────────────────────────────────
     [Header("Room Prefabs (same order on all clients)")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
     [SerializeField] private GameObject hallwayPrefab;
 
     [Header("Player Prefabs (index matches character selection)")]
-    [Tooltip("Index 0 = Knight, 1 = Rogue, 2 = Mage, 3 = Cleric — must match CharacterSelectUI order.")]
     [SerializeField] private List<GameObject> playerPrefabs;
 
     [Header("Generation Settings")]
-    [SerializeField] private int   minRooms        = 5;
-    [SerializeField] private int   maxRooms        = 10;
+    [SerializeField] private int   minRooms          = 5;
+    [SerializeField] private int   maxRooms          = 10;
     [SerializeField] private float specialRoomChance = 0.3f;
-    [SerializeField] private float cellSize        = 2f;
-
-    [SerializeField] private float roomSpacing = 0f;
+    [SerializeField] private float cellSize          = 2f;
+    [SerializeField] private float roomSpacing       = 0f;
 
     [Header("Fallback (if no character selection data)")]
     [SerializeField] private GameObject fallbackPlayerPrefab;
 
-    // ── Shared types (keep parity with old LevelGenerator) ────────────────
     [Serializable]
     public class RoomPrefabData
     {
@@ -88,10 +56,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         [HideInInspector] public Vector3 gridOffset = Vector3.zero;
     }
 
-    // ── Events ────────────────────────────────────────────────────────────
     public static Action OnLevelReady;
 
-    // ── Runtime ───────────────────────────────────────────────────────────
     private List<PlacedRoom>                        placedRooms;
     private Dictionary<Vector2Int, PlacedRoom>      roomGrid;
     private Dictionary<(PlacedRoom, LevelGenerator.Direction), PlacedRoom> roomConnections;
@@ -99,31 +65,24 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
     public class PlacedRoom
     {
-        public GameObject                roomInstance;
-        public RoomPrefabData            prefabData;
-        public RoomConnector             connector;
-        public Vector3                   worldPosition;
-        public Vector2Int                gridPosition;
-        public RoomGrid                  roomGrid;
-        public int                       prefabIndex; // needed for sync
+        public GameObject     roomInstance;
+        public RoomPrefabData prefabData;
+        public RoomConnector  connector;
+        public Vector3        worldPosition;
+        public Vector2Int     gridPosition;
+        public RoomGrid       roomGrid;
+        public int            prefabIndex;
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // NGO Spawn
-    // ─────────────────────────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
     {
         if (!IsServer) return;
 
-        // Increase NGO message size limit so large levels never hit the buffer cap.
-        // Default is 64KB — we set it to 4MB which handles any realistic room count.
         var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
         if (transport != null)
         {
-            transport.MaxPayloadSize        = 4 * 1024 * 1024; // 4 MB
-            transport.MaxSendQueueSize      = 4 * 1024 * 1024; // 4 MB send queue
-            Debug.Log("[NetworkedLevelGenerator] NGO transport buffer set to 4MB.");
+            transport.MaxPayloadSize   = 4 * 1024 * 1024;
+            transport.MaxSendQueueSize = 4 * 1024 * 1024;
         }
 
         StartCoroutine(WaitThenGenerate());
@@ -131,70 +90,46 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
     private IEnumerator WaitThenGenerate()
     {
-        // Wait until NGO has fully initialised this NetworkObject on the server
-        // before doing anything — no time guesses, just wait for the frame to settle
         yield return new WaitForEndOfFrame();
         ReadRoomPrefabDefinitions();
         GenerateLevelOnServer();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Server: Generate
-    // ─────────────────────────────────────────────────────────────────────
-
     private void GenerateLevelOnServer()
     {
         generationSeed = UnityEngine.Random.Range(0, int.MaxValue);
         UnityEngine.Random.InitState(generationSeed);
-
-        // Server uses UnityEngine.Random — isolatedRandom must be null
         isolatedRandom = null;
 
         ClearLevel();
-        placedRooms    = new List<PlacedRoom>();
-        roomGrid       = new Dictionary<Vector2Int, PlacedRoom>();
+        placedRooms     = new List<PlacedRoom>();
+        roomGrid        = new Dictionary<Vector2Int, PlacedRoom>();
         roomConnections = new Dictionary<(PlacedRoom, LevelGenerator.Direction), PlacedRoom>();
 
         GenerateRoomLayout();
         InitializeRoomGrids();
         InitializeDoors();
+        NetworkedUnit.RebuildRoomGridCache();
 
-        // Send just the seed — clients regenerate the level locally using
-        // the same algorithm and seed, producing identical results with zero
-        // network allocation overhead regardless of level size
         SyncLevelToClientsClientRpc(generationSeed, null);
-
-        // Wait for all clients to confirm ready, then spawn
         StartCoroutine(WaitForAllClientsReadyThenSpawn());
     }
 
-    // ── Client acknowledgement tracking ──────────────────────────────────
-    // No time guesses — server waits until EVERY non-host client explicitly
-    // confirms it has finished reconstructing the level before spawning players.
     private HashSet<ulong> clientsConfirmedReady = new HashSet<ulong>();
 
-    /// <summary>
-    /// Called by each non-host client the moment it finishes ReconstructLevelOnClient.
-    /// The server collects these and only spawns players once everyone is ready.
-    /// </summary>
     [ServerRpc(RequireOwnership = false)]
     public void ClientLevelReadyServerRpc(ServerRpcParams rpcParams = default)
     {
         ulong senderId = rpcParams.Receive.SenderClientId;
         clientsConfirmedReady.Add(senderId);
-
         int nonHostClients = NetworkManager.Singleton.ConnectedClientsList.Count - 1;
-        Debug.Log($"[NetworkedLevelGenerator] Client {senderId} ready " +
-                  $"({clientsConfirmedReady.Count}/{nonHostClients})");
+        Debug.Log($"[NetworkedLevelGenerator] Client {senderId} ready ({clientsConfirmedReady.Count}/{nonHostClients})");
     }
 
     private IEnumerator WaitForAllClientsReadyThenSpawn()
     {
         int nonHostClients = NetworkManager.Singleton.ConnectedClientsList.Count - 1;
 
-        Debug.Log($"[NetworkedLevelGenerator] Waiting for {nonHostClients} client(s) to confirm level ready...");
-
-        // If host is alone, skip waiting
         if (nonHostClients <= 0)
         {
             Debug.Log("[NetworkedLevelGenerator] Solo host — spawning immediately.");
@@ -203,12 +138,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             yield break;
         }
 
-        // Wait until every connected non-host client has called ClientLevelReadyServerRpc
-        // No timeout — if a client never responds it means it crashed/disconnected
-        // and NGO's disconnect callback will handle that separately
         while (clientsConfirmedReady.Count < nonHostClients)
         {
-            // Re-check client count in case someone disconnected while waiting
             nonHostClients = NetworkManager.Singleton.ConnectedClientsList.Count - 1;
             yield return null;
         }
@@ -218,18 +149,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         OnLevelReady?.Invoke();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // ClientRpc: Sync level layout
-    // ─────────────────────────────────────────────────────────────────────
-
-    // ── Chunked level sync — one room per RPC to stay under NGO size limits ──
-
-    // ── Level sync — send seed only, clients regenerate identically ─────────
-    // Instead of sending all room data over the network (which causes memory
-    // allocation errors), we just send the seed. Both host and client run the
-    // exact same generation algorithm with the same seed = identical results.
-    // Zero allocation issues, works for any room count, any device.
-
     [ClientRpc]
     private void SyncLevelToClientsClientRpc(int seed, RoomSyncData[] rooms)
     {
@@ -238,31 +157,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         RegenerateLevelFromSeed(seed);
     }
 
-    // ── Isolated random for generation — never touches UnityEngine.Random ──
-    // This is critical: UnityEngine.Random state on the client and server will
-    // diverge because the server uses Random for other things (player spawn offsets
-    // etc) after generation. Using System.Random with the same seed guarantees
-    // the client runs the EXACT same sequence as the server did during generation.
     private System.Random isolatedRandom;
-
-    private int IsolatedRange(int min, int max) => isolatedRandom.Next(min, max + 1);
-    private float IsolatedValue()               => (float)isolatedRandom.NextDouble();
 
     private void RegenerateLevelFromSeed(int seed)
     {
-        // CRITICAL: isolatedRandom must be NULL so GenRange/GenValue use
-        // UnityEngine.Random — the same RNG the server used during generation.
-        // System.Random uses a completely different algorithm so even with the
-        // same seed it produces different numbers, giving a different layout.
         isolatedRandom = null;
-
-        // CRITICAL: ReadRoomPrefabDefinitions must run on the client too.
-        // Without it all room widths/heights stay at the default 10x10 instead
-        // of the actual prefab dimensions. PlaceRoomInDirection then calculates
-        // wrong connector positions and rooms either overlap or fail to connect,
-        // causing the generation to produce only 1-2 rooms and stop.
         ReadRoomPrefabDefinitions();
-
         UnityEngine.Random.InitState(seed);
 
         ClearLevel();
@@ -274,6 +174,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         InitializeRoomGrids();
         InitializeDoors();
         ReconstructConnectionsFromGrid();
+        NetworkedUnit.RebuildRoomGridCache();
 
         PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
         if (startRoom != null)
@@ -288,101 +189,29 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         Debug.Log($"[NetworkedLevelGenerator] Client level built from seed {seed} — {placedRooms.Count} rooms.");
     }
 
-    private void ReconstructLevelOnClient(int seed, RoomSyncData[] rooms)
-    {
-        UnityEngine.Random.InitState(seed);
-
-        ClearLevel();
-        placedRooms     = new List<PlacedRoom>();
-        roomGrid        = new Dictionary<Vector2Int, PlacedRoom>();
-        roomConnections = new Dictionary<(PlacedRoom, LevelGenerator.Direction), PlacedRoom>();
-
-        foreach (RoomSyncData data in rooms)
-        {
-            if (data.PrefabIndex < 0 || data.PrefabIndex >= roomPrefabs.Count)
-            {
-                Debug.LogError($"[NetworkedLevelGenerator] Invalid prefab index {data.PrefabIndex}");
-                continue;
-            }
-
-            RoomPrefabData prefabData = roomPrefabs[data.PrefabIndex];
-            Vector3    worldPos = new Vector3(data.WorldX, data.WorldY, data.WorldZ);
-            Vector2Int gridPos  = new Vector2Int(data.GridX, data.GridZ);
-
-            PlacedRoom room = InstantiateRoom(prefabData, data.PrefabIndex, gridPos, worldPos);
-            if (room != null)
-            {
-                placedRooms.Add(room);
-                roomGrid[gridPos] = room;
-            }
-        }
-
-        // ── FIX 1: Rebuild roomConnections on the client ──────────────────
-        // The server builds connections via CreateHallway during generation,
-        // but the client only receives positions — so we rebuild the connection
-        // map here from the grid positions, which are identical on both sides.
-        ReconstructConnectionsFromGrid();
-
-        InitializeRoomGrids();
-        InitializeDoors();
-
-        PlacedRoom startRoom = placedRooms.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
-        if (startRoom != null)
-        {
-            RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom));
-            LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
-        }
-
-        // Tell the server we're done reconstructing the level
-        // so it knows when it's safe to spawn players
-        ClientLevelReadyServerRpc();
-
-        // Don't fire OnLevelReady yet — wait for our player object to arrive
-        StartCoroutine(WaitForLocalPlayerThenFireReady());
-
-        Debug.Log("[NetworkedLevelGenerator] Client level reconstruction complete.");
-    }
-
-    /// <summary>
-    /// Rebuilds roomConnections on the client from grid adjacency.
-    /// Two rooms are connected if they are exactly 1 grid step apart AND
-    /// both have a RoomConnector point facing each other.
-    /// </summary>
     private void ReconstructConnectionsFromGrid()
     {
         foreach (PlacedRoom a in placedRooms)
         {
             foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
-                // Already registered this direction?
                 if (roomConnections.ContainsKey((a, dir))) continue;
 
                 Vector2Int neighbourGrid = a.gridPosition + GetDirectionOffset(dir);
                 if (!roomGrid.TryGetValue(neighbourGrid, out PlacedRoom b)) continue;
-
-                // Verify both rooms actually have connector points facing each other
                 if (a.connector == null || b.connector == null) continue;
                 if (!a.connector.HasConnectionPoint(dir)) continue;
                 if (!b.connector.HasConnectionPoint(GetOppositeDirection(dir))) continue;
 
-                roomConnections[(a, dir)]                        = b;
-                roomConnections[(b, GetOppositeDirection(dir))]  = a;
+                roomConnections[(a, dir)]                       = b;
+                roomConnections[(b, GetOppositeDirection(dir))] = a;
             }
         }
-
         Debug.Log($"[NetworkedLevelGenerator] Client rebuilt {roomConnections.Count} room connections.");
     }
 
-    /// <summary>
-    /// Waits until the local client's player NetworkObject has been spawned
-    /// by the server, then fires OnLevelReady so UI/action systems can find it.
-    /// </summary>
-    private System.Collections.IEnumerator WaitForLocalPlayerThenFireReady()
+    private IEnumerator WaitForLocalPlayerThenFireReady()
     {
-        // Instead of scanning every frame (which allocates a new array each frame
-        // and causes ALLOC_TEMP_MAIN warnings), we scan once every 10 frames.
-        // NGO fires OnClientConnectedCallback and NetworkObject.OnSpawn when a
-        // player object arrives — we just need to not miss it.
         const int scanInterval = 10;
         int       frameCount   = 0;
         float     timeout      = 15f;
@@ -393,7 +222,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             elapsed += Time.deltaTime;
             frameCount++;
 
-            // Only do the expensive scan every 10 frames
             if (frameCount % scanInterval == 0)
             {
                 Unit[] units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
@@ -408,17 +236,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
                     }
                 }
             }
-
             yield return null;
         }
 
         Debug.LogWarning("[NetworkedLevelGenerator] Timed out waiting for local player. Firing OnLevelReady anyway.");
         OnLevelReady?.Invoke();
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Player spawning (Server only)
-    // ─────────────────────────────────────────────────────────────────────
 
     private void SpawnAllPlayers()
     {
@@ -429,23 +252,18 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             return;
         }
 
-        // Set start room for server-side systems
         RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom));
         LevelGrid.Instance?.SetCurrentRoomGrid(startRoom.roomGrid);
 
-        // Read character selections directly from LobbySync — it persists from the menu scene
-        // via DontDestroyOnLoad so the data is guaranteed to be here when we spawn.
         var connectedClients = NetworkManager.Singleton.ConnectedClientsList;
 
-        int centerX = startRoom.roomGrid.GetWidth() / 2;
+        int centerX = startRoom.roomGrid.GetWidth()  / 2;
         int centerZ = startRoom.roomGrid.GetHeight() / 2;
 
         for (int i = 0; i < connectedClients.Count; i++)
         {
             ulong clientId = connectedClients[i].ClientId;
 
-            // LobbySync holds the char index each client chose in the menu.
-            // Falls back to 0 if LobbySync is missing or the client never registered.
             int charIndex = (LobbySync.Instance != null)
                 ? LobbySync.Instance.GetCharacterIndex(clientId)
                 : 0;
@@ -454,7 +272,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             GameObject prefabToSpawn = GetPlayerPrefab(charIndex);
 
-            // Offset each player slightly so they don't overlap
             GridPosition spawnPos = new GridPosition(
                 centerX + (i % 2 == 0 ? -1 : 1),
                 centerZ + (i / 2 == 0 ? -1 : 1));
@@ -469,14 +286,21 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
             if (netObj == null)
             {
-                Debug.LogError($"[NetworkedLevelGenerator] Player prefab missing NetworkObject!");
+                Debug.LogError("[NetworkedLevelGenerator] Player prefab missing NetworkObject!");
                 Destroy(playerGO);
                 continue;
             }
 
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
-            // Place on grid (server side)
+            // FIX HOST SPAWN: Set transform.position directly right after SpawnAsPlayerObject.
+            // NGO's NetworkTransform hasn't ticked yet at this point, so there is no "previous"
+            // position to interpolate from — the first NT snapshot will already be at spawnWorldPos.
+            // We cannot use NetworkTransform.Teleport() here because that requires being called
+            // from the authoritative side of the NT, which varies by authority mode and is not
+            // guaranteed to be the level generator's context.
+            playerGO.transform.position = spawnWorldPos;
+
             Unit unit = playerGO.GetComponent<Unit>();
             if (unit != null)
                 unit.PlaceInRoom(startRoom.roomGrid, spawnPos);
@@ -485,27 +309,32 @@ public class NetworkedLevelGenerator : NetworkBehaviour
             if (netUnit != null)
                 netUnit.PlaceInRoom(startRoom.roomGrid, spawnPos);
 
-            // Register this client's starting room in RoomManager so
-            // TilemapGridVisual resolves the correct tilemap per client
-            RoomManager.Instance?.SetCurrentRoom(
-                ConvertToOldPlacedRoom(startRoom), clientId);
+            RoomManager.Instance?.SetCurrentRoom(ConvertToOldPlacedRoom(startRoom), clientId);
 
             Debug.Log($"[NetworkedLevelGenerator] Spawned class {charIndex} for client {clientId} at {spawnPos}");
-            
-            // Capture loop variables for the coroutine closure
-            ulong capturedClientId  = clientId;
-            GridPosition capturedSpawnPos = spawnPos;
-            RoomGrid capturedRoomGrid = startRoom.roomGrid;
-            NetworkedUnit capturedNetUnit = netUnit;
-            StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
+
+            ulong        capturedClientId  = clientId;
+            GridPosition capturedSpawnPos  = spawnPos;
+            RoomGrid     capturedRoomGrid  = startRoom.roomGrid;
+            NetworkedUnit capturedNetUnit  = netUnit;
+
+            // FIX HOST SPAWN: The host (server) is ALSO a client, so it receives
+            // InitialiseUnitOnClientClientRpc just like remote clients. This caused the
+            // host to get placed wrong because:
+            //   1. PlaceInRoom above sets host position correctly on the server side.
+            //   2. Then the delayed RPC arrives at the host-as-client and calls
+            //      ApplyClientInitialisation again — sometimes resolving a different room
+            //      (e.g. the room the camera is looking at) and overwriting the correct placement.
+            //
+            // Fix: for the HOST (server clientId == NetworkManager.ServerClientId), skip the
+            // delayed RPC entirely. The host's placement is already authoritative from
+            // PlaceInRoom above. For remote clients, send the RPC as before.
+            bool isHostPlayer = (clientId == NetworkManager.Singleton.LocalClientId && IsHost);
+            if (!isHostPlayer)
+                StartCoroutine(SendInitRpcAfterDelay(capturedNetUnit, capturedRoomGrid, capturedSpawnPos, capturedClientId));
         }
     }
 
-    /// <summary>
-    /// Waits a short delay then tells the owning client to initialise their
-    /// local Unit component. The delay ensures the NetworkObject has fully
-    /// arrived on the client before we send the RPC.
-    /// </summary>
     private IEnumerator SendInitRpcAfterDelay(NetworkedUnit netUnit, RoomGrid roomGrid,
                                                GridPosition spawnPos, ulong clientId)
     {
@@ -516,10 +345,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         Vector3 spawnWorldPos = roomGrid.GetWorldPosition(spawnPos);
         ClientRpcParams ownerOnly = new ClientRpcParams
         {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new ulong[] { clientId }
-            }
+            Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { clientId } }
         };
 
         netUnit.InitialiseUnitOnClientClientRpc(
@@ -540,10 +366,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         return null;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Sync data builder
-    // ─────────────────────────────────────────────────────────────────────
-
     private RoomSyncData[] BuildSyncData()
     {
         var list = new List<RoomSyncData>();
@@ -561,10 +383,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         }
         return list.ToArray();
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Room generation (server only — same logic as original LevelGenerator)
-    // ─────────────────────────────────────────────────────────────────────
 
     private void ReadRoomPrefabDefinitions()
     {
@@ -586,16 +404,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         }
     }
 
-    // ── Random helpers — use isolatedRandom on client, UnityEngine.Random on server ──
     private int GenRange(int min, int max)
-        => isolatedRandom != null
-            ? isolatedRandom.Next(min, max + 1)
-            : UnityEngine.Random.Range(min, max + 1);
+        => isolatedRandom != null ? isolatedRandom.Next(min, max + 1) : UnityEngine.Random.Range(min, max + 1);
 
     private float GenValue()
-        => isolatedRandom != null
-            ? (float)isolatedRandom.NextDouble()
-            : UnityEngine.Random.value;
+        => isolatedRandom != null ? (float)isolatedRandom.NextDouble() : UnityEngine.Random.value;
 
     private void ShuffleListGen<T>(List<T> list)
     {
@@ -614,19 +427,14 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         var queue = new Queue<PlacedRoom>();
         queue.Enqueue(startRoom);
 
-        int roomCount = 1;
-        int target    = GenRange(minRooms, maxRooms);
-
-        // Safety: total placements attempted across entire generation, not per-room.
-        // A large limit ensures we always reach the target room count as long as
-        // connectors are available — only truly exhausted layouts exit early.
+        int roomCount        = 1;
+        int target           = GenRange(minRooms, maxRooms);
         int totalAttempts    = 0;
-        int maxTotalAttempts = target * 20; // generous — never exits too early
+        int maxTotalAttempts = target * 20;
 
         while (queue.Count > 0 && roomCount < target && totalAttempts < maxTotalAttempts)
         {
             PlacedRoom current = queue.Dequeue();
-
             var dirs   = GetAvailableDirections(current);
             ShuffleListGen(dirs);
             int toMake = Mathf.Min(GenRange(1, 2), dirs.Count);
@@ -648,23 +456,18 @@ public class NetworkedLevelGenerator : NetworkBehaviour
                         queue.Enqueue(newRoom);
 
                     roomCount++;
-
-                    // Only make as many rooms from this node as toMake allows
                     if (roomCount % toMake == 0) break;
                 }
                 else
                 {
-                    // This direction failed — put the room back in queue so
-                    // other directions get tried from it on the next pass
                     if (!queue.Contains(current))
                         queue.Enqueue(current);
                 }
             }
         }
 
-        // If we still haven't hit target, log a warning but don't fail silently
         if (roomCount < target)
-            Debug.LogWarning($"[NetworkedLevelGenerator] Only placed {roomCount}/{target} rooms — connectors may be exhausted.");
+            Debug.LogWarning($"[NetworkedLevelGenerator] Only placed {roomCount}/{target} rooms.");
         else
             Debug.Log($"[NetworkedLevelGenerator] Generated {placedRooms.Count} rooms.");
     }
@@ -672,10 +475,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     private PlacedRoom PlaceRoom(LevelGenerator.RoomType roomType, Vector2Int gridPos, Vector3 worldPos)
     {
         if (roomGrid.ContainsKey(gridPos)) return null;
-
         RoomPrefabData prefabData = GetRandomRoomPrefab(roomType);
         if (prefabData == null) return null;
-
         int prefabIndex = roomPrefabs.IndexOf(prefabData);
         return InstantiateRoom(prefabData, prefabIndex, gridPos, worldPos);
     }
@@ -713,13 +514,11 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         foreach (PlacedRoom room in placedRooms)
         {
             RoomTilemapSetup setup = room.roomInstance.GetComponent<RoomTilemapSetup>();
-            if (setup == null)
-                setup = room.roomInstance.AddComponent<RoomTilemapSetup>();
+            if (setup == null) setup = room.roomInstance.AddComponent<RoomTilemapSetup>();
             setup.Initialize();
 
             RoomGrid rg = room.roomInstance.GetComponent<RoomGrid>();
-            if (rg == null)
-                rg = room.roomInstance.AddComponent<RoomGrid>();
+            if (rg == null) rg = room.roomInstance.AddComponent<RoomGrid>();
 
             rg.Initialize(setup.GetWidth(), setup.GetHeight(), setup.GetCellSize(),
                           room.worldPosition, setup.GetGridOffset(), null);
@@ -732,10 +531,8 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     private void InitializeDoors()
     {
         foreach (PlacedRoom room in placedRooms)
-        {
             foreach (RoomDoor door in room.roomInstance.GetComponentsInChildren<RoomDoor>())
                 door.Initialize(ConvertToOldPlacedRoom(room));
-        }
     }
 
     private void ClearLevel()
@@ -743,10 +540,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         foreach (Transform child in transform)
             Destroy(child.gameObject);
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────
 
     private PlacedRoom PlaceRoomInDirection(PlacedRoom existing, LevelGenerator.Direction dir, LevelGenerator.RoomType type)
     {
@@ -764,20 +557,17 @@ public class NetworkedLevelGenerator : NetworkBehaviour
 
         var entry = tempConn.GetConnectionPoint(oppDir);
 
-        // Get the grid offset and convert it to a world direction vector
         Vector2Int gridOffset = GetDirectionOffset(dir);
-        Vector3 worldDir = new Vector3(gridOffset.x, 0, gridOffset.y);
-
-        // Apply the inspector spacing to the new position
-        Vector3 newPos = exit.transform.position - entry.transform.localPosition + (worldDir * roomSpacing);
-        Vector2Int newGrid = existing.gridPosition + gridOffset;
+        Vector3    worldDir   = new Vector3(gridOffset.x, 0, gridOffset.y);
+        Vector3    newPos     = exit.transform.position - entry.transform.localPosition + (worldDir * roomSpacing);
+        Vector2Int newGrid    = existing.gridPosition + gridOffset;
 
         return PlaceRoom(type, newGrid, newPos);
     }
 
     private void CreateHallway(PlacedRoom a, PlacedRoom b, LevelGenerator.Direction dir)
     {
-        roomConnections[(a, dir)]                    = b;
+        roomConnections[(a, dir)]                       = b;
         roomConnections[(b, GetOppositeDirection(dir))] = a;
 
         if (hallwayPrefab == null) return;
@@ -786,7 +576,7 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         var entry = b.connector.GetConnectionPoint(GetOppositeDirection(dir));
         if (exit?.transform == null || entry?.transform == null) return;
 
-        Vector3 pos = (exit.transform.position + entry.transform.position) * 0.5f;
+        Vector3    pos = (exit.transform.position + entry.transform.position) * 0.5f;
         Quaternion rot = (dir == LevelGenerator.Direction.East || dir == LevelGenerator.Direction.West)
             ? Quaternion.Euler(0, 90, 0) : Quaternion.identity;
 
@@ -834,10 +624,10 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     {
         switch (dir)
         {
-            case LevelGenerator.Direction.North: return new Vector2Int(0,  1);
-            case LevelGenerator.Direction.South: return new Vector2Int(0, -1);
-            case LevelGenerator.Direction.East:  return new Vector2Int(1,  0);
-            case LevelGenerator.Direction.West:  return new Vector2Int(-1, 0);
+            case LevelGenerator.Direction.North: return new Vector2Int( 0,  1);
+            case LevelGenerator.Direction.South: return new Vector2Int( 0, -1);
+            case LevelGenerator.Direction.East:  return new Vector2Int( 1,  0);
+            case LevelGenerator.Direction.West:  return new Vector2Int(-1,  0);
             default: return Vector2Int.zero;
         }
     }
@@ -877,7 +667,6 @@ public class NetworkedLevelGenerator : NetworkBehaviour
         return connected;
     }
 
-    // ── Converts internal PlacedRoom to LevelGenerator.PlacedRoom for compatibility ─
     public LevelGenerator.PlacedRoom ConvertToOldPlacedRoom(PlacedRoom room)
     {
         return new LevelGenerator.PlacedRoom
@@ -895,12 +684,12 @@ public class NetworkedLevelGenerator : NetworkBehaviour
     {
         return new LevelGenerator.RoomPrefabData
         {
-            prefab       = data.prefab,
-            roomType     = data.roomType,
-            spawnWeight  = data.spawnWeight,
-            width        = data.width,
-            height       = data.height,
-            gridOffset   = data.gridOffset
+            prefab      = data.prefab,
+            roomType    = data.roomType,
+            spawnWeight = data.spawnWeight,
+            width       = data.width,
+            height      = data.height,
+            gridOffset  = data.gridOffset
         };
     }
 }

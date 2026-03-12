@@ -314,13 +314,13 @@ GameObject:
   m_Component:
   - component: {fileID: 7452946023283060347}
   - component: {fileID: 8196366089892556402}
-  - component: {fileID: 7433247199158922092}
-  - component: {fileID: 6174879794123682378}
-  - component: {fileID: 6188976603983702837}
   - component: {fileID: 8330677325356227350}
   - component: {fileID: 2711663199561445073}
   - component: {fileID: 6261395266465452630}
   - component: {fileID: 613578261285717485}
+  - component: {fileID: 7433247199158922092}
+  - component: {fileID: 6174879794123682378}
+  - component: {fileID: 6188976603983702837}
   m_Layer: 7
   m_Name: EnemiesNet
   m_TagString: Untagged
@@ -368,55 +368,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.3740344, y: 0.8937532, z: 1.3740344}
   m_Center: {x: 0.116650224, y: 0.21186674, z: 0.070367575}
---- !u!114 &7433247199158922092
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8025110106504339535}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd4159fef9583c74d9947b5451066483, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
-  stats: {fileID: 11400000, guid: 731661ef92fa6d94b93561c19c293a86, type: 2}
-  showDebugLogs: 0
---- !u!114 &6174879794123682378
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8025110106504339535}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8c4b9ca878a1a874c88bd094a0615d14, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
-  stepDelay: 0.15
---- !u!114 &6188976603983702837
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8025110106504339535}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3c305cccafa530a41b7a897900a715c3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HealthComponent
-  damageNumberPrefab: {fileID: 5974884329945659219, guid: e3ca6c27c33f03f4aa57520969b4352b, type: 3}
-  damageNumberOffset: {x: 0, y: 1.5, z: 0}
-  damageFlashObject: {fileID: 702090570923245453}
-  flashDuration: 0.1
-  flashCount: 2
-  maxHealth: 10
-  startingHealth: 10
-  destroyOnDeath: 1
-  deathDelay: 0.5
-  _currentHealth: 10
 --- !u!114 &8330677325356227350
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -465,6 +416,7 @@ MonoBehaviour:
   destroyOnDeath: 1
   deathDelay: 0.5
   _currentHealthDebug: 10
+  reviveHealthPercent: 0.25
 --- !u!114 &6261395266465452630
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -494,6 +446,56 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedEnemyAI
   ShowTopMostFoldoutHeaderGroup: 1
   stepDelay: 0.2
+--- !u!114 &7433247199158922092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8025110106504339535}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd4159fef9583c74d9947b5451066483, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
+  stats: {fileID: 11400000, guid: 731661ef92fa6d94b93561c19c293a86, type: 2}
+  showDebugLogs: 0
+  selectedVisual: {fileID: 0}
+--- !u!114 &6174879794123682378
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8025110106504339535}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c4b9ca878a1a874c88bd094a0615d14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
+  stepDelay: 0.15
+--- !u!114 &6188976603983702837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8025110106504339535}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c305cccafa530a41b7a897900a715c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HealthComponent
+  damageNumberPrefab: {fileID: 5974884329945659219, guid: e3ca6c27c33f03f4aa57520969b4352b, type: 3}
+  damageNumberOffset: {x: 0, y: 1.5, z: 0}
+  damageFlashObject: {fileID: 702090570923245453}
+  flashDuration: 0.1
+  flashCount: 2
+  maxHealth: 10
+  startingHealth: 10
+  destroyOnDeath: 1
+  deathDelay: 0.5
+  _currentHealth: 10
 --- !u!1 &8987739170651933238
 GameObject:
   m_ObjectHideFlags: 0
