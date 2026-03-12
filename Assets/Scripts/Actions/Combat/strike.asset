@@ -18,10 +18,10 @@ MonoBehaviour:
   - {fileID: 0}
   useDiceDamage: 1
   baseDamage: 0
-  diceCount: 5
+  diceCount: 6
   dieType: 6
-  flatBonus: 0
-  damageMultiplier: 2
+  flatBonus: 1
+  damageMultiplier: 3
   attackPattern: {fileID: 11400000, guid: 9ff93c24dc6ed08448cd0ee6abcdc690, type: 2}
   rotatesToFacing: 1
   minRange: 0
@@ -31,5 +31,5 @@ MonoBehaviour:
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: "Damage : 5d6 + 0 \xD7 2\nStamina cost: 2\nPattern : Strike_AP 1 (1 tiles)\nRange
+  _summary: "Damage : 6d6 + 1 \xD7 3\nStamina cost: 2\nPattern : Strike_AP 1 (2 tiles)\nRange
     : Melee\nRotates : True"

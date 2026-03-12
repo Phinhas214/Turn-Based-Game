@@ -12,9 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0acd3a5764e85d5458b22565e6ef901b, type: 3}
   m_Name: Bite
   m_EditorClassIdentifier: Assembly-CSharp::AttackPattern
-  tiles: []
-  minRange: 1
-  maxRange: 1
-  _previewInfo: 'Tile count: 0
+  tiles:
+  - offset: {x: 0, y: 0}
+  minRange: 0
+  maxRange: 0
+  _previewInfo: 'Tile count: 1
 
-    Range: 1 - 1 (RANGED)'
+    Range: 0 - 0 (MELEE)'

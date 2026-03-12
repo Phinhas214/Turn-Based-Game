@@ -16,11 +16,11 @@ MonoBehaviour:
   maxHealth: 25
   moveRange: 3
   attackData: {fileID: 11400000, guid: 4fd6d99f5c90e9246a4f5a7247567e5e, type: 2}
-  kiteEnabled: 1
+  kiteEnabled: 0
   kiteRange: 5
   alwaysChases: 1
   turnsBeforeFirstAction: 0
   _summary: 'HP: 25  |  Move: 3  |  Attack range: 0 (from attackData)
 
     Attack:
-    Attack  |  Kite: True (range 5)'
+    Attack  |  Kite: False (range 5)'
