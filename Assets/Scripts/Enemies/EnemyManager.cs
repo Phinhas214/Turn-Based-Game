@@ -100,11 +100,17 @@ public class EnemyManager : MonoBehaviour
         foreach (EnemyUnit enemy in snapshot)
         {
             if (enemy == null || enemy.IsDead) continue;
-            EnemyAI ai = enemy.GetComponent<EnemyAI>();
-            if (ai == null) continue;
+
+            EnemyAI ai     = enemy.GetComponent<EnemyAI>();
+            BossAI  bossAI = enemy.GetComponent<BossAI>();
+            if (ai == null && bossAI == null) continue;
 
             bool done = false;
-            ai.TakeTurn(() => done = true);
+            if (bossAI != null)
+                bossAI.TakeTurn(() => done = true);
+            else
+                ai.TakeTurn(() => done = true);
+
             yield return new WaitUntil(() => done);
         }
 

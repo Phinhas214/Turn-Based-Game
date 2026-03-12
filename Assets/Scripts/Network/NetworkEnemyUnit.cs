@@ -122,9 +122,8 @@ public class NetworkedEnemyUnit : NetworkBehaviour, IHasHealth
 
         OnEnemyDied?.Invoke(this);
         NetworkedEnemyManager.Instance?.UnregisterEnemy(this);
-        StartCoroutine(DespawnAfterDelay(0.5f));
-
-        if (showDebugLogs) Debug.Log($"[NetworkedEnemyUnit] {stats?.enemyName} died.");
+        
+        StartCoroutine(DespawnAfterDelay(0.5f)); 
     }
 
     private System.Collections.IEnumerator DespawnAfterDelay(float delay)

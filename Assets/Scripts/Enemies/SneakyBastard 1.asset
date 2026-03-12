@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 075fa26d8c5a09441ad3d939ccc1e656, type: 3}
+  m_Name: SneakyBastard 1
+  m_EditorClassIdentifier: Assembly-CSharp::BossStats
+  waves:
+  - waveName: Wolfs
+    spawns:
+    - prefab: {fileID: 4615168901716942150, guid: 2d2dee31910d56d4dac9112b0a7b6eb0, type: 3}
+      count: 2
+  - waveName: Snowmen
+    spawns:
+    - prefab: {fileID: 8025110106504339535, guid: 59f93f03f17988548bbd8327cf699f82, type: 3}
+      count: 2
+  spawnRadius: 5
+  invisibilityCooldownTurns: 3
+  goesInvisAfterAttackEveryNTurns: 2
+  invisHitChance: 0.15
+  baseRevealRadius: 2
+  revealRadiusPerExtraPlayer: 1
+  randomiseCombatMode: 1
+  forcedCombatMode: 0
+  rangedRetreatRange: 2
+  rangedPreferredRange: 4
+  _summary: 'Waves: 2  |  Spawn radius: 5
+
+    Invis cooldown: 3 turns  |  Invis
+    after attack every 2 turns
+
+    Reveal radius: 2 (+1/extra player)  |  Hit chance
+    while invis: 15 %
+
+    Ranged retreat: 2 tiles  |  Preferred range: 4 tiles'

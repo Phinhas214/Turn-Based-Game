@@ -5,21 +5,12 @@ using UnityEngine;
 
 /// <summary>
 /// Controls one enemy's behaviour on its turn.
-///
-/// Uses PlayerTarget to find the player — this works regardless of
-/// initialization order and will naturally extend to multiplayer
-/// (target the closest PlayerTarget).
-///
-/// Per turn:
-///   - If no PlayerTarget in same room → idle
-///   - If player in room but out of attack range → move closer
-///   - If player in range → attack
+/// Enemies will not stack on top of each other or on the player's tile.
 /// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class EnemyAI : MonoBehaviour
 {
     [Header("Movement Timing")]
-    [Tooltip("Seconds between each step when moving across tiles.")]
     [SerializeField, Min(0f)] private float stepDelay = 0.2f;
 
     private EnemyUnit enemyUnit;
@@ -31,7 +22,6 @@ public class EnemyAI : MonoBehaviour
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>Called by EnemyManager. Runs the full turn then calls onComplete.</summary>
     public void TakeTurn(Action onComplete)
     {
         if (!enemyUnit.CanActThisTurn() || enemyUnit.IsDead)
@@ -40,9 +30,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // Find the player target
         PlayerTarget target = FindPlayerInRoom();
-
         if (target == null)
         {
             Debug.Log($"[EnemyAI] {enemyUnit.Stats?.enemyName} idles — no player in room.");
@@ -66,16 +54,16 @@ public class EnemyAI : MonoBehaviour
             yield break;
         }
 
-        Unit playerUnit   = target.GetUnit();
-        GridPosition myPos     = enemyUnit.GridPosition;
-        GridPosition playerPos = playerUnit.GetGridPosition();
-        int dist = ManhattanDist(myPos, playerPos);
+        Unit         playerUnit = target.GetUnit();
+        GridPosition myPos      = enemyUnit.GridPosition;
+        GridPosition playerPos  = playerUnit.GetGridPosition();
+        int          dist       = ManhattanDist(myPos, playerPos);
 
         // ── Move phase ─────────────────────────────────────────────────────
         if (dist > stats.attackRange)
         {
-            Pathfinder pathfinder = new Pathfinder(room);
-            List<GridPosition> path = pathfinder.FindPathToRange(myPos, playerPos, stats.attackRange);
+            Pathfinder         pathfinder = new Pathfinder(room);
+            List<GridPosition> path       = pathfinder.FindPathToRange(myPos, playerPos, stats.attackRange);
 
             if (path.Count > 0)
             {
@@ -83,11 +71,14 @@ public class EnemyAI : MonoBehaviour
                 for (int i = 0; i < steps; i++)
                 {
                     if (enemyUnit.IsDead) { onComplete?.Invoke(); yield break; }
+
+                    // Don't step onto a tile already occupied by another enemy or the player
+                    if (IsTileOccupied(path[i], room)) break;
+
                     enemyUnit.MoveToPosition(path[i]);
                     yield return new WaitForSeconds(stepDelay);
                 }
 
-                // Recalculate distance after moving
                 myPos = enemyUnit.GridPosition;
                 dist  = ManhattanDist(myPos, playerPos);
             }
@@ -112,18 +103,21 @@ public class EnemyAI : MonoBehaviour
         EnemyStats stats = enemyUnit.Stats;
         if (stats.attackData == null)
         {
-            Debug.LogWarning($"[EnemyAI] {stats?.enemyName} has no attackData assigned in EnemyStats.");
+            Debug.LogWarning($"[EnemyAI] {stats?.enemyName} has no attackData assigned.");
             return;
         }
 
         HealthComponent playerHealth = playerUnit.GetComponent<HealthComponent>();
         if (playerHealth == null)
         {
-            Debug.LogWarning("[EnemyAI] Player has no HealthComponent — cannot deal damage.");
+            Debug.LogWarning("[EnemyAI] Player has no HealthComponent.");
             return;
         }
 
-        // Use pattern if one is set, otherwise hit directly
+        int damage = stats.attackData.CalculateDamage();
+
+        AttackSpritePopup.Show(stats.attackData, playerUnit.transform.position);
+
         if (stats.attackData.attackPattern != null)
         {
             GridPosition myPos     = enemyUnit.GridPosition;
@@ -138,40 +132,64 @@ public class EnemyAI : MonoBehaviour
             {
                 if (tile == playerPos)
                 {
-                    playerHealth.TakeDamage(stats.attackData.baseDamage);
+                    playerHealth.TakeDamage(damage);
                     hit = true;
-                    Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg.");
+                    Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {damage} dmg.");
                 }
             }
 
             if (!hit)
             {
-                // Pattern didn't reach — fall back to direct hit
-                playerHealth.TakeDamage(stats.attackData.baseDamage);
-                Debug.Log($"[EnemyAI] {stats.enemyName} hit player (direct) for {stats.attackData.baseDamage} dmg.");
+                playerHealth.TakeDamage(damage);
+                Debug.Log($"[EnemyAI] {stats.enemyName} hit player (direct) for {damage} dmg.");
             }
         }
         else
         {
-            playerHealth.TakeDamage(stats.attackData.baseDamage);
-            Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {stats.attackData.baseDamage} dmg.");
+            playerHealth.TakeDamage(damage);
+            Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {damage} dmg.");
         }
+    }
+
+    // ── Tile occupation ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if the tile is already occupied by another living enemy or the player.
+    /// Prevents enemies from stacking on the same tile during movement.
+    /// </summary>
+    private bool IsTileOccupied(GridPosition pos, RoomGrid room)
+    {
+        var enemies = EnemyManager.Instance?.GetEnemiesInRoom(room);
+        if (enemies != null)
+            foreach (EnemyUnit other in enemies)
+            {
+                if (other == enemyUnit || other == null || other.IsDead) continue;
+                if (other.GridPosition == pos) return true;
+            }
+
+        PlayerTarget pt = PlayerTarget.Instance;
+        if (pt != null)
+        {
+            Unit playerUnit = pt.GetUnit();
+            if (playerUnit != null)
+            {
+                var health = playerUnit.GetComponent<HealthComponent>();
+                if (health == null || !health.IsDead)
+                    if (playerUnit.GetGridPosition() == pos) return true;
+            }
+        }
+
+        return false;
     }
 
     // ── Player detection ───────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns the PlayerTarget if they are in the same room as this enemy.
-    /// Uses PlayerTarget component — no fragile grid comparison.
-    /// </summary>
     private PlayerTarget FindPlayerInRoom()
     {
         PlayerTarget target = PlayerTarget.Instance;
         if (target == null) return null;
-
         RoomGrid enemyRoom = enemyUnit.CurrentRoomGrid;
         if (enemyRoom == null) return null;
-
         return target.IsInRoom(enemyRoom) ? target : null;
     }
 

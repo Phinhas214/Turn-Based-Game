@@ -10,12 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 00e063aecd0b03f41a24cf018f97c4c3, type: 3}
-  m_Name: EActionStab
+  m_Name: strike
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
-  actionName: Attack
+  actionName: Strike
   icon: {fileID: 0}
-  baseDamage: 2
-  attackPattern: {fileID: 11400000, guid: ed7ed0d728a8ddc429ab1d1554e0bdbf, type: 2}
+  animationFrames:
+  - {fileID: 0}
+  useDiceDamage: 1
+  baseDamage: 0
+  diceCount: 5
+  dieType: 6
+  flatBonus: 0
+  damageMultiplier: 2
+  attackPattern: {fileID: 11400000, guid: 9ff93c24dc6ed08448cd0ee6abcdc690, type: 2}
   rotatesToFacing: 1
   minRange: 0
   maxRange: 0
@@ -24,13 +31,5 @@ MonoBehaviour:
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: 'Damage      : 2
-
-    Stamina cost: 2
-
-    Pattern     : StabPattern
-    (0 tiles)
-
-    Range       : Melee (pattern at unit)
-
-    Rotates     : True'
+  _summary: "Damage : 5d6 + 0 \xD7 2\nStamina cost: 2\nPattern : Strike_AP 1 (1 tiles)\nRange
+    : Melee\nRotates : True"

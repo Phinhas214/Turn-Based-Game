@@ -18,6 +18,10 @@ public class ActionButtonUI : MonoBehaviour
 
     [SerializeField] private GameObject selectedGameObject;
 
+    [Header("Icon")]
+    [Tooltip("Assign the Image that should display the action's icon sprite. Leave empty to skip.")]
+    [SerializeField] private Image actionIcon;
+
     [Header("Stamina Cost Display")]
     [SerializeField] private GameObject      staminaCostRoot;
     [SerializeField] private TextMeshProUGUI staminaCostText;
@@ -32,7 +36,6 @@ public class ActionButtonUI : MonoBehaviour
 
     private void Awake()
     {
-        // Ensure we have a CanvasGroup for the alpha dimming effect
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
     }
@@ -44,10 +47,10 @@ public class ActionButtonUI : MonoBehaviour
         if (actionNameText != null)
             actionNameText.text = action.GetActionName().ToUpper();
 
-        // Setup button listener to route to the correct system (SP or MP)
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(() => SetActionOnActiveSystem(baseAction));
 
+        RefreshIcon();
         RefreshStaminaCost();
         RefreshAffordability();
     }
@@ -59,7 +62,6 @@ public class ActionButtonUI : MonoBehaviour
         if (selectedGameObject != null)
             selectedGameObject.SetActive(currentAction == baseAction);
 
-        // Re-check if we can still afford this whenever the selection changes
         RefreshAffordability();
     }
 
@@ -83,11 +85,26 @@ public class ActionButtonUI : MonoBehaviour
 
     // ── UI Refresh Logic ──────────────────────────────────────────────────
 
+    private void RefreshIcon()
+    {
+        if (actionIcon == null) return;
+
+        if (baseAction is CombatAction combatAction && combatAction.ActionData?.icon != null)
+        {
+            actionIcon.sprite  = combatAction.ActionData.icon;
+            actionIcon.enabled = true;
+        }
+        else
+        {
+            // No icon available — hide rather than show a blank image
+            actionIcon.enabled = false;
+        }
+    }
+
     private void RefreshStaminaCost()
     {
         if (staminaCostRoot == null) return;
 
-        // 1. Check Combat Actions (uses ActionData values)
         if (baseAction is CombatAction combatAction && combatAction.ActionData != null)
         {
             int cost = combatAction.ActionData.staminaCost;
@@ -95,11 +112,10 @@ public class ActionButtonUI : MonoBehaviour
 
             if (staminaCostText != null)
                 staminaCostText.text = cost.ToString();
-            
+
             return;
         }
 
-        // 2. Check Move Action (Sam's 1-stamina rule)
         if (baseAction is MoveAction)
         {
             staminaCostRoot.SetActive(true);
@@ -110,7 +126,6 @@ public class ActionButtonUI : MonoBehaviour
             return;
         }
 
-        // 3. Default: Hide cost if neither of the above
         staminaCostRoot.SetActive(false);
     }
 
@@ -119,23 +134,18 @@ public class ActionButtonUI : MonoBehaviour
         if (canvasGroup == null || button == null) return;
 
         bool canAfford = CanAffordAction();
-        
-        // Dim the button and disable interaction if unaffordable
-        canvasGroup.alpha = canAfford ? 1f : unaffordableAlpha;
+        canvasGroup.alpha   = canAfford ? 1f : unaffordableAlpha;
         button.interactable = canAfford;
     }
 
     private bool CanAffordAction()
     {
-        // For MoveAction, we check the unit's PlayerStats directly
         if (baseAction is MoveAction)
         {
             PlayerStats stats = baseAction.GetComponent<PlayerStats>();
-            // If no stats found, assume it's free/allowed for safety
             return stats == null || stats.currentStamina > 0;
         }
 
-        // For CombatAction, we use the built-in affordability check
         if (baseAction is CombatAction combatAction)
             return combatAction.CanAfford();
 

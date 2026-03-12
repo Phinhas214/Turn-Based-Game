@@ -7,6 +7,10 @@ public class CombatActionData : ScriptableObject
     public string actionName = "Attack";
     public Sprite icon;
 
+    [Tooltip("All frames of the attack sprite sheet in order. Drag the sliced child sprites here.\n" +
+             "Leave empty to fall back to showing 'icon' as a static flash.")]
+    public Sprite[] animationFrames;
+
     [Header("Damage Mode")]
     [Tooltip("If enabled, damage is rolled using dice instead of flat damage.")]
     public bool useDiceDamage = false;
@@ -18,11 +22,15 @@ public class CombatActionData : ScriptableObject
     [Header("Dice Damage (used if dice enabled)")]
     [Min(0)]
     public int diceCount = 1;
-
     public DieType dieType = DieType.D6;
-
     [Tooltip("Flat modifier added after dice are rolled.")]
     public int flatBonus = 0;
+
+    [Header("Damage Multiplier")]
+    [Tooltip("Final damage is multiplied by this value. 1 = normal, 2 = double, 0.5 = half.\n" +
+             "Applied after dice/flat damage is calculated.")]
+    [Min(0f)]
+    public float damageMultiplier = 1f;
 
     [Header("Attack Pattern")]
     public AttackPattern attackPattern;
@@ -36,12 +44,35 @@ public class CombatActionData : ScriptableObject
     [Header("Stamina Cost")]
     [Min(0)]
     public int staminaCost = 2;
-
     public bool requiresEnoughStamina = true;
 
     [Header("Visual Feedback")]
-    public Color aoeHighlightColor = new Color(1f, 0.25f, 0.25f, 1f);
-    public Color rangeHighlightColor = new Color(1f, 0.8f, 0.2f, 1f);
+    public Color aoeHighlightColor   = new Color(1f, 0.25f, 0.25f, 1f);
+    public Color rangeHighlightColor = new Color(1f, 0.8f,  0.2f,  1f);
+
+    // ── Damage helper ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Calculates the final damage value, rolling dice if enabled and applying
+    /// the damage multiplier. Use this everywhere instead of reading baseDamage directly.
+    /// </summary>
+    public int CalculateDamage()
+    {
+        int raw;
+        if (useDiceDamage)
+        {
+            int sides = (int)dieType;
+            raw = flatBonus;
+            for (int i = 0; i < diceCount; i++)
+                raw += UnityEngine.Random.Range(1, sides + 1);
+        }
+        else
+        {
+            raw = baseDamage;
+        }
+
+        return Mathf.Max(1, Mathf.RoundToInt(raw * damageMultiplier));
+    }
 
 #if UNITY_EDITOR
     [Header("Summary (read-only)")]
@@ -65,8 +96,12 @@ public class CombatActionData : ScriptableObject
             ? $"{diceCount}d{(int)dieType} + {flatBonus}"
             : $"{baseDamage}";
 
+        string multiplierText = !Mathf.Approximately(damageMultiplier, 1f)
+            ? $" × {damageMultiplier}"
+            : "";
+
         _summary =
-            $"Damage : {damageText}\n" +
+            $"Damage : {damageText}{multiplierText}\n" +
             $"Stamina cost: {staminaCost}\n" +
             $"Pattern : {patternInfo}\n" +
             $"Range : {rangeInfo}\n" +

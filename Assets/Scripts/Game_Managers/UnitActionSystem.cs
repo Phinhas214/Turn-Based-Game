@@ -51,7 +51,6 @@ public class UnitActionSystem : MonoBehaviour
         if (isBusy)      return;
         if (selectedUnit == null) return;
 
-        // NEW: block all player input while enemies are taking their turns
         if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn) return;
 
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
@@ -75,31 +74,43 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (!Input.GetMouseButtonDown(0)) return;
 
-        Vector3 mouseWorld = MouseWorld.GetPosition();
-
+        Vector3      mouseWorld  = MouseWorld.GetPosition();
         GridPosition mouseGridPos = LevelGrid.Instance.GetGridPosition(mouseWorld);
 
-        // --- NEW: check if an enemy exists on this tile ---
+        // ── Enemy tile clicked ─────────────────────────────────────────────
         RoomGrid roomGrid = RoomManager.Instance.GetCurrentRoomGrid();
-
         if (roomGrid != null)
         {
             EnemyUnit enemy = roomGrid.GetEnemyAtGridPosition(mouseGridPos);
-
             if (enemy != null)
             {
+                // If a combat action is selected and this tile is in range — attack
+                if (selectedAction is CombatAction combatAction)
+                {
+                    if (!combatAction.CanAfford())
+                    {
+                        Debug.Log("[UnitActionSystem] Not enough stamina.");
+                        return;
+                    }
+
+                    if (combatAction.IsValidTarget(mouseGridPos))
+                    {
+                        SetBusy();
+                        combatAction.PerformAttack(mouseGridPos, ClearBusy);
+                        return;
+                    }
+                }
+
+                // No combat action active — just select the enemy for inspection
                 Debug.Log($"[EnemySelect] Enemy clicked at {mouseGridPos}: {enemy.name}");
-
                 SetSelectedEnemy(enemy);
-
                 HealthComponent hc = enemy.GetComponent<HealthComponent>();
                 EnemyHealthUI.Instance.SetTarget(hc);
-
                 return;
             }
         }
 
-        // --- existing action logic continues ---
+        // ── Non-enemy tile — existing action logic ─────────────────────────
         switch (selectedAction)
         {
             case MoveAction moveAction:
@@ -132,7 +143,7 @@ public class UnitActionSystem : MonoBehaviour
 
     private bool TryHandleUnitSelection()
     {
-        if (!Input.GetMouseButtonDown(0)) return false;
+        if (!Input.GetMouseButtonDown(1)) return false;
 
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
         if (Physics.Raycast(ray, out RaycastHit hit, float.MaxValue, unitLayerMask))
@@ -173,6 +184,4 @@ public class UnitActionSystem : MonoBehaviour
 
     public Unit       GetSelectedUnit()   => selectedUnit;
     public BaseAction GetSelectedAction() => selectedAction;
-
-    
 }

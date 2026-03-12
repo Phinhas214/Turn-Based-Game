@@ -413,10 +413,13 @@ MonoBehaviour:
   flashCount: 1
   maxHealth: 10
   startingHealth: 10
-  destroyOnDeath: 1
+  destroyOnDeath: 0
   deathDelay: 0.5
-  _currentHealthDebug: 10
+  downedVisualRoot: {fileID: 0}
+  downedRotationZ: 90
+  downedTiltSpeed: 180
   reviveHealthPercent: 0.25
+  _currentHealthDebug: 10
 --- !u!114 &6261395266465452630
 MonoBehaviour:
   m_ObjectHideFlags: 0

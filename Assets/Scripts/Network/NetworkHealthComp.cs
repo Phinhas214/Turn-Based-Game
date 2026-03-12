@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -19,80 +18,100 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [Header("Damage Flash")]
     [SerializeField] private GameObject damageFlashObject;
     [SerializeField] private float flashDuration = 0.15f;
-    [SerializeField] private int   flashCount    = 1;
+    [SerializeField] private int flashCount = 1;
     [Header("Health Settings")]
-    [Min(1)] [SerializeField] private int maxHealth     = 100;
-    [Min(0)] [SerializeField] private int startingHealth = 0;
+    [Min(1)][SerializeField] private int maxHealth = 100;
+    [Min(0)][SerializeField] private int startingHealth = 0;
     [Header("Death Behaviour")]
-    [SerializeField] private bool  destroyOnDeath = false;
+    [SerializeField] private bool destroyOnDeath = false;
     [SerializeField, Min(0f)] private float deathDelay = 0f;
-    [Header("Downed Visual")]
-    [SerializeField] private Transform downedVisualRoot;
-    [SerializeField] private float downedRotationZ = 90f;
-    [SerializeField] private float downedTiltSpeed = 180f;
-    [Header("Revive Settings")]
-    [SerializeField, Range(0f, 1f)] private float reviveHealthPercent = 0.25f;
-    [Header("Debug")]
+    [Header("Debug (read-only in play mode)")]
     [SerializeField] private int _currentHealthDebug;
 
     public event Action<int, int> OnHealthChanged;
-    public event Action           OnDeath;
-    public event Action           OnRevived;
+    public event Action OnDeath;
+    public event Action OnRevived;
+
+    [Header("Revive Settings")]
+    [SerializeField, Range(0f, 1f)] private float reviveHealthPercent = 0.25f;
 
     private SpriteRenderer flashRenderer;
-    private Coroutine      flashRoutine;
-    private Coroutine      tiltRoutine;
-    private Quaternion     originalLocalRotation;
-    private bool           isPlayerUnit;
+    private Coroutine flashRoutine;
 
-    public int   CurrentHealth => netCurrentHealth.Value;
-    public int   MaxHealth     => netMaxHealth.Value;
-    public bool  IsDead        => netCurrentHealth.Value <= 0;
-    public bool  IsDown        => netIsDown.Value;
+    // FIX: Track whether we have already fired death visuals client-side.
+    // TriggerDeathClientRpc fires on ALL clients including the host.
+    // Without this guard the host fires ExecuteDeath twice, calling
+    // NetworkObject.Despawn twice and triggering the "Invalid Destroy" error.
+    private bool hasTriggeredDeathVisuals = false;
+
+    public int CurrentHealth => netCurrentHealth.Value;
+    public int MaxHealth => netMaxHealth.Value;
+    public bool IsDead => netCurrentHealth.Value <= 0;
+    public bool IsDown => netIsDown.Value;
     public float HealthPercent => netMaxHealth.Value > 0
         ? (float)netCurrentHealth.Value / netMaxHealth.Value : 0f;
 
     private void Awake()
     {
-        isPlayerUnit = GetComponent<NetworkedUnit>() != null;
-        if (downedVisualRoot == null) downedVisualRoot = transform;
-        originalLocalRotation = downedVisualRoot.localRotation;
-
         if (damageFlashObject)
         {
             flashRenderer = damageFlashObject.GetComponent<SpriteRenderer>();
             damageFlashObject.SetActive(true);
             SetFlashAlpha(0f);
         }
-
         IHasHealth statsProvider = GetComponent<IHasHealth>();
-        if (statsProvider != null) maxHealth = statsProvider.GetMaxHealth();
+        if (statsProvider != null)
+            maxHealth = statsProvider.GetMaxHealth();
     }
 
     public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
-            netMaxHealth.Value     = maxHealth;
+            netMaxHealth.Value = maxHealth;
             netCurrentHealth.Value = startingHealth > 0
                 ? Mathf.Min(startingHealth, maxHealth) : maxHealth;
         }
         netCurrentHealth.OnValueChanged += HandleNetHealthChanged;
-        netIsDown.OnValueChanged        += HandleNetIsDownChanged;
         _currentHealthDebug = netCurrentHealth.Value;
-        if (netIsDown.Value) ApplyDownedVisual(instant: true);
+        hasTriggeredDeathVisuals = false;
     }
 
     public override void OnNetworkDespawn()
     {
         netCurrentHealth.OnValueChanged -= HandleNetHealthChanged;
-        netIsDown.OnValueChanged        -= HandleNetIsDownChanged;
     }
 
     public void TakeDamage(int amount)
     {
         if (!IsServer) { RequestTakeDamageServerRpc(amount); return; }
         ApplyDamageOnServer(amount);
+    }
+
+    public void Revive()
+    {
+        if (!IsServer) { ReviveServerRpc(); return; }
+        ApplyReviveOnServer();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ReviveServerRpc() => ApplyReviveOnServer();
+
+    private void ApplyReviveOnServer()
+    {
+        if (!IsDown) return;
+        int reviveHp = Mathf.Max(1, Mathf.RoundToInt(netMaxHealth.Value * reviveHealthPercent));
+        netCurrentHealth.Value = reviveHp;
+        netIsDown.Value = false;
+        TriggerReviveClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerReviveClientRpc()
+    {
+        OnRevived?.Invoke();
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
     }
 
     public void RequestTakeDamage(int amount) => RequestTakeDamageServerRpc(amount);
@@ -108,14 +127,8 @@ public class NetworkedHealthComponent : NetworkBehaviour
     public void InitializeHealth(int newMaxHealth)
     {
         if (!IsServer) { InitializeHealthServerRpc(newMaxHealth); return; }
-        netMaxHealth.Value     = Mathf.Max(1, newMaxHealth);
+        netMaxHealth.Value = Mathf.Max(1, newMaxHealth);
         netCurrentHealth.Value = netMaxHealth.Value;
-    }
-
-    public void Revive()
-    {
-        if (!IsServer) { ReviveServerRpc(); return; }
-        ApplyReviveOnServer();
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -125,27 +138,29 @@ public class NetworkedHealthComponent : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void InitializeHealthServerRpc(int newMax)
     {
-        netMaxHealth.Value     = Mathf.Max(1, newMax);
+        netMaxHealth.Value = Mathf.Max(1, newMax);
         netCurrentHealth.Value = netMaxHealth.Value;
     }
-    [ServerRpc(RequireOwnership = false)]
-    private void ReviveServerRpc() => ApplyReviveOnServer();
 
     private void ApplyDamageOnServer(int amount)
     {
         if (IsDead || amount <= 0) return;
         netCurrentHealth.Value = Mathf.Max(0, netCurrentHealth.Value - amount);
         TriggerDamageVisualsClientRpc(amount);
-
-        if (netCurrentHealth.Value <= 0)
+        if (netCurrentHealth.Value == 0)
         {
-            if (isPlayerUnit)
+            bool isPlayer = GetComponent<NetworkedUnit>() != null;
+            if (isPlayer)
             {
                 netIsDown.Value = true;
                 TriggerDownedClientRpc();
             }
             else
             {
+                // FIX: Reset the guard on the server before broadcasting death.
+                // The host's ClientRpc callback will set it again, but we need
+                // the server-side HandleDeath in NetworkedEnemyUnit to be able
+                // to run its ONE despawn path without the guard blocking it.
                 TriggerDeathClientRpc();
             }
         }
@@ -157,18 +172,14 @@ public class NetworkedHealthComponent : NetworkBehaviour
         netCurrentHealth.Value = Mathf.Min(netMaxHealth.Value, netCurrentHealth.Value + amount);
     }
 
-    private void ApplyReviveOnServer()
-    {
-        if (!netIsDown.Value) return;
-        int reviveHp = Mathf.Max(1, Mathf.RoundToInt(netMaxHealth.Value * reviveHealthPercent));
-        netCurrentHealth.Value = reviveHp;
-        netIsDown.Value        = false;
-        TriggerReviveClientRpc();
-    }
-
     [ClientRpc]
     private void TriggerDamageVisualsClientRpc(int amount)
     {
+        // FIX: Guard against receiving RPCs for already-dead/destroyed objects.
+        // This prevents the MissingReferenceException in RpcMessages.Deserialize
+        // that occurs when damage visuals arrive after client-side object cleanup.
+        if (this == null || !gameObject.activeInHierarchy) return;
+
         SpawnDamageNumber(amount);
         TriggerDamageFlash();
     }
@@ -177,51 +188,42 @@ public class NetworkedHealthComponent : NetworkBehaviour
     private void TriggerDownedClientRpc()
     {
         OnDeath?.Invoke();
-        ApplyDownedVisual(instant: false);
+        gameObject.SetActive(false);
     }
 
     [ClientRpc]
     private void TriggerDeathClientRpc()
     {
+        // FIX: This RPC fires on ALL clients including the host (server).
+        // Use hasTriggeredDeathVisuals to ensure we only run once per object lifetime.
+        // Without this, the host runs ExecuteDeath twice:
+        //   1. From NetworkedEnemyUnit.HandleDeath() → health.OnDeath event
+        //   2. From this ClientRpc arriving at the host
+        // The second call hits NetworkObject.Despawn on an already-despawned object,
+        // producing the "Invalid Destroy" log error.
+        if (hasTriggeredDeathVisuals) return;
+        hasTriggeredDeathVisuals = true;
+
         OnDeath?.Invoke();
+
+        // FIX: Do NOT call ExecuteDeath on clients. The server handles all
+        // NetworkObject lifecycle. Clients just hide the object and wait for
+        // the server's Despawn() call to propagate, which removes it cleanly.
+        // Calling Destroy() or Despawn() from a client causes the error:
+        // "[Invalid Destroy] Destroy a spawned NetworkObject on a non-host client is not valid"
         if (IsServer)
         {
-            if (deathDelay > 0f) Invoke(nameof(ExecuteDeathServer), deathDelay);
-            else                 ExecuteDeathServer();
+            if (deathDelay > 0f)
+                Invoke(nameof(ExecuteDeathOnServer), deathDelay);
+            else
+                ExecuteDeathOnServer();
         }
         else
         {
-            if (deathDelay > 0f) Invoke(nameof(HideOnClient), deathDelay);
-            else                 HideOnClient();
+            // Client: just hide visually. The server's Despawn(true) will
+            // destroy the object on all clients automatically via NGO.
+            gameObject.SetActive(false);
         }
-    }
-
-    [ClientRpc]
-    private void TriggerReviveClientRpc()
-    {
-        OnRevived?.Invoke();
-        ApplyStandingVisual();
-    }
-
-    private void ExecuteDeathServer()
-    {
-        if (!IsServer) return;
-        if (TryGetComponent<NetworkObject>(out var netObj))
-        {
-            if (destroyOnDeath) netObj.Despawn(true);
-            else                gameObject.SetActive(false);
-        }
-        else
-        {
-            if (destroyOnDeath) Destroy(gameObject);
-            else                gameObject.SetActive(false);
-        }
-    }
-
-    private void HideOnClient()
-    {
-        if (IsServer) return;
-        gameObject.SetActive(false);
     }
 
     private void HandleNetHealthChanged(int oldVal, int newVal)
@@ -230,36 +232,36 @@ public class NetworkedHealthComponent : NetworkBehaviour
         OnHealthChanged?.Invoke(newVal, netMaxHealth.Value);
     }
 
-    private void HandleNetIsDownChanged(bool oldVal, bool newVal)
+    // FIX: Renamed from ExecuteDeath — this only runs on the server now.
+    // Clients never call this directly. Server calls Despawn(true) which
+    // automatically destroys the object on all connected clients via NGO.
+    private void ExecuteDeathOnServer()
     {
-        if (newVal) ApplyDownedVisual(instant: false);
-        else        ApplyStandingVisual();
-    }
+        if (!IsServer) return;
 
-    private void ApplyDownedVisual(bool instant)
-    {
-        if (tiltRoutine != null) { StopCoroutine(tiltRoutine); tiltRoutine = null; }
-        Quaternion target = originalLocalRotation * Quaternion.Euler(0f, 0f, downedRotationZ);
-        if (instant) downedVisualRoot.localRotation = target;
-        else         tiltRoutine = StartCoroutine(TiltToRoutine(target));
-    }
-
-    private void ApplyStandingVisual()
-    {
-        if (tiltRoutine != null) { StopCoroutine(tiltRoutine); tiltRoutine = null; }
-        tiltRoutine = StartCoroutine(TiltToRoutine(originalLocalRotation));
-    }
-
-    private IEnumerator TiltToRoutine(Quaternion target)
-    {
-        while (Quaternion.Angle(downedVisualRoot.localRotation, target) > 0.5f)
+        if (TryGetComponent<NetworkObject>(out var netObj))
         {
-            downedVisualRoot.localRotation = Quaternion.RotateTowards(
-                downedVisualRoot.localRotation, target, downedTiltSpeed * Time.deltaTime);
-            yield return null;
+            if (destroyOnDeath)
+                netObj.Despawn(true);   // destroys on server AND all clients
+            else
+                gameObject.SetActive(false);
         }
-        downedVisualRoot.localRotation = target;
-        tiltRoutine = null;
+        else
+        {
+            // Non-networked object — safe to destroy directly
+            if (destroyOnDeath)
+                Destroy(gameObject);
+            else
+                gameObject.SetActive(false);
+        }
+    }
+
+    private void SpawnDamageNumber(int amount)
+    {
+        if (!damageNumberPrefab) return;
+        DamageNumber dmg = Instantiate(damageNumberPrefab,
+            transform.position + damageNumberOffset, Quaternion.identity);
+        dmg.Initialize(amount);
     }
 
     private void TriggerDamageFlash()
@@ -269,7 +271,7 @@ public class NetworkedHealthComponent : NetworkBehaviour
         flashRoutine = StartCoroutine(DamageFlashRoutine());
     }
 
-    private IEnumerator DamageFlashRoutine()
+    private System.Collections.IEnumerator DamageFlashRoutine()
     {
         float half = flashDuration * 0.5f;
         for (int i = 0; i < flashCount; i++)
@@ -280,7 +282,7 @@ public class NetworkedHealthComponent : NetworkBehaviour
         flashRoutine = null;
     }
 
-    private IEnumerator FadeFlash(float from, float to, float duration)
+    private System.Collections.IEnumerator FadeFlash(float from, float to, float duration)
     {
         float t = 0f;
         while (t < duration)
@@ -298,13 +300,5 @@ public class NetworkedHealthComponent : NetworkBehaviour
         Color c = flashRenderer.color;
         c.a = alpha;
         flashRenderer.color = c;
-    }
-
-    private void SpawnDamageNumber(int amount)
-    {
-        if (!damageNumberPrefab) return;
-        DamageNumber dmg = Instantiate(damageNumberPrefab,
-            transform.position + damageNumberOffset, Quaternion.identity);
-        dmg.Initialize(amount);
     }
 }

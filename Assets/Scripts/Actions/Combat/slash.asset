@@ -12,13 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 00e063aecd0b03f41a24cf018f97c4c3, type: 3}
   m_Name: slash
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
-  actionName: Attack
+  actionName: Slash
   icon: {fileID: 0}
+  animationFrames: []
   useDiceDamage: 1
   baseDamage: 0
   diceCount: 4
   dieType: 6
   flatBonus: 0
+  damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: 1ead6495335b653489c28f9d3296f9e7, type: 2}
   rotatesToFacing: 1
   minRange: 0
@@ -32,7 +34,7 @@ MonoBehaviour:
 
     Stamina cost: 2
 
-    Pattern : Slash_AP (5 tiles)
+    Pattern : Slash_AP (6 tiles)
 
     Range
     : Melee

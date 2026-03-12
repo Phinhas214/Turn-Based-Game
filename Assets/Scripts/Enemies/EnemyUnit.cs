@@ -113,10 +113,10 @@ public class EnemyUnit : MonoBehaviour, IHasHealth  // NEW — implements IHasHe
     }
 
     // ── Turn handling ──────────────────────────────────────────────────────
-
     public bool CanActThisTurn()
     {
         if (IsDead) return false;
+        if (stats == null) return true; // no stats = act immediately
         if (turnsWaited < stats.turnsBeforeFirstAction)
         {
             turnsWaited++;

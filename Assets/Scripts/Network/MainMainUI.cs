@@ -32,7 +32,7 @@ public class MainMenuController : MonoBehaviour
     [Header("Navigation Panels")]
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject modePanel;
-    [SerializeField] private GameObject multiplayerPanel; // has BOTH Create Session + Join By Code widgets
+    [SerializeField] private GameObject multiplayerPanel;
     [SerializeField] private GameObject loadingPanel;
 
     // ── Navigation Buttons ────────────────────────────────────────────────
@@ -47,21 +47,16 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private TMP_InputField playerNameInput;
 
     [Header("Enter Lobby")]
-    [SerializeField] private Button enterLobbyButton; // click after widget connects
-
-
+    [SerializeField] private Button enterLobbyButton;
 
     // ── Phase 1: Waiting Lobby ────────────────────────────────────────────
-    // WaitingLobbyPanel = always active parent
-    // WaitingLobbyContent = inactive at start, shown when session is active
     [Header("Phase 1 — Waiting Lobby")]
-    [SerializeField] private GameObject      waitingLobbyPanel;    // always active
-    [SerializeField] private GameObject      waitingLobbyContent;  // inactive at start
-
-    [SerializeField] private TextMeshProUGUI waitingPlayerCount;   // "2 / 4 players"
-    [SerializeField] private Transform       waitingPlayerList;    // spawns PlayerSlot prefabs
-    [SerializeField] private GameObject      playerSlotPrefab;     // your Slot prefab
-    [SerializeField] private Button          beginCharSelectButton; // host only
+    [SerializeField] private GameObject      waitingLobbyPanel;
+    [SerializeField] private GameObject      waitingLobbyContent;
+    [SerializeField] private TextMeshProUGUI waitingPlayerCount;
+    [SerializeField] private Transform       waitingPlayerList;
+    [SerializeField] private GameObject      playerSlotPrefab;
+    [SerializeField] private Button          beginCharSelectButton;
     [SerializeField] private Button          waitingLeaveButton;
 
     // ── Phase 2: Character Select ─────────────────────────────────────────
@@ -69,9 +64,10 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject      characterSelectPanel;
     [SerializeField] private GameObject      characterSelectContent;
     [SerializeField] private Transform       charSelectPlayerList;
-    [SerializeField] private List<Button> characterButtons;  // assign buttons in order
-    [SerializeField] private List<string> characterNames;   // type names to match each button e.g. "SmokeStack"
-    [SerializeField] private List<Sprite> characterSprites; // portraits in same order
+    [SerializeField] private List<Button>     characterButtons;
+    [SerializeField] private List<string>     characterNames;
+    [SerializeField] private List<Sprite>     characterSprites;
+    [SerializeField] private List<GameObject> characterPrefabs;   // ← NEW: one prefab per character, same order
     [SerializeField] private TextMeshProUGUI selectedCharacterName;
     [SerializeField] private Color           selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
     [SerializeField] private Color           deselectedTint = new Color(1f, 1f, 1f, 0.4f);
@@ -119,8 +115,8 @@ public class MainMenuController : MonoBehaviour
             }
         }
 
-        readyButton         ?.onClick.AddListener(OnReadyClicked);
-        startButton         ?.onClick.AddListener(OnStartClicked);
+        readyButton          ?.onClick.AddListener(OnReadyClicked);
+        startButton          ?.onClick.AddListener(OnStartClicked);
         charSelectLeaveButton?.onClick.AddListener(OnLeaveClicked);
 
         // Hide content at startup
@@ -137,10 +133,8 @@ public class MainMenuController : MonoBehaviour
 
     private void Start()
     {
-        // Wait for NetworkGameManager to sign in so we have a PlayerId-scoped name
         StartCoroutine(LoadPlayerName());
 
-        // Force clean state regardless of how the scene was saved in the editor
         waitingLobbyPanel     ?.SetActive(false);
         waitingLobbyContent   ?.SetActive(false);
         characterSelectPanel  ?.SetActive(false);
@@ -153,13 +147,11 @@ public class MainMenuController : MonoBehaviour
         RefreshCharacterButtons();
         ShowNavPanel(mainMenuPanel);
 
-        // Start a coroutine to wait for NetworkGameManager to be ready then subscribe
         StartCoroutine(SubscribeWhenReady());
     }
 
     private System.Collections.IEnumerator LoadPlayerName()
     {
-        // Wait until NetworkGameManager has signed in and has a PlayerId
         while (NetworkGameManager.Instance == null || string.IsNullOrEmpty(NetworkGameManager.Instance.LocalPlayerId))
             yield return null;
 
@@ -170,7 +162,6 @@ public class MainMenuController : MonoBehaviour
 
     private System.Collections.IEnumerator SubscribeWhenReady()
     {
-        // Wait for LobbySync to spawn (requires NGO to be running)
         while (LobbySync.Instance == null)
             yield return null;
 
@@ -194,9 +185,9 @@ public class MainMenuController : MonoBehaviour
 
     private void HideAllNavPanels()
     {
-        mainMenuPanel   ?.SetActive(false);
-        modePanel       ?.SetActive(false);
-        multiplayerPanel?.SetActive(false);
+        mainMenuPanel        ?.SetActive(false);
+        modePanel            ?.SetActive(false);
+        multiplayerPanel     ?.SetActive(false);
         waitingLobbyPanel    ?.SetActive(false);
         characterSelectPanel ?.SetActive(false);
     }
@@ -209,18 +200,16 @@ public class MainMenuController : MonoBehaviour
 
     private void StartSinglePlayer()
     {
-        CharacterSelection.Index = selectedCharIndex;
+        CharacterSelection.Index  = selectedCharIndex;
+        CharacterSelection.Prefab = GetSelectedPrefab();   // ← NEW
         loadingPanel?.SetActive(true);
         SceneManager.LoadScene(1);
     }
-
-
 
     private void Update()
     {
         if (enterLobbyButton != null && multiplayerPanel != null && multiplayerPanel.activeSelf)
         {
-            // Show Enter Lobby once NGO is connected (widget has done its job)
             bool connected = Unity.Netcode.NetworkManager.Singleton != null
                           && Unity.Netcode.NetworkManager.Singleton.IsListening;
             enterLobbyButton.gameObject.SetActive(connected);
@@ -250,13 +239,11 @@ public class MainMenuController : MonoBehaviour
         isSinglePlayer    = false;
         HideAllNavPanels();
 
-        // Show lobby — hide character select
         waitingLobbyPanel     ?.SetActive(true);
         waitingLobbyContent   ?.SetActive(true);
         characterSelectPanel  ?.SetActive(false);
         characterSelectContent?.SetActive(false);
 
-        // Only host can begin character select
         bool isHost = Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false;
         beginCharSelectButton?.gameObject.SetActive(isHost);
     }
@@ -285,7 +272,6 @@ public class MainMenuController : MonoBehaviour
 
     private void HandlePlayerDataUpdated(ulong[] clientIds)
     {
-        // Rebuild the player list in whichever panel is active
         Transform list = inCharSelectPhase ? charSelectPlayerList : waitingPlayerList;
 
         if (list != null && playerSlotPrefab != null && LobbySync.Instance != null)
@@ -297,7 +283,7 @@ public class MainMenuController : MonoBehaviour
                 int    charIdx  = LobbySync.Instance.GetCharacterIndex(id);
                 bool   ready    = LobbySync.Instance.IsReady(id);
                 bool   isLocal  = id == LobbySync.Instance.LocalClientId;
-                bool   isHost   = id == 0; // host is always client 0 in NGO
+                bool   isHost   = id == 0;
 
                 string charName = (charIdx >= 0 && charIdx < characterNames.Count)
                     ? characterNames[charIdx] : "Selecting...";
@@ -331,18 +317,16 @@ public class MainMenuController : MonoBehaviour
 
         if (isSinglePlayer)
         {
-            // Single player: hide Ready (no one to wait for), show Start immediately
             readyButton?.gameObject.SetActive(false);
             startButton?.gameObject.SetActive(true);
             if (startButton != null) startButton.interactable = true;
         }
         else
         {
-            // Multiplayer: everyone sees Ready, only host sees Start
             readyButton?.gameObject.SetActive(true);
             bool isHost = Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false;
             startButton?.gameObject.SetActive(isHost);
-            if (startButton != null) startButton.interactable = false; // enabled when all ready
+            if (startButton != null) startButton.interactable = false;
         }
     }
 
@@ -352,9 +336,7 @@ public class MainMenuController : MonoBehaviour
 
     private void OnBeginCharSelectClicked()
     {
-        // Host tells everyone (including self) to switch via NetworkVariable
         LobbySync.Instance?.BeginCharSelectPhase();
-        // Host also calls locally in case LobbySync fires before subscription
         SwitchToCharSelectPhase();
     }
 
@@ -417,10 +399,9 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
-        // Multiplayer — host loads the scene for everyone via NGO
         if (!(Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false)) return;
-        // Store local selection so NetworkedLevelGenerator can read it
-        CharacterSelection.Index = selectedCharIndex;
+        CharacterSelection.Index  = selectedCharIndex;
+        CharacterSelection.Prefab = GetSelectedPrefab();   // ← NEW
         Unity.Netcode.NetworkManager.Singleton.SceneManager.LoadScene(
             "Multiplayer_1",
             UnityEngine.SceneManagement.LoadSceneMode.Single);
@@ -429,7 +410,7 @@ public class MainMenuController : MonoBehaviour
     private void RefreshStartButton()
     {
         if (startButton == null) return;
-        if (isSinglePlayer) return; // single player start is always ready
+        if (isSinglePlayer) return;
 
         bool isHost = Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false;
         if (!isHost) return;
@@ -449,7 +430,7 @@ public class MainMenuController : MonoBehaviour
     {
         isReady           = false;
         inCharSelectPhase = false;
-        readyButton?.gameObject.SetActive(true); // restore for next time
+        readyButton?.gameObject.SetActive(true);
 
         if (isSinglePlayer)
         {
@@ -460,5 +441,17 @@ public class MainMenuController : MonoBehaviour
         {
             _ = NetworkGameManager.Instance?.LeaveSessionAsync();
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Returns the prefab for the currently selected character, or null if not assigned.</summary>
+    private GameObject GetSelectedPrefab()
+    {
+        if (characterPrefabs == null || selectedCharIndex >= characterPrefabs.Count)
+            return null;
+        return characterPrefabs[selectedCharIndex];
     }
 }
