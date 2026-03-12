@@ -2381,6 +2381,7 @@ GameObject:
   - component: {fileID: 347625499}
   - component: {fileID: 347625498}
   - component: {fileID: 347625497}
+  - component: {fileID: 347625500}
   m_Layer: 5
   m_Name: Quit
   m_TagString: Untagged
@@ -2450,7 +2451,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 347625498}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 347625500}
+        m_TargetAssemblyTypeName: SceneLoader, Assembly-CSharp
+        m_MethodName: LoadScene
+        m_Mode: 5
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: MainMenu
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &347625498
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2550,6 +2563,23 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 347625495}
   m_CullTransparentMesh: 1
+--- !u!114 &347625500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 347625495}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a73a5d3decca834b9bdec4d2db5eb5f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SceneLoader
+--- !u!1 &363203169 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 560516854240694216, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
+  m_PrefabInstance: {fileID: 4154003633038141054}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &367267365
 GameObject:
   m_ObjectHideFlags: 0
@@ -4200,8 +4230,8 @@ Camera:
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
-  orthographic: 0
-  orthographic size: 5
+  orthographic: 1
+  orthographic size: 10
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -4226,8 +4256,8 @@ Transform:
   m_GameObject: {fileID: 485253838}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 10, y: 32.99, z: 8}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 10, y: 71.42, z: 8}
+  m_LocalScale: {x: 1, y: 1, z: 1.418356}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -12098,15 +12128,15 @@ MonoBehaviour:
   spawnEntries:
   - prefab: {fileID: 4615168901716942150, guid: 2d2dee31910d56d4dac9112b0a7b6eb0, type: 3}
     count: 18
-    roomType: 2
+    roomType: 4
     preferEdgeTiles: 0
   - prefab: {fileID: 8025110106504339535, guid: 59f93f03f17988548bbd8327cf699f82, type: 3}
-    count: 22
+    count: 23
     roomType: 2
     preferEdgeTiles: 0
-  - prefab: {fileID: 560516854240694216, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
-    count: 1
-    roomType: 4
+  - prefab: {fileID: 363203169}
+    count: 5
+    roomType: 2
     preferEdgeTiles: 0
   borderPadding: 1
   spawnOnLevelReady: 1
@@ -17764,9 +17794,9 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: 211313601630423689, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
-      propertyPath: m_Enabled
-      value: 0
-      objectReference: {fileID: 0}
+      propertyPath: stats
+      value: 
+      objectReference: {fileID: 11400000, guid: 4b0397dbd9b2e044ab023bbbc30f6bd1, type: 2}
     - target: {fileID: 560516854240694216, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
       propertyPath: m_Name
       value: SneakyBastard
@@ -17774,10 +17804,6 @@ PrefabInstance:
     - target: {fileID: 5940874128594845369, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
       propertyPath: GlobalObjectIdHash
       value: 2875409494
-      objectReference: {fileID: 0}
-    - target: {fileID: 5940874128594845369, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
-      propertyPath: InScenePlacedSourceGlobalObjectIdHash
-      value: 172318966
       objectReference: {fileID: 0}
     - target: {fileID: 7346270749887865029, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
       propertyPath: m_LocalPosition.x

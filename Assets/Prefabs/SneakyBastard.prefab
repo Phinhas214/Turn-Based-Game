@@ -14,9 +14,7 @@ GameObject:
   - component: {fileID: 3109700486353443679}
   - component: {fileID: 4110023310329318982}
   - component: {fileID: 5940874128594845369}
-  - component: {fileID: 5668359915137633250}
-  - component: {fileID: 5317644472237806519}
-  - component: {fileID: 3913703027754970703}
+  - component: {fileID: 2898260621645847793}
   m_Layer: 7
   m_Name: SneakyBastard
   m_TagString: Untagged
@@ -76,7 +74,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cd4159fef9583c74d9947b5451066483, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
-  stats: {fileID: 0}
+  stats: {fileID: 11400000, guid: 4b0397dbd9b2e044ab023bbbc30f6bd1, type: 2}
   showDebugLogs: 0
   selectedVisual: {fileID: 5658578474306752223}
 --- !u!114 &3109700486353443679
@@ -121,12 +119,12 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 560516854240694216}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 172318966
+  GlobalObjectIdHash: 2875409494
   InScenePlacedSourceGlobalObjectIdHash: 172318966
   DeferredDespawnTick: 0
   Ownership: 1
@@ -139,20 +137,7 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
---- !u!114 &5668359915137633250
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 560516854240694216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 32cce9a365a94c34e84e68944b2ee03b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RangedEnemyAI
-  stepDelay: 0.2
---- !u!114 &5317644472237806519
+--- !u!114 &2898260621645847793
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -164,23 +149,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 386d454cacd72594aaeb12bd3ec33169, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossAI
-  stepDelay: 0.2
---- !u!114 &3913703027754970703
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 560516854240694216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: aa0fa2c04b8f44b47aad07514875f613, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BossUnit
-  bossStats: {fileID: 11400000, guid: bbd40ddc5fb70cf4d9ca2f3ed65dfc08, type: 2}
-  visualRoot: {fileID: 6939326132652345928}
-  revealEffect: {fileID: 0}
-  showDebugLogs: 0
+  stepDelay: 0.05
+  goInvisEveryNTurns: 2
+  maxInvisTurns: 2
+  revealRadius: 3
+  visualRoot: {fileID: 560516854240694216}
 --- !u!1 &4875784394321722152
 GameObject:
   m_ObjectHideFlags: 0

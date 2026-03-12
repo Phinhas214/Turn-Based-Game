@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
   actionName: Attack
   icon: {fileID: 0}
+  animationFrames: []
   useDiceDamage: 0
   baseDamage: 2
   diceCount: 1
@@ -22,8 +23,8 @@ MonoBehaviour:
   damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: ed7ed0d728a8ddc429ab1d1554e0bdbf, type: 2}
   rotatesToFacing: 1
-  minRange: 0
-  maxRange: 0
+  minRange: 1
+  maxRange: 1
   canTargetSelf: 0
   staminaCost: 2
   requiresEnoughStamina: 1
@@ -33,9 +34,9 @@ MonoBehaviour:
 
     Stamina cost: 2
 
-    Pattern : Bite (0 tiles)
+    Pattern : Bite (1 tiles)
 
     Range
-    : Melee
+    : Ranged 1-1
 
     Rotates : True'

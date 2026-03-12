@@ -35,8 +35,8 @@ MonoBehaviour:
   damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: 0546de768d1a702429858937f418e877, type: 2}
   rotatesToFacing: 1
-  minRange: 3
-  maxRange: 7
+  minRange: 1
+  maxRange: 1
   canTargetSelf: 0
   staminaCost: 0
   requiresEnoughStamina: 0
@@ -49,6 +49,6 @@ MonoBehaviour:
     Pattern : Impale (0 tiles)
 
     Range
-    : Ranged 3-7
+    : Ranged 1-1
 
     Rotates : True'

@@ -3478,6 +3478,11 @@ MonoBehaviour:
     transform: {fileID: 8008323626440851421}
     direction: 3
     isConnected: 0
+  northDoorStrip: {fileID: 0}
+  southDoorStrip: {fileID: 0}
+  eastDoorStrip: {fileID: 0}
+  westDoorStrip: {fileID: 0}
+  roomType: 2
 --- !u!114 &7327165207951669560
 MonoBehaviour:
   m_ObjectHideFlags: 0
