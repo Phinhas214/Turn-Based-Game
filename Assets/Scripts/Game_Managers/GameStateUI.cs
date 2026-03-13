@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
+using System.Collections.Generic;
 
 /// <summary>
 /// Shows Win/Lose panels and a restart hint.
@@ -10,16 +12,17 @@ using TMPro;
 public class GameStateUI : MonoBehaviour
 {
     [Header("Panels")]
-    [SerializeField] private GameObject winPanel;
-    [SerializeField] private GameObject losePanel;
-    [SerializeField] private GameObject hudPanel;
+    [SerializeField] private List<GameObject> gameplayPanels;
+
 
     [Header("Win Panel")]
     [SerializeField] private TextMeshProUGUI winMessageText;
+    [SerializeField] private GameObject winPanel;
     [SerializeField] private Button          winRestartButton;
 
     [Header("Lose Panel")]
     [SerializeField] private TextMeshProUGUI loseMessageText;
+    [SerializeField] private GameObject losePanel;
     [SerializeField] private Button          loseRestartButton;
 
     [Header("HUD")]
@@ -74,40 +77,27 @@ public class GameStateUI : MonoBehaviour
 
     private void ShowPlayingUI()
     {
-        SetPanel(winPanel,  false);
-        SetPanel(losePanel, false);
-        SetPanel(hudPanel,  true);
+        foreach (var panel in gameplayPanels)
+            panel.SetActive(true);
 
-        if (restartHintText != null)
-            restartHintText.gameObject.SetActive(true);
+        winPanel.SetActive(false);
+        losePanel.SetActive(false);
     }
 
     private void ShowWinScreen()
     {
-        Debug.Log("[GameStateUI] Showing win screen.");
-        SetPanel(winPanel,  true);
-        SetPanel(losePanel, false);
-        SetPanel(hudPanel,  false);
+        foreach (var panel in gameplayPanels)
+            panel.SetActive(false);
 
-        if (winMessageText != null)
-            winMessageText.text = winMessage;
-
-        if (restartHintText != null)
-            restartHintText.gameObject.SetActive(false);
+        winPanel.SetActive(true);
     }
 
     private void ShowLoseScreen()
     {
-        Debug.Log("[GameStateUI] Showing lose screen.");
-        SetPanel(losePanel, true);
-        SetPanel(winPanel,  false);
-        SetPanel(hudPanel,  false);
+        foreach (var panel in gameplayPanels)
+            panel.SetActive(false);
 
-        if (loseMessageText != null)
-            loseMessageText.text = loseMessage;
-
-        if (restartHintText != null)
-            restartHintText.gameObject.SetActive(false);
+        losePanel.SetActive(true);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -117,9 +107,5 @@ public class GameStateUI : MonoBehaviour
         GameStateManager.Instance?.RestartGame();
     }
 
-    private void SetPanel(GameObject panel, bool active)
-    {
-        if (panel != null)
-            panel.SetActive(active);
-    }
+    
 }

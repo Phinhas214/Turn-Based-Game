@@ -208,7 +208,7 @@ MonoBehaviour:
     m_SelectOnRight: {fileID: 0}
   m_Transition: 1
   m_Colors:
-    m_NormalColor: {r: 0.6666667, g: 0.6666667, b: 0.6666667, a: 1}
+    m_NormalColor: {r: 0.3301887, g: 0.3301887, b: 0.3301887, a: 1}
     m_HighlightedColor: {r: 1, g: 1, b: 1, a: 1}
     m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
     m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
@@ -276,7 +276,8 @@ MonoBehaviour:
   button: {fileID: 5001278990198830033}
   actionNameText: {fileID: 3024783614875537005}
   selectedGameObject: {fileID: 0}
-  staminaCostRoot: {fileID: 0}
+  actionIcon: {fileID: 0}
+  staminaCostRoot: {fileID: 5538306584789833394}
   staminaCostText: {fileID: 8029833780592907672}
   staminaIcon: {fileID: 0}
   unaffordableAlpha: 0.4
