@@ -18,18 +18,22 @@ public class ActionButtonUI : MonoBehaviour
 
     [SerializeField] private GameObject selectedGameObject;
 
+    [Header("Description")]
+    [Tooltip("Text field that shows dice damage / attack info.")]
+    [SerializeField] private TextMeshProUGUI actionDescText;
+
     [Header("Icon")]
     [Tooltip("Assign the Image that should display the action's icon sprite. Leave empty to skip.")]
     [SerializeField] private Image actionIcon;
 
     [Header("Stamina Cost Display")]
-    [SerializeField] private GameObject      staminaCostRoot;
+    [SerializeField] private GameObject staminaCostRoot;
     [SerializeField] private TextMeshProUGUI staminaCostText;
-    [SerializeField] private Image           staminaIcon;
+    [SerializeField] private Image staminaIcon;
 
     [Header("Affordability Visuals")]
     [Range(0f, 1f)]
-    [SerializeField] private float   unaffordableAlpha = 0.4f;
+    [SerializeField] private float unaffordableAlpha = 0.4f;
     [SerializeField] private CanvasGroup canvasGroup;
 
     private BaseAction baseAction;
@@ -51,6 +55,7 @@ public class ActionButtonUI : MonoBehaviour
         button.onClick.AddListener(() => SetActionOnActiveSystem(baseAction));
 
         RefreshIcon();
+        RefreshDescription();
         RefreshStaminaCost();
         RefreshAffordability();
     }
@@ -91,14 +96,52 @@ public class ActionButtonUI : MonoBehaviour
 
         if (baseAction is CombatAction combatAction && combatAction.ActionData?.icon != null)
         {
-            actionIcon.sprite  = combatAction.ActionData.icon;
+            actionIcon.sprite = combatAction.ActionData.icon;
             actionIcon.enabled = true;
         }
         else
         {
-            // No icon available — hide rather than show a blank image
             actionIcon.enabled = false;
         }
+    }
+
+    private void RefreshDescription()
+    {
+        if (actionDescText == null)
+            return;
+
+        if (baseAction is CombatAction combatAction && combatAction.ActionData != null)
+        {
+            var data = combatAction.ActionData;
+
+            if (data.useDiceDamage)
+            {
+                int sides = (int)data.dieType;
+
+                string diceText = $"{data.diceCount}d{sides}";
+
+                if (data.flatBonus > 0)
+                    diceText += $" <color=#6CFF6C>+{data.flatBonus}</color>";
+                else if (data.flatBonus < 0)
+                    diceText += $" {data.flatBonus}";
+
+                actionDescText.text = diceText;
+            }
+            else
+            {
+                actionDescText.text = data.baseDamage.ToString();
+            }
+
+            return;
+        }
+
+        if (baseAction is MoveAction)
+        {
+            actionDescText.text = "—";
+            return;
+        }
+
+        actionDescText.text = "";
     }
 
     private void RefreshStaminaCost()
@@ -134,7 +177,7 @@ public class ActionButtonUI : MonoBehaviour
         if (canvasGroup == null || button == null) return;
 
         bool canAfford = CanAffordAction();
-        canvasGroup.alpha   = canAfford ? 1f : unaffordableAlpha;
+        canvasGroup.alpha = canAfford ? 1f : unaffordableAlpha;
         button.interactable = canAfford;
     }
 
