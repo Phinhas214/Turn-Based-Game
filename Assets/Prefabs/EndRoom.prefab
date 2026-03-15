@@ -493,7 +493,7 @@ GameObject:
   - component: {fileID: 2068514946839042161}
   - component: {fileID: 4053823170114673896}
   m_Layer: 0
-  m_Name: Tilemap
+  m_Name: Floor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3151,7 +3151,7 @@ MonoBehaviour:
   southDoorStrip: {fileID: 7555522563783246470}
   eastDoorStrip: {fileID: 1975331890704233207}
   westDoorStrip: {fileID: 4491154640608330324}
-  roomType: 2
+  roomType: 1
 --- !u!114 &904225956695286176
 MonoBehaviour:
   m_ObjectHideFlags: 0

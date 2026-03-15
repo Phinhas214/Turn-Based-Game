@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 public class EnemySpawner : MonoBehaviour
 {
@@ -35,7 +36,9 @@ public class EnemySpawner : MonoBehaviour
             if (entry.prefab == null) continue;
 
             List<LevelGenerator.PlacedRoom> matching = levelGen.GetAllRooms()
-                .FindAll(r => r.prefabData.roomType == entry.roomType && r.roomGrid != null);
+                .FindAll(r => r.prefabData.roomType == entry.roomType
+                           && r.roomGrid != null
+                           && r.roomGrid.IsInitialized());
 
             if (matching.Count == 0)
             {
@@ -72,8 +75,14 @@ public class EnemySpawner : MonoBehaviour
             return null;
         }
 
-        // GetWorldPosition now returns the correct world position per room
         Vector3 worldPos = roomGrid.GetWorldPosition(position);
+
+        // Safety check — if world position is at origin something went wrong
+        if (worldPos == Vector3.zero)
+        {
+            Debug.LogWarning($"[EnemySpawner] GetWorldPosition returned zero for {position} — skipping spawn.");
+            return null;
+        }
 
         GameObject go = Instantiate(prefab, worldPos, Quaternion.identity);
         EnemyUnit enemyUnit = go.GetComponent<EnemyUnit>();
@@ -92,28 +101,55 @@ public class EnemySpawner : MonoBehaviour
         return enemyUnit;
     }
 
+    /// <summary>
+    /// Gets a random walkable tile using actual tilemap cell bounds instead of
+    /// assuming positions start at (0,0). This fixes enemies spawning at wrong
+    /// positions when tilemap coords are offset.
+    /// </summary>
     private GridPosition? GetRandomWalkableTile(RoomGrid roomGrid, bool preferEdge)
     {
         TilemapRoomGrid tilemapGrid = roomGrid.GetTilemapRoomGrid();
         if (tilemapGrid == null) return null;
 
-        int w = roomGrid.GetWidth();
-        int h = roomGrid.GetHeight();
+        Tilemap floor = tilemapGrid.GetFloorTilemap();
+        if (floor == null) return null;
+
+        // Use actual tilemap bounds instead of (0,0) to (width,height)
+        BoundsInt bounds = floor.cellBounds;
         List<GridPosition> candidates = new List<GridPosition>();
 
-        for (int x = borderPadding; x < w - borderPadding; x++)
-            for (int z = borderPadding; z < h - borderPadding; z++)
+        for (int x = bounds.xMin + borderPadding; x < bounds.xMax - borderPadding; x++)
+        {
+            for (int y = bounds.yMin + borderPadding; y < bounds.yMax - borderPadding; y++)
             {
-                GridPosition pos = new GridPosition(x, z);
+                GridPosition pos = new GridPosition(x, y);
                 if (tilemapGrid.IsWalkable(pos))
                     candidates.Add(pos);
             }
+        }
 
-        if (candidates.Count == 0) return null;
+        if (candidates.Count == 0)
+        {
+            Debug.LogWarning($"[EnemySpawner] No walkable candidates found in bounds {bounds} with padding {borderPadding}. Trying without padding.");
+
+            // Fallback: try without padding
+            for (int x = bounds.xMin; x < bounds.xMax; x++)
+                for (int y = bounds.yMin; y < bounds.yMax; y++)
+                {
+                    GridPosition pos = new GridPosition(x, y);
+                    if (tilemapGrid.IsWalkable(pos))
+                        candidates.Add(pos);
+                }
+
+            if (candidates.Count == 0) return null;
+        }
 
         if (preferEdge)
         {
-            GridPosition center = new GridPosition(w / 2, h / 2);
+            GridPosition center = new GridPosition(
+                (bounds.xMin + bounds.xMax) / 2,
+                (bounds.yMin + bounds.yMax) / 2);
+
             candidates.Sort((a, b) =>
                 ManhattanDist(b, center).CompareTo(ManhattanDist(a, center)));
             return candidates[Random.Range(0, Mathf.Max(1, candidates.Count / 3))];
