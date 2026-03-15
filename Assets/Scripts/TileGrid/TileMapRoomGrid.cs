@@ -43,12 +43,6 @@ public Vector3 GetWorldPosition(GridPosition gridPos)
 
     Vector3Int cell = new Vector3Int(gridPos.x, gridPos.z, 0);
     
-    // GetCellCenterWorld returns (worldX, worldY, worldZ)
-    // For a flat tilemap in a 3D X/Z game:
-    //   result.x = correct world X  ✓
-    //   result.y = tiny offset (tilemap plane height, e.g. -0.5)
-    //   result.z = correct world Z  ✓
-    // So we just use x and z directly, set y to the room's floor height
     Vector3 cellWorld = primaryTilemap.GetCellCenterWorld(cell);
     
     return new Vector3(cellWorld.x, transform.position.y, cellWorld.z);
@@ -79,7 +73,6 @@ public bool IsPositionInRoom(Vector3 worldPos)
     return primaryTilemap.HasTile(cell);
 }
 
-    // ── Wall checking ──────────────────────────────────────────────────────
 
     public bool IsWallAtPosition(GridPosition gridPos)
     {

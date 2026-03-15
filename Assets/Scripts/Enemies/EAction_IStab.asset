@@ -35,20 +35,21 @@ MonoBehaviour:
   damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: 3c343ee384d712b4c8f6674c1f21801a, type: 2}
   rotatesToFacing: 1
-  minRange: 3
-  maxRange: 5
+  minRange: 1
+  maxRange: 1
   canTargetSelf: 0
   staminaCost: 0
   requiresEnoughStamina: 0
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  showSpritePerTile: 1
   _summary: 'Damage : 3
 
     Stamina cost: 0
 
-    Pattern : Stab (3 tiles)
+    Pattern : Stab (6 tiles)
 
     Range
-    : Ranged 3-5
+    : Ranged 1-1
 
     Rotates : True'

@@ -89,6 +89,9 @@ public class CombatAction : BaseAction
             ? GetPatternAt(targetGridPos, currentFacing)
             : GetPatternAt(unitPos, currentFacing);
 
+        // Show attack sprite on all hit tiles (or single popup if showSpritePerTile is off)
+        AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
+
         SpendStamina();
         ApplyDamage(hitPositions);
 

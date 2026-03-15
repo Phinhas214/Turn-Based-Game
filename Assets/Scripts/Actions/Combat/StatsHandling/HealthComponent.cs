@@ -49,8 +49,10 @@ public class HealthComponent : MonoBehaviour
     // Debug
     // ─────────────────────────────────────────────────────────────
 
-    [Header("Debug (read-only in play mode)")]
+    [Header("Debug")]
+    [Tooltip("Edit this at runtime to set HP directly. Hit Enter or click away to apply.")]
     [SerializeField] private int _currentHealth;
+    private int _lastKnownHealth;
 
     // ─────────────────────────────────────────────────────────────
     // Events
@@ -93,6 +95,8 @@ public class HealthComponent : MonoBehaviour
                 : maxHealth;
         }
 
+        _lastKnownHealth = _currentHealth;
+
         if (damageFlashObject)
         {
             flashRenderer = damageFlashObject.GetComponent<SpriteRenderer>();
@@ -103,6 +107,17 @@ public class HealthComponent : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+#if UNITY_EDITOR
+        // Detect when the inspector field is manually edited at runtime
+        if (_currentHealth != _lastKnownHealth)
+        {
+            SetHealth(_currentHealth);
+        }
+#endif
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Public API
     // ─────────────────────────────────────────────────────────────
@@ -110,8 +125,10 @@ public class HealthComponent : MonoBehaviour
     public void TakeDamage(int amount)
     {
         if (IsDead || amount <= 0) return;
+        if (!gameObject.activeInHierarchy) return;
 
         _currentHealth = Mathf.Max(0, _currentHealth - amount);
+        _lastKnownHealth = _currentHealth;
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
 
         SpawnDamageNumber(amount);
@@ -141,12 +158,14 @@ public class HealthComponent : MonoBehaviour
         if (IsDead || amount <= 0) return;
 
         _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
+        _lastKnownHealth = _currentHealth;
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
     }
 
     public void SetHealth(int value)
     {
         _currentHealth = Mathf.Clamp(value, 0, maxHealth);
+        _lastKnownHealth = _currentHealth;
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
 
         if (_currentHealth == 0)
@@ -157,6 +176,7 @@ public class HealthComponent : MonoBehaviour
     {
         maxHealth = Mathf.Max(1, newMaxHealth);
         _currentHealth = maxHealth;
+        _lastKnownHealth = _currentHealth;
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
     }
 
@@ -167,6 +187,7 @@ public class HealthComponent : MonoBehaviour
     private void TriggerDamageFlash()
     {
         if (!flashRenderer) return;
+        if (!gameObject.activeInHierarchy) return;
 
         if (flashRoutine != null)
             StopCoroutine(flashRoutine);

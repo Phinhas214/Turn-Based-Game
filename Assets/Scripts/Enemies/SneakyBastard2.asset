@@ -15,7 +15,7 @@ MonoBehaviour:
   enemyName: Enemy
   maxHealth: 10
   moveRange: 5
-  attackData: {fileID: 11400000, guid: 606abb9aa315b93418ccc40382386f65, type: 2}
+  attackData: {fileID: 11400000, guid: d1f7f7dedcc11cc4097ae35d1931cbd6, type: 2}
   kiteEnabled: 0
   kiteRange: 5
   alwaysChases: 1
