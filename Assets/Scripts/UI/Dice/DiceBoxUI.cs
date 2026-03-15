@@ -8,26 +8,23 @@ public class DiceBoxUI : MonoBehaviour
     public TextMeshProUGUI resultsText;
     public TextMeshProUGUI totalText;
 
+    [Header("Dice Visuals")]
     public Transform diceSpawnPoint;
     public Transform diceCenter;
     public DiceVisual d6Prefab;
-
     public Transform diceVisualContainer;
-
 
     List<DiceVisual> diceVisuals = new();
 
-    // Persistent dice in the box
-    List<int> allResults = new();
-
-    // Just the most recent roll
+    // Dice rolled this attack
     List<int> currentRoll = new();
 
-    public void ShowRoll(List<int> results)
-    {
-        currentRoll = results;
+    int currentFlatBonus = 0;
 
-        allResults.AddRange(results);
+    public void ShowRoll(List<int> results, int flatBonus = 0)
+    {
+        currentRoll = new List<int>(results);
+        currentFlatBonus = flatBonus;
 
         foreach (int value in results)
             SpawnD6Visual(value);
@@ -48,7 +45,6 @@ public class DiceBoxUI : MonoBehaviour
         UpdateDiceLayout();
     }
 
-
     void UpdateDiceLayout()
     {
         float spacingX = 50f;
@@ -60,7 +56,6 @@ public class DiceBoxUI : MonoBehaviour
         int totalDice = diceVisuals.Count;
         int totalRows = Mathf.CeilToInt((float)totalDice / maxPerRow);
 
-        // Vertical centering: rows grow upward and downward from center
         float totalHeight = (totalRows - 1) * spacingY;
         float topRowY = center.y + totalHeight / 2f;
 
@@ -70,7 +65,6 @@ public class DiceBoxUI : MonoBehaviour
         {
             int diceInThisRow = Mathf.Min(maxPerRow, totalDice - dieIndex);
 
-            // Center this row horizontally
             float rowWidth = (diceInThisRow - 1) * spacingX;
             float startX = center.x - rowWidth / 2f;
 
@@ -87,14 +81,11 @@ public class DiceBoxUI : MonoBehaviour
         }
     }
 
-
     public void Clear()
     {
-        // Clear data
-        allResults.Clear();
         currentRoll.Clear();
+        currentFlatBonus = 0;
 
-        // Destroy dice visuals
         for (int i = 0; i < diceVisuals.Count; i++)
         {
             if (diceVisuals[i] != null)
@@ -103,7 +94,6 @@ public class DiceBoxUI : MonoBehaviour
 
         diceVisuals.Clear();
 
-        // Reset UI
         UpdateUI();
     }
 
@@ -112,39 +102,48 @@ public class DiceBoxUI : MonoBehaviour
         if (diceVisuals.Count == 0)
             return;
 
-        allResults.Clear();
         currentRoll.Clear();
 
         for (int i = 0; i < diceVisuals.Count; i++)
         {
-            // Roll a new value for this die
             int newValue = DiceRoller.Roll(DieType.D6);
 
-            // Store result
-            allResults.Add(newValue);
             currentRoll.Add(newValue);
-
-            // Update the visual
             diceVisuals[i].Reroll(newValue);
         }
 
         UpdateUI();
     }
 
-
     void UpdateUI()
     {
-        // Results = current roll only
+        // Show dice results
         if (currentRoll.Count == 0)
+        {
             resultsText.text = "-";
+            totalText.text = "-";
+            return;
+        }
+
+        resultsText.text = string.Join(", ", currentRoll);
+
+        int diceTotal = 0;
+
+        foreach (int value in currentRoll)
+            diceTotal += value;
+
+        int finalTotal = diceTotal + currentFlatBonus;
+
+        if (currentFlatBonus != 0)
+        {
+            totalText.text =
+                $"{diceTotal} " +
+                $"<color=#6CFF6C>+ {currentFlatBonus}</color> " +
+                $"= <b>{finalTotal}</b>";
+        }
         else
-            resultsText.text = string.Join(", ", currentRoll);
-
-        // Total = all dice in box
-        int total = 0;
-        foreach (int value in allResults)
-            total += value;
-
-        totalText.text = $"{total}";
+        {
+            totalText.text = $"{finalTotal}";
+        }
     }
 }
