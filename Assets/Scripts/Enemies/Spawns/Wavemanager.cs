@@ -9,29 +9,18 @@ public class WaveManager : MonoBehaviour
     public static WaveManager Instance { get; private set; }
 
     [Header("Enemy Budget Scaling")]
-    [Tooltip("Total enemies to spawn on level 1.")]
     [SerializeField] private int baseEnemyCount = 5;
-    [Tooltip("Additional enemies added per level.")]
     [SerializeField] private int enemiesPerLevel = 3;
-    [Tooltip("Hard cap on total enemies regardless of level.")]
     [SerializeField] private int maxEnemies = 40;
 
     [Header("Room Count Scaling")]
-    [Tooltip("Minimum rooms on level 1.")]
-    [SerializeField] private int baseMinRooms = 5;
-    [Tooltip("Maximum rooms on level 1.")]
-    [SerializeField] private int baseMaxRooms = 8;
-    [Tooltip("Extra rooms added to both min and max per level.")]
+    [SerializeField] private int baseMinRooms = 6;
+    [SerializeField] private int baseMaxRooms = 10;
     [SerializeField] private int roomsPerLevel = 1;
-    [Tooltip("Hard cap on room count regardless of level.")]
     [SerializeField] private int maxRooms = 20;
 
-    // ── State ──────────────────────────────────────────────────────────────
-
-    public int CurrentLevel    { get; private set; } = 1;
-    public int StagesCleared   { get; private set; } = 0;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    public int CurrentLevel  { get; private set; } = 1;
+    public int StagesCleared { get; private set; } = 0;
 
     private void Awake()
     {
@@ -40,9 +29,6 @@ public class WaveManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    // ── API ────────────────────────────────────────────────────────────────
-
-    /// <summary>Call when the player completes a stage and moves to the next.</summary>
     public void AdvanceLevel()
     {
         StagesCleared++;
@@ -50,12 +36,11 @@ public class WaveManager : MonoBehaviour
         Debug.Log($"[WaveManager] Stage cleared! Total cleared: {StagesCleared}. Now on level {CurrentLevel}.");
     }
 
-    /// <summary>Full reset — call when returning to main menu or starting fresh.</summary>
     public void ResetToLevel1()
     {
         CurrentLevel  = 1;
         StagesCleared = 0;
-        Debug.Log("[WaveManager] Reset to level 1. Stages cleared reset to 0.");
+        Debug.Log("[WaveManager] Reset to level 1.");
     }
 
     public int GetTotalEnemyBudget()

@@ -1,35 +1,28 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using TMPro;
 
 /// <summary>
-/// Shows when the player dies.
-/// Displays how many stages were cleared this run and offers a Main Menu button.
-///
-/// Hook up by calling LoseScreen.Show() from wherever player death is handled
-/// (e.g. your GameStateManager or HealthComponent OnDeath event on the player).
-///
-/// Place this on a persistent GameObject or in your UI scene.
+/// Shows when the player dies. Call LoseScreen.Show() from GameStateManager.
+/// Place on any persistent GameObject in the game scene.
 /// </summary>
 public class LoseScreen : MonoBehaviour
 {
     public static LoseScreen Instance { get; private set; }
 
-    [Header("UI References (wire up in Inspector, or fallback UI auto-builds)")]
-    [SerializeField] private GameObject          panelRoot;
-    [SerializeField] private TextMeshProUGUI     titleLabel;
-    [SerializeField] private TextMeshProUGUI     stagesClearedLabel;
-    [SerializeField] private TextMeshProUGUI     levelReachedLabel;
-    [SerializeField] private Button              mainMenuButton;
-    [SerializeField] private Button              retryButton;
+    [Header("UI References (leave empty — auto-built at runtime)")]
+    [SerializeField] private GameObject      panelRoot;
+    [SerializeField] private TextMeshProUGUI titleLabel;
+    [SerializeField] private TextMeshProUGUI stagesClearedLabel;
+    [SerializeField] private TextMeshProUGUI levelReachedLabel;
+    [SerializeField] private Button          retryButton;
+    [SerializeField] private Button          mainMenuButton;
 
     [Header("Settings")]
-    [SerializeField] private string mainMenuSceneName = "MainMenu";
-    [Tooltip("If true, Retry regenerates the level at level 1. If false, Retry continues from the current level.")]
-    [SerializeField] private bool retryResetsProgress = true;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    [SerializeField] private string mainMenuSceneName   = "MainMenu";
+    [SerializeField] private bool   retryResetsProgress = true;
 
     private void Awake()
     {
@@ -39,50 +32,26 @@ public class LoseScreen : MonoBehaviour
 
     private void Start()
     {
-        if (panelRoot == null)
-            BuildFallbackUI();
-
+        EnsureEventSystem();
+        if (panelRoot == null) BuildFallbackUI();
         HidePanel();
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Call this when the player dies to show the lose screen.
-    /// Can be called from GameStateManager, HealthComponent.OnDeath, etc.
-    /// </summary>
     public static void Show()
     {
-        if (Instance != null)
-            Instance.ShowPanel();
-        else
-            Debug.LogWarning("[LoseScreen] No LoseScreen instance found in scene!");
+        if (Instance != null) Instance.ShowPanel();
+        else Debug.LogWarning("[LoseScreen] No LoseScreen instance in scene!");
     }
-
-    // ── Panel ──────────────────────────────────────────────────────────────
 
     private void ShowPanel()
     {
         if (panelRoot != null) panelRoot.SetActive(true);
-
-        int stagesCleared = WaveManager.Instance != null ? WaveManager.Instance.StagesCleared : 0;
-        int levelReached  = WaveManager.Instance != null ? WaveManager.Instance.CurrentLevel  : 1;
-
-        if (titleLabel != null)
-            titleLabel.text = "You Died";
-
-        if (stagesClearedLabel != null)
-            stagesClearedLabel.text = stagesCleared == 0
-                ? "No stages cleared"
-                : stagesCleared == 1
-                    ? "1 Stage Cleared"
-                    : $"{stagesCleared} Stages Cleared";
-
-        if (levelReachedLabel != null)
-            levelReachedLabel.text = $"Reached Level {levelReached}";
-
+        int stages = WaveManager.Instance != null ? WaveManager.Instance.StagesCleared : 0;
+        int level  = WaveManager.Instance != null ? WaveManager.Instance.CurrentLevel  : 1;
+        if (titleLabel         != null) titleLabel.text         = "You Died";
+        if (stagesClearedLabel != null) stagesClearedLabel.text = stages == 0 ? "No stages cleared" : stages == 1 ? "1 Stage Cleared" : $"{stages} Stages Cleared";
+        if (levelReachedLabel  != null) levelReachedLabel.text  = $"Reached Level {level}";
         Time.timeScale = 0f;
-        Debug.Log($"[LoseScreen] Player died. StagesCleared={stagesCleared} LevelReached={levelReached}");
     }
 
     private void HidePanel()
@@ -90,7 +59,12 @@ public class LoseScreen : MonoBehaviour
         if (panelRoot != null) panelRoot.SetActive(false);
     }
 
-    // ── Buttons ────────────────────────────────────────────────────────────
+    public void OnRetryClicked()
+    {
+        Time.timeScale = 1f;
+        HidePanel();
+        GameStateManager.Instance?.RestartGame(retryResetsProgress);
+    }
 
     public void OnMainMenuClicked()
     {
@@ -99,93 +73,57 @@ public class LoseScreen : MonoBehaviour
         SceneManager.LoadScene(mainMenuSceneName);
     }
 
-    public void OnRetryClicked()
+    private static void EnsureEventSystem()
     {
-        Time.timeScale = 1f;
-        HidePanel();
-
-        if (retryResetsProgress)
-            WaveManager.Instance?.ResetToLevel1();
-
-        LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
-        if (levelGen != null)
-            levelGen.GenerateLevel();
-        else
-            Debug.LogError("[LoseScreen] No LevelGenerator found for retry!");
+        if (FindFirstObjectByType<EventSystem>() == null)
+        {
+            var es = new GameObject("EventSystem");
+            es.AddComponent<EventSystem>();
+            es.AddComponent<StandaloneInputModule>();
+        }
     }
-
-    // ── Fallback UI ────────────────────────────────────────────────────────
 
     private void BuildFallbackUI()
     {
-        GameObject canvasGO = new GameObject("LoseScreenCanvas");
-        Canvas canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 200;
-        canvasGO.AddComponent<CanvasScaler>();
-        canvasGO.AddComponent<GraphicRaycaster>();
+        var cgo = new GameObject("LoseScreenCanvas");
+        var c = cgo.AddComponent<Canvas>();
+        c.renderMode = RenderMode.ScreenSpaceOverlay; c.sortingOrder = 200;
+        cgo.AddComponent<CanvasScaler>(); cgo.AddComponent<GraphicRaycaster>();
 
         panelRoot = new GameObject("LosePanel");
-        panelRoot.transform.SetParent(canvasGO.transform, false);
-        RectTransform pr = panelRoot.AddComponent<RectTransform>();
-        pr.anchorMin = new Vector2(0.25f, 0.2f);
-        pr.anchorMax = new Vector2(0.75f, 0.8f);
+        panelRoot.transform.SetParent(cgo.transform, false);
+        var pr = panelRoot.AddComponent<RectTransform>();
+        pr.anchorMin = new Vector2(0.25f,0.2f); pr.anchorMax = new Vector2(0.75f,0.8f);
         pr.offsetMin = pr.offsetMax = Vector2.zero;
-        panelRoot.AddComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.97f);
+        panelRoot.AddComponent<Image>().color = new Color(0.05f,0.05f,0.05f,0.97f);
 
-        titleLabel         = MakeLabel(panelRoot, "Title",         new Vector2(0f, 0.78f), new Vector2(1f, 0.97f), 36, new Color(0.9f, 0.2f, 0.2f));
-        stagesClearedLabel = MakeLabel(panelRoot, "StagesCleared", new Vector2(0f, 0.60f), new Vector2(1f, 0.78f), 24, Color.white);
-        levelReachedLabel  = MakeLabel(panelRoot, "LevelReached",  new Vector2(0f, 0.46f), new Vector2(1f, 0.60f), 20, new Color(0.7f, 0.7f, 0.7f));
+        titleLabel         = ML(panelRoot,"Title",        new Vector2(0f,0.78f),new Vector2(1f,0.97f),36,new Color(0.9f,0.2f,0.2f));
+        stagesClearedLabel = ML(panelRoot,"StagesCleared",new Vector2(0f,0.60f),new Vector2(1f,0.78f),24,Color.white);
+        levelReachedLabel  = ML(panelRoot,"LevelReached", new Vector2(0f,0.46f),new Vector2(1f,0.60f),20,new Color(0.7f,0.7f,0.7f));
 
-        retryButton = MakeButton(panelRoot, "Retry",
-            new Vector2(0.08f, 0.26f), new Vector2(0.92f, 0.44f),
-            new Color(0.2f, 0.4f, 0.7f));
+        retryButton    = MB(panelRoot,"Retry",    new Vector2(0.08f,0.26f),new Vector2(0.92f,0.44f),new Color(0.2f,0.4f,0.7f));
         retryButton.onClick.AddListener(OnRetryClicked);
-
-        mainMenuButton = MakeButton(panelRoot, "Main Menu",
-            new Vector2(0.08f, 0.04f), new Vector2(0.92f, 0.22f),
-            new Color(0.55f, 0.15f, 0.15f));
+        mainMenuButton = MB(panelRoot,"Main Menu",new Vector2(0.08f,0.04f),new Vector2(0.92f,0.22f),new Color(0.55f,0.15f,0.15f));
         mainMenuButton.onClick.AddListener(OnMainMenuClicked);
     }
 
-    private TextMeshProUGUI MakeLabel(GameObject parent, string name,
-                                      Vector2 anchorMin, Vector2 anchorMax,
-                                      float fontSize, Color color)
+    private TextMeshProUGUI ML(GameObject p,string n,Vector2 a0,Vector2 a1,float s,Color col)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent.transform, false);
-        var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-        var tmp = go.AddComponent<TextMeshProUGUI>();
-        tmp.fontSize  = fontSize;
-        tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color     = color;
-        return tmp;
+        var go=new GameObject(n); go.transform.SetParent(p.transform,false);
+        var rt=go.AddComponent<RectTransform>(); rt.anchorMin=a0; rt.anchorMax=a1; rt.offsetMin=rt.offsetMax=Vector2.zero;
+        var t=go.AddComponent<TextMeshProUGUI>(); t.fontSize=s; t.alignment=TextAlignmentOptions.Center; t.color=col; return t;
     }
 
-    private Button MakeButton(GameObject parent, string label,
-                               Vector2 anchorMin, Vector2 anchorMax, Color color)
+    private Button MB(GameObject p,string lbl,Vector2 a0,Vector2 a1,Color col)
     {
-        GameObject go = new GameObject(label + "Btn");
-        go.transform.SetParent(parent.transform, false);
-        var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin; rt.anchorMax = anchorMax;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-        go.AddComponent<Image>().color = color;
-        var btn = go.AddComponent<Button>();
-
-        var textGO = new GameObject("Text");
-        textGO.transform.SetParent(go.transform, false);
-        var tmp = textGO.AddComponent<TextMeshProUGUI>();
-        tmp.text      = label;
-        tmp.fontSize  = 22;
-        tmp.alignment = TextAlignmentOptions.Center;
-        tmp.color     = Color.white;
-        var trt = textGO.GetComponent<RectTransform>();
-        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
-        trt.offsetMin = trt.offsetMax = Vector2.zero;
-
+        var go=new GameObject(lbl+"Btn"); go.transform.SetParent(p.transform,false);
+        var rt=go.AddComponent<RectTransform>(); rt.anchorMin=a0; rt.anchorMax=a1; rt.offsetMin=rt.offsetMax=Vector2.zero;
+        go.AddComponent<Image>().color=col;
+        var btn=go.AddComponent<Button>();
+        var cb=btn.colors; cb.highlightedColor=col*1.4f; cb.pressedColor=col*0.6f; btn.colors=cb;
+        var tgo=new GameObject("Text"); tgo.transform.SetParent(go.transform,false);
+        var tmp=tgo.AddComponent<TextMeshProUGUI>(); tmp.text=lbl; tmp.fontSize=22; tmp.alignment=TextAlignmentOptions.Center; tmp.color=Color.white;
+        var trt=tgo.GetComponent<RectTransform>(); trt.anchorMin=Vector2.zero; trt.anchorMax=Vector2.one; trt.offsetMin=trt.offsetMax=Vector2.zero;
         return btn;
     }
 }

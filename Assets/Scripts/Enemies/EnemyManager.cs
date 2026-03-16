@@ -28,6 +28,8 @@ public class EnemyManager : MonoBehaviour
         Instance = this;
     }
 
+    // ── Registration ───────────────────────────────────────────────────────
+
     public void RegisterEnemy(EnemyUnit enemy)
     {
         if (!activeEnemies.Contains(enemy))
@@ -43,19 +45,15 @@ public class EnemyManager : MonoBehaviour
 
     public void UnregisterEnemy(EnemyUnit enemy)
     {
-        // 1. Capture the room reference before removal
         RoomGrid roomOfDeadEnemy = enemy.CurrentRoomGrid;
 
-        // 2. Perform the removal and check if successful (Sam's safety check)
         if (activeEnemies.Remove(enemy))
         {
             if (showDebugLogs)
                 Debug.Log($"[EnemyManager] Unregistered {enemy.Stats?.enemyName}. Remaining: {activeEnemies.Count}");
 
-            // 3. Notify UI/Systems that list changed
             OnEnemyListChanged?.Invoke();
 
-            // 4. Handle Room Clearing Logic
             if (roomOfDeadEnemy != null)
             {
                 List<EnemyUnit> remaining = GetEnemiesInRoom(roomOfDeadEnemy);
@@ -66,7 +64,38 @@ public class EnemyManager : MonoBehaviour
                 }
             }
         }
-    } // End of UnregisterEnemy
+    }
+
+    // ── ClearAllEnemies ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Destroys all active enemy GameObjects and clears the tracking list.
+    /// Called by LevelGenerator.ClearLevel() before regenerating so stale
+    /// enemies don't persist into the next run.
+    /// </summary>
+    public void ClearAllEnemies()
+    {
+        // Stop any running turn coroutine first so it doesn't keep iterating
+        // over enemies that are about to be destroyed
+        if (isRunningEnemyTurns)
+        {
+            StopAllCoroutines();
+            isRunningEnemyTurns = false;
+        }
+
+        foreach (EnemyUnit enemy in activeEnemies)
+        {
+            if (enemy != null)
+                Destroy(enemy.gameObject);
+        }
+
+        activeEnemies.Clear();
+        OnEnemyListChanged?.Invoke();
+
+        Debug.Log("[EnemyManager] All enemies cleared.");
+    }
+
+    // ── Queries ────────────────────────────────────────────────────────────
 
     public int GetEnemyCount() => activeEnemies.Count;
     public List<EnemyUnit> GetAllEnemies() => new List<EnemyUnit>(activeEnemies);
@@ -81,6 +110,8 @@ public class EnemyManager : MonoBehaviour
         }
         return result;
     }
+
+    // ── Turn execution ─────────────────────────────────────────────────────
 
     public void RunEnemyTurns()
     {

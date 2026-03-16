@@ -3,32 +3,23 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Tracks win/lose state.
-///
-/// Win  — player enters End room (checked every time SetCurrentRoom is called)
-/// Lose — player HealthComponent reaches 0
-/// R    — restart by reloading the scene
+/// Handles LOSE state only (player death).
+/// Win/progression is handled entirely by EndRoomUI to avoid conflicts.
+/// Restart regenerates in-place — does NOT reload the scene so
+/// WaveManager and other DontDestroyOnLoad singletons stay intact.
 /// </summary>
 public class GameStateManager : MonoBehaviour
 {
     public static GameStateManager Instance { get; private set; }
 
-    [Header("Restart")]
-    [SerializeField] private KeyCode restartKey = KeyCode.R;
-
-    // ── Events ─────────────────────────────────────────────────────────────
-    public event Action OnGameWon;
     public event Action OnGameLost;
     public event Action OnGameRestarted;
 
-    // ── State ──────────────────────────────────────────────────────────────
-    public enum GameState { Playing, Won, Lost }
+    public enum GameState { Playing, Lost }
     public GameState CurrentState { get; private set; } = GameState.Playing;
 
     private HealthComponent playerHealth;
     private bool subscribedToPlayer = false;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -36,39 +27,20 @@ public class GameStateManager : MonoBehaviour
         Instance = this;
     }
 
-    private void OnEnable()
-    {
-        LevelGenerator.OnLevelReady  += OnLevelReady;
-        RoomManager.OnAnyRoomChanged += OnRoomChanged;
-    }
-
+    private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady  -= OnLevelReady;
-        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+        LevelGenerator.OnLevelReady -= OnLevelReady;
         UnsubscribeFromPlayer();
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(restartKey))
-        {
-            RestartGame();
-            return;
-        }
-
-        // Poll every frame to subscribe to the player if we haven't yet.
-        // This handles the case where the player spawns after OnLevelReady fires.
         if (!subscribedToPlayer)
             TrySubscribeToPlayer();
 
-        // Also poll the player's alive state directly as a fallback.
-        // Catches cases where OnDeath fires but the event wasn't hooked up yet.
-        if (CurrentState == GameState.Playing && subscribedToPlayer)
-        {
-            if (playerHealth != null && playerHealth.IsDead)
-                HandlePlayerDeath();
-        }
+        if (CurrentState == GameState.Playing && playerHealth != null && playerHealth.IsDead)
+            HandlePlayerDeath();
     }
 
     // ── Level ready ────────────────────────────────────────────────────────
@@ -77,18 +49,9 @@ public class GameStateManager : MonoBehaviour
     {
         CurrentState       = GameState.Playing;
         subscribedToPlayer = false;
+        Time.timeScale     = 1f;
         TrySubscribeToPlayer();
-
-        // Also check the current room right now in case the start room
-        // was already set before we subscribed to OnAnyRoomChanged
-        if (RoomManager.Instance != null)
-        {
-            var currentRoom = RoomManager.Instance.GetCurrentRoom();
-            if (currentRoom != null)
-                CheckForWin(currentRoom);
-        }
-
-        Debug.Log("[GameStateManager] Level ready — watching for win/lose.");
+        Debug.Log("[GameStateManager] Level ready — watching for lose.");
     }
 
     // ── Player subscription ────────────────────────────────────────────────
@@ -99,20 +62,12 @@ public class GameStateManager : MonoBehaviour
         if (player == null) return;
 
         HealthComponent hc = player.GetComponent<HealthComponent>();
-        if (hc == null)
-        {
-            Debug.LogWarning("[GameStateManager] Player has no HealthComponent.");
-            return;
-        }
+        if (hc == null || hc == playerHealth) return;
 
-        if (hc == playerHealth) return; // already subscribed to this one
-
-        // Unsubscribe from old reference if it changed
         UnsubscribeFromPlayer();
-
-        playerHealth = hc;
+        playerHealth          = hc;
         playerHealth.OnDeath += HandlePlayerDeath;
-        subscribedToPlayer   = true;
+        subscribedToPlayer    = true;
 
         Debug.Log($"[GameStateManager] Subscribed to player health ({playerHealth.MaxHealth} HP).");
     }
@@ -120,10 +75,8 @@ public class GameStateManager : MonoBehaviour
     private void UnsubscribeFromPlayer()
     {
         if (playerHealth != null)
-        {
             playerHealth.OnDeath -= HandlePlayerDeath;
-            playerHealth          = null;
-        }
+        playerHealth       = null;
         subscribedToPlayer = false;
     }
 
@@ -132,39 +85,50 @@ public class GameStateManager : MonoBehaviour
     private void HandlePlayerDeath()
     {
         if (CurrentState != GameState.Playing) return;
-
         CurrentState = GameState.Lost;
         Debug.Log("[GameStateManager] Player died — GAME OVER.");
         OnGameLost?.Invoke();
+        LoseScreen.Show();
     }
 
-    // ── Room changed ───────────────────────────────────────────────────────
+    // ── Called by EndRoomUI when advancing to the next level ───────────────
 
-    private void OnRoomChanged(LevelGenerator.PlacedRoom newRoom)
+    /// <summary>
+    /// Resets game state to Playing and notifies listeners (e.g. GameStateUI).
+    /// Call this instead of invoking OnGameRestarted directly from outside.
+    /// </summary>
+    public void NotifyLevelAdvanced()
     {
-        CheckForWin(newRoom);
-    }
-
-    private void CheckForWin(LevelGenerator.PlacedRoom room)
-    {
-        if (CurrentState != GameState.Playing) return;
-        if (room == null) return;
-
-        if (room.prefabData != null &&
-            room.prefabData.roomType == LevelGenerator.RoomType.End)
-        {
-            CurrentState = GameState.Won;
-            Debug.Log("[GameStateManager] Player reached End room — YOU WIN.");
-            OnGameWon?.Invoke();
-        }
+        CurrentState       = GameState.Playing;
+        subscribedToPlayer = false;
+        Time.timeScale     = 1f;
+        OnGameRestarted?.Invoke();
+        Debug.Log("[GameStateManager] Level advanced — state reset to Playing.");
     }
 
     // ── Restart ────────────────────────────────────────────────────────────
 
-    public void RestartGame()
+    /// <summary>
+    /// Restarts in-place. resetProgress=true resets WaveManager to level 1.
+    /// Does NOT reload the scene.
+    /// </summary>
+    public void RestartGame(bool resetProgress = true)
     {
-        Debug.Log("[GameStateManager] Restarting scene.");
+        Debug.Log($"[GameStateManager] Restarting. ResetProgress={resetProgress}");
+        Time.timeScale = 1f;
+
+        if (resetProgress)
+            WaveManager.Instance?.ResetToLevel1();
+
         OnGameRestarted?.Invoke();
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+
+        LevelGenerator levelGen = FindFirstObjectByType<LevelGenerator>();
+        if (levelGen != null)
+            levelGen.GenerateLevel();
+        else
+        {
+            Debug.LogWarning("[GameStateManager] No LevelGenerator — reloading scene.");
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
     }
 }

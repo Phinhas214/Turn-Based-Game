@@ -25,7 +25,6 @@ public class LevelGrid : MonoBehaviour
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
     }
 
-    // Automatically keep currentRoomGrid in sync with RoomManager
     private void OnRoomChanged(LevelGenerator.PlacedRoom room)
     {
         if (room?.roomGrid != null)
@@ -34,6 +33,8 @@ public class LevelGrid : MonoBehaviour
             Debug.Log($"[LevelGrid] Current room synced to: {room.roomInstance.name}");
         }
     }
+
+    // ── Registration ───────────────────────────────────────────────────────
 
     public void RegisterRoomGrid(RoomGrid roomGrid)
     {
@@ -46,6 +47,22 @@ public class LevelGrid : MonoBehaviour
         roomGrids.Remove(roomGrid);
     }
 
+    // ── ClearAllRoomGrids ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Clears all registered room grids and resets the current room reference.
+    /// Called by LevelGenerator.ClearLevel() before regenerating so stale
+    /// grid references don't carry over into the next run.
+    /// </summary>
+    public void ClearAllRoomGrids()
+    {
+        roomGrids.Clear();
+        currentRoomGrid = null;
+        Debug.Log("[LevelGrid] All room grids cleared.");
+    }
+
+    // ── Current room ───────────────────────────────────────────────────────
+
     public void SetCurrentRoomGrid(RoomGrid roomGrid)
     {
         currentRoomGrid = roomGrid;
@@ -53,8 +70,9 @@ public class LevelGrid : MonoBehaviour
     }
 
     public RoomGrid GetCurrentRoomGrid() => currentRoomGrid;
-
     public bool IsInitialized() => currentRoomGrid != null;
+
+    // ── Coordinate helpers ─────────────────────────────────────────────────
 
     public GridPosition GetGridPosition(Vector3 worldPosition)
     {

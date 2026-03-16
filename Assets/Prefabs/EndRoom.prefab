@@ -3224,8 +3224,8 @@ MonoBehaviour:
   nextLevelButton: {fileID: 0}
   mainMenuButton: {fileID: 0}
   levelLabel: {fileID: 0}
-  nextLevelPreviewLabel: {fileID: 0}
-  playerTag: Player
+  stagesClearedLabel: {fileID: 0}
+  nextLevelLabel: {fileID: 0}
 --- !u!1 &5682147247067098538
 GameObject:
   m_ObjectHideFlags: 0

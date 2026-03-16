@@ -10,7 +10,6 @@ public class HealthFireUI : MonoBehaviour
 
     private HealthComponent          spHealth;
     private NetworkedHealthComponent mpHealth;
-
     private int lastTier = -1;
 
     private void OnEnable()
@@ -29,6 +28,13 @@ public class HealthFireUI : MonoBehaviour
     private void OnLevelReady()
     {
         UnsubscribeAll();
+
+        // If this GameObject was hidden by the lose/pause screen, re-enable it
+        // before starting the coroutine — Unity can't start coroutines on
+        // inactive GameObjects even if they're about to become active.
+        if (!gameObject.activeInHierarchy)
+            gameObject.SetActive(true);
+
         StartCoroutine(WaitForLocalUnitThenBind());
     }
 
@@ -58,6 +64,7 @@ public class HealthFireUI : MonoBehaviour
                     yield break;
                 }
             }
+
             elapsed += Time.deltaTime;
             yield return null;
         }
@@ -74,10 +81,8 @@ public class HealthFireUI : MonoBehaviour
     private void OnHealthChanged(int current, int max)
     {
         if (max <= 0 || !animator) return;
-
         float hpPercent = (float)current / max;
         int tier = CalculateTier(hpPercent);
-
         if (tier != lastTier)
         {
             animator.SetInteger("HealthTier", tier);

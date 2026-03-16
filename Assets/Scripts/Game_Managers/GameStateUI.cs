@@ -1,111 +1,68 @@
-using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 /// <summary>
-/// Shows Win/Lose panels and a restart hint.
-/// Subscribes to GameStateManager in Start (not OnEnable) so Instance is ready.
+/// Handles the lose panel UI only.
+/// Win/next-level UI is handled by EndRoomUI.
 /// </summary>
 public class GameStateUI : MonoBehaviour
 {
-    [Header("Panels")]
+    [Header("Gameplay Panels (hidden on lose)")]
     [SerializeField] private List<GameObject> gameplayPanels;
 
-
-    [Header("Win Panel")]
-    [SerializeField] private TextMeshProUGUI winMessageText;
-    [SerializeField] private GameObject winPanel;
-    [SerializeField] private Button          winRestartButton;
-
     [Header("Lose Panel")]
+    [SerializeField] private GameObject      losePanel;
     [SerializeField] private TextMeshProUGUI loseMessageText;
-    [SerializeField] private GameObject losePanel;
     [SerializeField] private Button          loseRestartButton;
 
-    [Header("HUD")]
-    [SerializeField] private TextMeshProUGUI restartHintText;
-
     [Header("Messages")]
-    [SerializeField] private string winMessage  = "You Escaped!\nThe dungeon has been cleared.";
     [SerializeField] private string loseMessage = "You Died.\nThe dungeon claims another soul.";
-    [SerializeField] private string restartHint = "Press R to restart";
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Start()
     {
-        // Wire buttons
-        winRestartButton?.onClick.AddListener(OnRestartClicked);
         loseRestartButton?.onClick.AddListener(OnRestartClicked);
 
-        // Set hint text
-        if (restartHintText != null)
-            restartHintText.text = restartHint;
-
-        // Subscribe to GameStateManager — done in Start so Instance is ready
         if (GameStateManager.Instance != null)
         {
-            GameStateManager.Instance.OnGameWon       += ShowWinScreen;
             GameStateManager.Instance.OnGameLost      += ShowLoseScreen;
             GameStateManager.Instance.OnGameRestarted += ShowPlayingUI;
         }
         else
         {
-            Debug.LogWarning("[GameStateUI] GameStateManager.Instance is null in Start — " +
-                             "make sure GameStateManager is in the scene and above GameStateUI " +
-                             "in Script Execution Order.");
+            Debug.LogWarning("[GameStateUI] GameStateManager.Instance is null in Start.");
         }
 
-        // Start hidden
         ShowPlayingUI();
     }
 
     private void OnDestroy()
     {
-        if (GameStateManager.Instance != null)
-        {
-            GameStateManager.Instance.OnGameWon       -= ShowWinScreen;
-            GameStateManager.Instance.OnGameLost      -= ShowLoseScreen;
-            GameStateManager.Instance.OnGameRestarted -= ShowPlayingUI;
-        }
+        if (GameStateManager.Instance == null) return;
+        GameStateManager.Instance.OnGameLost      -= ShowLoseScreen;
+        GameStateManager.Instance.OnGameRestarted -= ShowPlayingUI;
     }
-
-    // ── Screens ────────────────────────────────────────────────────────────
 
     private void ShowPlayingUI()
     {
-        foreach (var panel in gameplayPanels)
-            panel.SetActive(true);
+        foreach (var p in gameplayPanels)
+            if (p != null) p.SetActive(true);
 
-        winPanel.SetActive(false);
-        losePanel.SetActive(false);
-    }
-
-    private void ShowWinScreen()
-    {
-        foreach (var panel in gameplayPanels)
-            panel.SetActive(false);
-
-        winPanel.SetActive(true);
+        if (losePanel != null) losePanel.SetActive(false);
     }
 
     private void ShowLoseScreen()
     {
-        foreach (var panel in gameplayPanels)
-            panel.SetActive(false);
+        foreach (var p in gameplayPanels)
+            if (p != null) p.SetActive(false);
 
-        losePanel.SetActive(true);
+        if (losePanel != null) losePanel.SetActive(true);
+        if (loseMessageText != null) loseMessageText.text = loseMessage;
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private void OnRestartClicked()
     {
-        GameStateManager.Instance?.RestartGame();
+        GameStateManager.Instance?.RestartGame(true);
     }
-
-    
 }

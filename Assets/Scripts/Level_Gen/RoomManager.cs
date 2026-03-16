@@ -6,11 +6,9 @@ public class RoomManager : MonoBehaviour
 {
     public static RoomManager Instance { get; private set; }
 
-    // SP: single current room reference
     private LevelGenerator.PlacedRoom currentRoom;
 
-    // MP: per-client room tracking (keyed by NGO client ID)
-    private Dictionary<ulong, LevelGenerator.PlacedRoom> clientRooms 
+    private Dictionary<ulong, LevelGenerator.PlacedRoom> clientRooms
         = new Dictionary<ulong, LevelGenerator.PlacedRoom>();
 
     public System.Action<LevelGenerator.PlacedRoom> OnRoomChanged;
@@ -18,42 +16,33 @@ public class RoomManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
     }
 
     // ── SetCurrentRoom ────────────────────────────────────────────────────
 
-    /// <summary>Single-player path or general room set.</summary>
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         Debug.Log($"🏠 [SP] Setting Current Room: {room.roomInstance.name}");
-        
+
         currentRoom = room;
 
-        // Trigger Events
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
 
-        // Update local camera boundaries
         UpdateCameraForRoom(room);
     }
 
-    /// <summary>Multiplayer-aware version — sets the room for a specific client.</summary>
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room, ulong clientId)
     {
         clientRooms[clientId] = room;
 
-        // Only update the camera and local events if this is the LOCAL client
         if (clientId == GetLocalClientId())
         {
             Debug.Log($"🌐 [MP] Local Room Changed: {room.roomInstance.name}");
             currentRoom = room;
-            
+
             OnRoomChanged?.Invoke(room);
             OnAnyRoomChanged?.Invoke(room);
 
@@ -61,9 +50,21 @@ public class RoomManager : MonoBehaviour
         }
     }
 
+    // ── ClearCurrentRoom ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Resets all room tracking. Called by LevelGenerator.ClearLevel()
+    /// before regenerating so stale room references don't persist.
+    /// </summary>
+    public void ClearCurrentRoom()
+    {
+        currentRoom = null;
+        clientRooms.Clear();
+        Debug.Log("[RoomManager] Current room cleared.");
+    }
+
     // ── Getters ───────────────────────────────────────────────────────────
 
-    /// <summary>Returns the current room for the LOCAL client.</summary>
     public LevelGenerator.PlacedRoom GetCurrentRoom()
     {
         if (IsMP())
@@ -106,14 +107,13 @@ public class RoomManager : MonoBehaviour
         GridPosition spawnGridPosition = targetRoom.roomGrid.GetGridPosition(doorWorldPosition);
         player.PlaceInRoom(targetRoom.roomGrid, spawnGridPosition);
 
-        // This handles both the dictionary (if MP) and the camera update
         if (IsMP())
             SetCurrentRoom(targetRoom, GetLocalClientId());
         else
             SetCurrentRoom(targetRoom);
     }
 
-    // ── Camera Integration ───────────────────────────────────────────────
+    // ── Camera Integration ────────────────────────────────────────────────
 
     private void UpdateCameraForRoom(LevelGenerator.PlacedRoom room)
     {
@@ -140,7 +140,7 @@ public class RoomManager : MonoBehaviour
         FreeTacticsCameraController.Instance.FocusOnPlayer();
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────
 
     private bool IsMP()
     {

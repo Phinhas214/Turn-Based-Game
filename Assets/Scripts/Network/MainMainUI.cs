@@ -4,28 +4,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// FULL FLOW:
-///   MainMenuPanel → ModePanel
-///     → SinglePlayer → loads game
-///     → Multiplayer  → HostPanel (Create Session widget)   ─┐
-///                    → JoinPanel (Session List widget)      ├→ WaitingLobbyContent appears
-///                    → JoinByCodePanel (Join By Code widget)┘
-///
-///   WaitingLobbyContent (all players wait here, see each other's names)
-///     Host sees "Begin Character Select" button
-///     → host clicks it → CharacterSelectContent appears for everyone
-///
-///   CharacterSelectContent
-///     All players pick a character (Knight/Rogue/Mage/Cleric) and click Ready
-///     Host sees Start button when all are ready
-///     → Start → loads multiplayer scene, NetworkedLevelGenerator spawns correct prefabs
-///
-/// KEY DESIGN:
-///   WaitingLobbyPanel and CharacterSelectPanel are ALWAYS ACTIVE GameObjects.
-///   Their child "Content" objects start INACTIVE and get shown/hidden.
-///   This ensures Awake() runs and events get subscribed properly.
-/// </summary>
 public class MainMenuController : MonoBehaviour
 {
     // ── Navigation Panels ─────────────────────────────────────────────────
@@ -67,7 +45,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private List<Button>     characterButtons;
     [SerializeField] private List<string>     characterNames;
     [SerializeField] private List<Sprite>     characterSprites;
-    [SerializeField] private List<GameObject> characterPrefabs;   // ← NEW: one prefab per character, same order
+    [SerializeField] private List<GameObject> characterPrefabs;
     [SerializeField] private TextMeshProUGUI selectedCharacterName;
     [SerializeField] private Color           selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
     [SerializeField] private Color           deselectedTint = new Color(1f, 1f, 1f, 0.4f);
@@ -82,12 +60,11 @@ public class MainMenuController : MonoBehaviour
     private bool isSinglePlayer     = false;
 
     // ─────────────────────────────────────────────────────────────────────
-    // Awake — wire all buttons
+    // Awake
     // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        // Navigation
         newGameButton          ?.onClick.AddListener(() => ShowNavPanel(modePanel));
         multiplayerButton      ?.onClick.AddListener(() => ShowNavPanel(multiplayerPanel));
         startSinglePlayerButton?.onClick.AddListener(GoToSinglePlayerCharSelect);
@@ -97,11 +74,9 @@ public class MainMenuController : MonoBehaviour
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
         enterLobbyButton?.onClick.AddListener(OnEnterLobbyClicked);
 
-        // Waiting lobby
         beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
         waitingLeaveButton   ?.onClick.AddListener(OnLeaveClicked);
 
-        // Character select buttons
         for (int i = 0; i < characterButtons.Count; i++)
         {
             int idx = i;
@@ -119,7 +94,6 @@ public class MainMenuController : MonoBehaviour
         startButton          ?.onClick.AddListener(OnStartClicked);
         charSelectLeaveButton?.onClick.AddListener(OnLeaveClicked);
 
-        // Hide content at startup
         waitingLobbyContent   ?.SetActive(false);
         characterSelectContent?.SetActive(false);
     }
@@ -172,7 +146,7 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Navigation helpers
+    // Navigation
     // ─────────────────────────────────────────────────────────────────────
 
     private void ShowNavPanel(GameObject target)
@@ -201,9 +175,32 @@ public class MainMenuController : MonoBehaviour
     private void StartSinglePlayer()
     {
         CharacterSelection.Index  = selectedCharIndex;
-        CharacterSelection.Prefab = GetSelectedPrefab();   // ← NEW
+        CharacterSelection.Prefab = GetSelectedPrefab();
+
         loadingPanel?.SetActive(true);
+
+        // Only reset WaveManager — let LevelGenerator.ClearLevel handle
+        // the grid/enemy cleanup at the correct time during generation
+        CleanupForNewGame();
+
         SceneManager.LoadScene(1);
+    }
+
+    /// <summary>
+    /// Resets persistent state for a fresh game.
+    /// Does NOT touch LevelGrid, RoomManager or room grids —
+    /// LevelGenerator.ClearLevel() handles those at the right time.
+    /// </summary>
+    private void CleanupForNewGame()
+    {
+        // Reset wave progress so the new game starts at level 1
+        WaveManager.Instance?.ResetToLevel1();
+
+        // Clear enemy list only — don't destroy EnemyManager
+        // and don't clear room grids here (timing issue)
+        EnemyManager.Instance?.ClearAllEnemies();
+
+        Debug.Log("[MainMenuController] Cleaned up for new game.");
     }
 
     private void Update()
@@ -216,10 +213,7 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    private void OnEnterLobbyClicked()
-    {
-        HandleSessionActive();
-    }
+    private void OnEnterLobbyClicked() => HandleSessionActive();
 
     private void OnPlayerNameChanged(string name)
     {
@@ -330,10 +324,6 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase 1 → Phase 2 transition
-    // ─────────────────────────────────────────────────────────────────────
-
     private void OnBeginCharSelectClicked()
     {
         LobbySync.Instance?.BeginCharSelectPhase();
@@ -401,7 +391,7 @@ public class MainMenuController : MonoBehaviour
 
         if (!(Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false)) return;
         CharacterSelection.Index  = selectedCharIndex;
-        CharacterSelection.Prefab = GetSelectedPrefab();   // ← NEW
+        CharacterSelection.Prefab = GetSelectedPrefab();
         Unity.Netcode.NetworkManager.Singleton.SceneManager.LoadScene(
             "Multiplayer_1",
             UnityEngine.SceneManagement.LoadSceneMode.Single);
@@ -409,8 +399,7 @@ public class MainMenuController : MonoBehaviour
 
     private void RefreshStartButton()
     {
-        if (startButton == null) return;
-        if (isSinglePlayer) return;
+        if (startButton == null || isSinglePlayer) return;
 
         bool isHost = Unity.Netcode.NetworkManager.Singleton?.IsHost ?? false;
         if (!isHost) return;
@@ -443,11 +432,6 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────
-
-    /// <summary>Returns the prefab for the currently selected character, or null if not assigned.</summary>
     private GameObject GetSelectedPrefab()
     {
         if (characterPrefabs == null || selectedCharIndex >= characterPrefabs.Count)

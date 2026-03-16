@@ -119,24 +119,42 @@ public class LevelGenerator : MonoBehaviour
 
     private void ClearLevel()
     {
+        // ── Destroy all room GameObjects ───────────────────────────────────
         foreach (Transform child in transform)
             Destroy(child.gameObject);
 
+        // ── Destroy the player ─────────────────────────────────────────────
         if (spawnedPlayer != null)
         {
             Destroy(spawnedPlayer);
             spawnedPlayer = null;
         }
+
+        // ── Clear LevelGrid AFTER destroying rooms, right before rebuilding ─
+        // This is the correct time — rooms are gone, new ones are about to be
+        // created and registered. Calling this too early (e.g. from MainMenu)
+        // causes EnemySpawner to find no valid rooms when OnLevelReady fires.
+        if (LevelGrid.Instance != null)
+            LevelGrid.Instance.ClearAllRoomGrids();
+
+        // ── Clear enemies ──────────────────────────────────────────────────
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.ClearAllEnemies();
+
+        // ── Reset room manager ─────────────────────────────────────────────
+        if (RoomManager.Instance != null)
+            RoomManager.Instance.ClearCurrentRoom();
+
+        Debug.Log("[LevelGenerator] ClearLevel complete.");
     }
 
     // ── Room layout ────────────────────────────────────────────────────────
 
     private void GenerateRoomLayout()
     {
-        // Hard fail early if no end room prefab is assigned
         if (GetRandomRoomPrefab(RoomType.End) == null)
         {
-            Debug.LogError("[LevelGenerator] No End room prefab assigned! Add one in the Inspector under Room Prefabs.");
+            Debug.LogError("[LevelGenerator] No End room prefab assigned!");
             return;
         }
 
@@ -147,10 +165,14 @@ public class LevelGenerator : MonoBehaviour
         roomsToConnect.Enqueue(startRoom);
 
         int        roomCount       = 1;
-        int        targetRoomCount = Random.Range(minRooms, maxRooms + 1);
+        int        scaledMin       = WaveManager.Instance != null ? WaveManager.Instance.GetMinRooms() : minRooms;
+        int        scaledMax       = WaveManager.Instance != null ? WaveManager.Instance.GetMaxRooms() : maxRooms;
+        int        targetRoomCount = Random.Range(scaledMin, scaledMax + 1);
         PlacedRoom bossRoom        = null;
         PlacedRoom lastPlacedRoom  = startRoom;
         int        attempts        = 0;
+
+        Debug.Log($"[LevelGenerator] Level {WaveManager.Instance?.CurrentLevel ?? 1} — targeting {targetRoomCount} rooms.");
 
         while (roomsToConnect.Count > 0 && roomCount < targetRoomCount && attempts < 100)
         {
@@ -189,11 +211,9 @@ public class LevelGenerator : MonoBehaviour
             }
         }
 
-        // ── Guarantee end room exists ──────────────────────────────────────
         bool hasEnd = placedRooms.Exists(r => r.prefabData.roomType == RoomType.End);
         if (!hasEnd)
         {
-            // Prefer converting the last placed non-start room
             PlacedRoom toConvert = lastPlacedRoom?.prefabData.roomType != RoomType.Start
                 ? lastPlacedRoom
                 : placedRooms.FindLast(r =>
@@ -202,13 +222,12 @@ public class LevelGenerator : MonoBehaviour
 
             if (toConvert != null)
             {
-                Debug.Log($"[LevelGenerator] No end room placed — converting '{toConvert.roomInstance.name}' to End room.");
+                Debug.Log($"[LevelGenerator] Converting '{toConvert.roomInstance.name}' to End room.");
                 ForceConvertToEndRoom(toConvert);
             }
             else
             {
-                // Absolute last resort: append a new end room
-                Debug.LogWarning("[LevelGenerator] No convertible room found — appending new end room.");
+                Debug.LogWarning("[LevelGenerator] Appending new end room.");
                 ForceAppendEndRoom(lastPlacedRoom ?? startRoom);
             }
         }
@@ -217,33 +236,27 @@ public class LevelGenerator : MonoBehaviour
         Debug.Log($"[LevelGenerator] Generated {placedRooms.Count} rooms. Boss={bossRoom != null} EndRoom={finalCheck}");
 
         if (!finalCheck)
-            Debug.LogError("[LevelGenerator] END ROOM STILL MISSING — check that an End prefab is assigned in the Inspector!");
+            Debug.LogError("[LevelGenerator] END ROOM STILL MISSING!");
     }
 
-    /// <summary>
-    /// Replaces an existing room with an end room in-place, properly cleaning
-    /// up all dictionaries before re-inserting to avoid ContainsKey collisions.
-    /// </summary>
     private void ForceConvertToEndRoom(PlacedRoom room)
     {
         RoomPrefabData endPrefab = GetRandomRoomPrefab(RoomType.End);
-        if (endPrefab == null) { Debug.LogError("[LevelGenerator] No End prefab found for conversion!"); return; }
+        if (endPrefab == null) { Debug.LogError("[LevelGenerator] No End prefab!"); return; }
 
         Vector3    position  = room.worldPosition;
         Vector2Int gridPos   = room.gridPosition;
         int        listIndex = placedRooms.IndexOf(room);
 
-        // Collect all connections that involved the old room so we can remap them
         var inbound  = new List<((PlacedRoom from, Direction dir), PlacedRoom to)>();
         var outbound = new List<((PlacedRoom from, Direction dir), PlacedRoom to)>();
 
         foreach (var kvp in roomConnections)
         {
             if (kvp.Key.Item1 == room) outbound.Add((kvp.Key, kvp.Value));
-            if (kvp.Value        == room) inbound.Add((kvp.Key, kvp.Value));
+            if (kvp.Value     == room) inbound.Add((kvp.Key, kvp.Value));
         }
 
-        // Remove old room from all tracking structures before destroying
         placedRooms.Remove(room);
         roomGrid.Remove(gridPos);
         foreach (var entry in outbound) roomConnections.Remove(entry.Item1);
@@ -252,39 +265,24 @@ public class LevelGenerator : MonoBehaviour
         if (room.roomInstance != null)
             Destroy(room.roomInstance);
 
-        // Place the new end room at the same grid position
         PlacedRoom newRoom = PlaceRoom(RoomType.End, gridPos, position);
-        if (newRoom == null)
-        {
-            Debug.LogError("[LevelGenerator] ForceConvertToEndRoom: PlaceRoom returned null after cleanup!");
-            return;
-        }
+        if (newRoom == null) { Debug.LogError("[LevelGenerator] ForceConvertToEndRoom failed!"); return; }
 
-        // Reinsert at the same list index for consistency
         placedRooms.Remove(newRoom);
         int insertAt = Mathf.Clamp(listIndex, 0, placedRooms.Count);
         placedRooms.Insert(insertAt, newRoom);
 
-        // Reconnect inbound (neighbour → newRoom)
         foreach (var entry in inbound)
             roomConnections[entry.Item1] = newRoom;
-
-        // Reconnect outbound (newRoom → neighbour)
         foreach (var entry in outbound)
             roomConnections[(newRoom, entry.Item1.Item2)] = entry.Item2;
 
-        Debug.Log($"[LevelGenerator] Successfully converted room at {gridPos} to End room.");
+        Debug.Log($"[LevelGenerator] Converted room at {gridPos} to End room.");
     }
 
-    /// <summary>
-    /// Appends a brand new end room off an existing room in any available direction.
-    /// Used as absolute last resort if no room can be converted.
-    /// </summary>
     private void ForceAppendEndRoom(PlacedRoom fromRoom)
     {
         List<Direction> dirs = GetAvailableDirections(fromRoom);
-
-        // If all directions are used, try them anyway — PlaceRoom handles grid collisions
         if (dirs.Count == 0)
             dirs = new List<Direction> { Direction.North, Direction.South, Direction.East, Direction.West };
 
@@ -294,12 +292,12 @@ public class LevelGenerator : MonoBehaviour
             if (newRoom != null)
             {
                 ConnectRooms(fromRoom, newRoom, dir);
-                Debug.Log($"[LevelGenerator] Appended End room off '{fromRoom.roomInstance.name}' going {dir}.");
+                Debug.Log($"[LevelGenerator] Appended End room going {dir}.");
                 return;
             }
         }
 
-        Debug.LogError("[LevelGenerator] ForceAppendEndRoom failed — all directions blocked. Map has no end room!");
+        Debug.LogError("[LevelGenerator] ForceAppendEndRoom failed!");
     }
 
     private void ConnectRooms(PlacedRoom roomA, PlacedRoom roomB, Direction direction)
@@ -459,7 +457,6 @@ public class LevelGenerator : MonoBehaviour
 
         BoundsInt bounds = floor.cellBounds;
 
-        // Start room has no tiles — fall back to first valid normal room
         if (bounds.size.x == 0 || bounds.size.y == 0)
         {
             Debug.LogWarning("[FindSpawn] Room has empty floor bounds — falling back to first valid normal room.");
@@ -586,7 +583,10 @@ public class LevelGenerator : MonoBehaviour
 
     private RoomType DetermineRoomType(int currentCount, int targetCount, bool bossAlreadyPlaced)
     {
-        if (spawnBossRoom && !bossAlreadyPlaced && currentCount == targetCount - 2)
+        // Only attempt boss room if a boss prefab is actually assigned
+        bool canSpawnBoss = spawnBossRoom && GetRandomRoomPrefab(RoomType.Boss) != null;
+
+        if (canSpawnBoss && !bossAlreadyPlaced && currentCount == targetCount - 2)
             return RoomType.Boss;
 
         if (currentCount == targetCount - 1)
