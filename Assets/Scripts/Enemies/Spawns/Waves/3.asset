@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 95651bf36a1144f4cabbde5fb00685cb, type: 3}
+  m_Name: 3
+  m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnTable
+  entries:
+  - prefab: {fileID: 4615168901716942150, guid: 4a07b586a46e14d4b81bd518f42a526c, type: 3}
+    percentage: 25
+  - prefab: {fileID: 8025110106504339535, guid: 869047f69370fd540ba99cfb63c463a4, type: 3}
+    percentage: 50
+  - prefab: {fileID: 4615168901716942150, guid: db4c6b0f6b141a642914954c87b50736, type: 3}
+    percentage: 25
+  roomType: 2
+  minLevel: 1
+  maxLevel: 99
+  _summary: "Active levels : 1 \u2013 \u221E\nRoom type     : Normal\nPercentages  
+    : 100.0%  \u2713 Good\nEnemy types   : 3\n\n  WolfFast \u2014 25%\n  SnowmenSlow
+    \u2014 50%\n  WolfSlow \u2014 25%\n"

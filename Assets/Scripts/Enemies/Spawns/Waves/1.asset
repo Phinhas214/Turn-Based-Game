@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 95651bf36a1144f4cabbde5fb00685cb, type: 3}
+  m_Name: 1
+  m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnTable
+  entries:
+  - prefab: {fileID: 8025110106504339535, guid: 59f93f03f17988548bbd8327cf699f82, type: 3}
+    percentage: 40
+    minSpawn: 0
+    maxSpawn: 0
+  - prefab: {fileID: 4615168901716942150, guid: 2d2dee31910d56d4dac9112b0a7b6eb0, type: 3}
+    percentage: 55
+    minSpawn: 0
+    maxSpawn: 0
+  - prefab: {fileID: 560516854240694216, guid: 2fa47c1d05842ac41829c9a56df9534b, type: 3}
+    percentage: 5
+    minSpawn: 0
+    maxSpawn: 0
+  roomType: 2
+  budgetMultiplier: 1
+  _summary: "Total %: 100.0% \u2713"

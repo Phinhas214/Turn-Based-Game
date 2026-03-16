@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 95651bf36a1144f4cabbde5fb00685cb, type: 3}
+  m_Name: 4
+  m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnTable
+  entries:
+  - prefab: {fileID: 4615168901716942150, guid: 2d2dee31910d56d4dac9112b0a7b6eb0, type: 3}
+    percentage: 24
+  - prefab: {fileID: 4615168901716942150, guid: 4a07b586a46e14d4b81bd518f42a526c, type: 3}
+    percentage: 24
+  - prefab: {fileID: 8025110106504339535, guid: 869047f69370fd540ba99cfb63c463a4, type: 3}
+    percentage: 24
+  - prefab: {fileID: 8025110106504339535, guid: f0aec3ed1010b2f43b333bb3f27e8723, type: 3}
+    percentage: 24
+  - prefab: {fileID: 560516854240694216, guid: de2e7f050d7a22e4c800aaa57a847981, type: 3}
+    percentage: 5
+  roomType: 2
+  minLevel: 1
+  maxLevel: 99
+  _summary: "Active levels : 1 \u2013 \u221E\nRoom type     : Normal\nPercentages  
+    : 101.0%  \u26A0 Should sum to 100! (currently 101.0%)\nEnemy types   : 5\n\n 
+    Wolf \u2014 24%\n  WolfFast \u2014 24%\n  SnowmenSlow \u2014 24%\n  SnowmenFast
+    \u2014 24%\n  SneakyBastardFast \u2014 5%\n"

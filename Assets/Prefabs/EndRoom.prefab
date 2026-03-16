@@ -3090,6 +3090,7 @@ GameObject:
   - component: {fileID: 585810388150731054}
   - component: {fileID: 6103418989233870764}
   - component: {fileID: 4734315062731140958}
+  - component: {fileID: 2849564387252275771}
   m_Layer: 6
   m_Name: EndRoom
   m_TagString: Untagged
@@ -3206,6 +3207,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RoomSpawnPointReader
   spawnPointsTilemap: {fileID: 6031031575307462262}
   showDebugLogs: 1
+--- !u!114 &2849564387252275771
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5579016750649738793}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52a34e4b6d799fd4aafed19b69d48e12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EndRoomUI
+  mainMenuSceneName: MainMenu
+  panelRoot: {fileID: 0}
+  nextLevelButton: {fileID: 0}
+  mainMenuButton: {fileID: 0}
+  levelLabel: {fileID: 0}
+  nextLevelPreviewLabel: {fileID: 0}
+  playerTag: Player
 --- !u!1 &5682147247067098538
 GameObject:
   m_ObjectHideFlags: 0

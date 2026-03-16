@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bac3d7c471af8ce4a9db60d225636b95, type: 3}
-  m_Name: Snowmen
+  m_Name: SnowmenS
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Enemy
   maxHealth: 15
@@ -18,9 +18,9 @@ MonoBehaviour:
   attackData: {fileID: 11400000, guid: 606abb9aa315b93418ccc40382386f65, type: 2}
   kiteEnabled: 1
   kiteRange: 8
-  alwaysChases: 1
+  alwaysChases: 0
   turnsBeforeFirstAction: 0
-  _summary: 'HP: 15  |  Move: 1  |  Attack range: 7 (from attackData)
+  _summary: 'HP: 15  |  Move: 1  |  Attack range: 4 (from attackData)
 
     Attack:
     Attack  |  Kite: True (range 8)'

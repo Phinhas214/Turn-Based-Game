@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00e063aecd0b03f41a24cf018f97c4c3, type: 3}
+  m_Name: EAction_ImpaleF
+  m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
+  actionName: Attack
+  icon: {fileID: 483832424, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  animationFrames:
+  - {fileID: 494746159, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -483947941, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -1871682699, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 894778454, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -117861461, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 1309994031, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -665337629, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -854450605, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 483832424, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 1452335617, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -922745333, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -512514818, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  useDiceDamage: 0
+  baseDamage: 2
+  diceCount: 1
+  dieType: 6
+  flatBonus: 0
+  damageMultiplier: 1
+  attackPattern: {fileID: 11400000, guid: 0546de768d1a702429858937f418e877, type: 2}
+  rotatesToFacing: 1
+  minRange: 2
+  maxRange: 6
+  canTargetSelf: 0
+  staminaCost: 0
+  requiresEnoughStamina: 0
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  showSpritePerTile: 0
+  _summary: 'Damage : 2
+
+    Stamina cost: 0
+
+    Pattern : Impale (0 tiles)
+
+    Range
+    : Ranged 2-6
+
+    Rotates : True'
