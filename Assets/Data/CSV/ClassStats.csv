@@ -1,5 +1,5 @@
 Class,MaxHealth,MaxStamina
-Knight,20,4
+Knight,25,15
 Rogue,14,10
-Mage,10,6
+Mage,10,8
 Cleric,16,4

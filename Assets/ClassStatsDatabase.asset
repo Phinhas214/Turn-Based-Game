@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ClassStatsDatabase
   classes:
   - playerClass: 0
-    maxHealth: 20
-    maxStamina: 4
+    maxHealth: 25
+    maxStamina: 15
   - playerClass: 1
     maxHealth: 14
     maxStamina: 10
   - playerClass: 2
     maxHealth: 10
-    maxStamina: 6
+    maxStamina: 8
   - playerClass: 3
     maxHealth: 16
     maxStamina: 4

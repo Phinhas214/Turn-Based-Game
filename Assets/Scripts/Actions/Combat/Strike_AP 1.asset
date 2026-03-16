@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AttackPattern
   tiles:
   - offset: {x: 2, y: 0}
-  - offset: {x: 3, y: 0}
+  - offset: {x: 1, y: 0}
   minRange: 4
   maxRange: 4
   _previewInfo: 'Tile count: 2

@@ -282,7 +282,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8c4b9ca878a1a874c88bd094a0615d14, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
-  stepDelay: 0.05
+  stepDelay: 0.1
 --- !u!114 &604963162148690518
 MonoBehaviour:
   m_ObjectHideFlags: 0

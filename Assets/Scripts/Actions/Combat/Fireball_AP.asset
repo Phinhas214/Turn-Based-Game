@@ -19,7 +19,7 @@ MonoBehaviour:
   - offset: {x: -1, y: 0}
   - offset: {x: 0, y: 0}
   minRange: 2
-  maxRange: 7
+  maxRange: 8
   _previewInfo: 'Tile count: 5
 
-    Range: 2 - 7 (RANGED)'
+    Range: 2 - 8 (RANGED)'

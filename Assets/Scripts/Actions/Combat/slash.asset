@@ -17,9 +17,9 @@ MonoBehaviour:
   animationFrames: []
   useDiceDamage: 1
   baseDamage: 0
-  diceCount: 4
+  diceCount: 5
   dieType: 6
-  flatBonus: 0
+  flatBonus: 6
   damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: 1ead6495335b653489c28f9d3296f9e7, type: 2}
   rotatesToFacing: 1
@@ -30,7 +30,8 @@ MonoBehaviour:
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: 'Damage : 4d6 + 0
+  showSpritePerTile: 0
+  _summary: 'Damage : 5d6 + 6
 
     Stamina cost: 2
 

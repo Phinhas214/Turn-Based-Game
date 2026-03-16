@@ -20,16 +20,17 @@ MonoBehaviour:
   baseDamage: 0
   diceCount: 6
   dieType: 6
-  flatBonus: 1
+  flatBonus: 6
   damageMultiplier: 3
   attackPattern: {fileID: 11400000, guid: 9ff93c24dc6ed08448cd0ee6abcdc690, type: 2}
   rotatesToFacing: 1
   minRange: 0
   maxRange: 0
   canTargetSelf: 0
-  staminaCost: 2
+  staminaCost: 3
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
-  _summary: "Damage : 6d6 + 1 \xD7 3\nStamina cost: 2\nPattern : Strike_AP 1 (2 tiles)\nRange
+  showSpritePerTile: 0
+  _summary: "Damage : 6d6 + 6 \xD7 3\nStamina cost: 3\nPattern : Strike_AP 1 (2 tiles)\nRange
     : Melee\nRotates : True"
