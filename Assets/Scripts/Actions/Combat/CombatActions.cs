@@ -251,7 +251,7 @@ public class CombatAction : BaseAction
         if (diceBox != null)
         {
             diceBox.Clear();
-            diceBox.ShowRoll(rolls); 
+            diceBox.ShowRoll(rolls, actionData.flatBonus);
         }
 
         return total;

@@ -276,6 +276,7 @@ MonoBehaviour:
   button: {fileID: 5922421880635570446}
   actionNameText: {fileID: 2720331086997413472}
   selectedGameObject: {fileID: 0}
+  actionDescText: {fileID: 6134589991723547986}
   actionIcon: {fileID: 0}
   staminaCostRoot: {fileID: 5500324636673053658}
   staminaCostText: {fileID: 8408432048722376576}
