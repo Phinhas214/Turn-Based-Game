@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: SnowmenF
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Enemy
-  maxHealth: 3
+  maxHealth: 1
   moveRange: 2
   attackData: {fileID: 11400000, guid: 606abb9aa315b93418ccc40382386f65, type: 2}
   kiteEnabled: 1
   kiteRange: 8
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP: 3  |  Move: 2  |  Attack range: 4 (from attackData)
+  _summary: 'HP: 1  |  Move: 2  |  Attack range: 9 (from attackData)
 
     Attack:
     Attack  |  Kite: True (range 8)'

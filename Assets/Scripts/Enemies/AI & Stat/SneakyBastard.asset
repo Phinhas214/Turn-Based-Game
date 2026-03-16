@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: SneakyBastard
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Enemy
-  maxHealth: 10
+  maxHealth: 19
   moveRange: 5
   attackData: {fileID: 11400000, guid: d1f7f7dedcc11cc4097ae35d1931cbd6, type: 2}
   kiteEnabled: 0
   kiteRange: 5
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP: 10  |  Move: 5  |  Attack range: 1 (from attackData)
+  _summary: 'HP: 19  |  Move: 5  |  Attack range: 1 (from attackData)
 
     Attack:
     Attack  |  Kite: False (range 5)'

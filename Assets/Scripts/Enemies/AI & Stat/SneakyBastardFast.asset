@@ -14,13 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Enemy
   maxHealth: 7
-  moveRange: 7
+  moveRange: 9
   attackData: {fileID: 11400000, guid: d1f7f7dedcc11cc4097ae35d1931cbd6, type: 2}
   kiteEnabled: 0
   kiteRange: 5
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP: 7  |  Move: 7  |  Attack range: 1 (from attackData)
+  _summary: 'HP: 7  |  Move: 9  |  Attack range: 1 (from attackData)
 
     Attack:
     Attack  |  Kite: False (range 5)'

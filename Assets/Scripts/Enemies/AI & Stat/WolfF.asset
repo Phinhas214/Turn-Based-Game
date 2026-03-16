@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: WolfF
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Enemy
-  maxHealth: 10
+  maxHealth: 16
   moveRange: 5
   attackData: {fileID: 11400000, guid: 4fd6d99f5c90e9246a4f5a7247567e5e, type: 2}
   kiteEnabled: 0
   kiteRange: 5
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP: 10  |  Move: 5  |  Attack range: 1 (from attackData)
+  _summary: 'HP: 16  |  Move: 5  |  Attack range: 1 (from attackData)
 
     Attack:
     Attack  |  Kite: False (range 5)'
