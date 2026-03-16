@@ -34,6 +34,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject modePanel;
     [SerializeField] private GameObject multiplayerPanel;
     [SerializeField] private GameObject loadingPanel;
+    [SerializeField] private GameObject creditsPanel;
 
     // ── Navigation Buttons ────────────────────────────────────────────────
     [Header("Navigation Buttons")]
@@ -42,6 +43,10 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button startSinglePlayerButton;
     [SerializeField] private Button backToMainButton;
     [SerializeField] private Button backToModeButton;
+
+    [SerializeField] private Button creditsButton;
+    [SerializeField] private Button creditsBackButton;
+
 
     [Header("Player Name")]
     [SerializeField] private TMP_InputField playerNameInput;
@@ -94,6 +99,9 @@ public class MainMenuController : MonoBehaviour
         backToMainButton       ?.onClick.AddListener(() => ShowNavPanel(mainMenuPanel));
         backToModeButton       ?.onClick.AddListener(() => ShowNavPanel(modePanel));
 
+        creditsButton?.onClick.AddListener(OpenCredits);
+        creditsBackButton?.onClick.AddListener(CloseCredits);
+
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
         enterLobbyButton?.onClick.AddListener(OnEnterLobbyClicked);
 
@@ -122,6 +130,8 @@ public class MainMenuController : MonoBehaviour
         // Hide content at startup
         waitingLobbyContent   ?.SetActive(false);
         characterSelectContent?.SetActive(false);
+
+
     }
 
     private void OnDestroy()
@@ -135,6 +145,7 @@ public class MainMenuController : MonoBehaviour
     {
         StartCoroutine(LoadPlayerName());
 
+        creditsPanel?.SetActive(false);
         waitingLobbyPanel     ?.SetActive(false);
         waitingLobbyContent   ?.SetActive(false);
         characterSelectPanel  ?.SetActive(false);
@@ -185,11 +196,12 @@ public class MainMenuController : MonoBehaviour
 
     private void HideAllNavPanels()
     {
-        mainMenuPanel        ?.SetActive(false);
-        modePanel            ?.SetActive(false);
-        multiplayerPanel     ?.SetActive(false);
-        waitingLobbyPanel    ?.SetActive(false);
-        characterSelectPanel ?.SetActive(false);
+        mainMenuPanel?.SetActive(false);
+        modePanel?.SetActive(false);
+        multiplayerPanel?.SetActive(false);
+        waitingLobbyPanel?.SetActive(false);
+        characterSelectPanel?.SetActive(false);
+        creditsPanel?.SetActive(false);
     }
 
     private void GoToSinglePlayerCharSelect()
@@ -453,5 +465,17 @@ public class MainMenuController : MonoBehaviour
         if (characterPrefabs == null || selectedCharIndex >= characterPrefabs.Count)
             return null;
         return characterPrefabs[selectedCharIndex];
+    }
+
+    private void OpenCredits()
+    {
+        HideAllNavPanels();
+        creditsPanel?.SetActive(true);
+    }
+
+    private void CloseCredits()
+    {
+        creditsPanel?.SetActive(false);
+        ShowNavPanel(mainMenuPanel);
     }
 }
